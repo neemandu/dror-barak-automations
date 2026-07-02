@@ -1,0 +1,6 @@
+# Runtime dependency for LIVE API calls. Dry-run and the test suite need only the
+# Python standard library, so this is optional until you run against production.
+requests>=2.31
+
+# Dev / test
+pytest>=8.0

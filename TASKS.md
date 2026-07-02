@@ -3,39 +3,39 @@
 One task per automation, ordered by dependency. See `CLAUDE.md` for the full
 description of each. Move items between sections as work progresses.
 
+All automations are built with a `--dry-run` mode and covered by the test suite
+(`python -m pytest` → 24 passing). "Done" here means **logic complete + dry-run
+verified**; each still needs live credentials (see Open Questions) to run against
+production.
+
 ## Backlog
 
-- [ ] **T1 — Lead → Google Contacts.** Webhook on new CRM lead saves the phone
-  number to Google Contacts.
-- [ ] **T2 — Send questionnaire (WhatsApp).** On CRM secondary status
-  `initial_meeting`, send Green API WhatsApp message with the Google Forms link.
-- [ ] **T3 — Social-media prep report (AI).** On questionnaire submit, AI analyzes
-  each social profile (last 5 videos) and produces a prep report for Dror.
-- [ ] **T4 — Send quote + capture signature.** "Send quote" issues a Fillout
-  quote with a signature field; on signature, store signed PDF in Drive + link in CRM.
-- [ ] **T5 — Onboarding (central).** On CRM `signed`: create Drive folder, copy
-  templates, create Morning client, open WhatsApp channel, write links back to CRM.
-- [ ] **T6 — Monthly payment requests.** 1st of month: active clients → Morning
-  payment request → WhatsApp payment link.
-- [ ] **T7 — Monthly campaign summary.** Month end: analyze campaigns, fill
-  template, add AI recommendations, send to Dror → forward to client + Drive.
-- [ ] **T8 — Strategy bot.** From questionnaire answers: audience + competitor +
-  presence analysis → full strategy → templates → client Drive → notify Dror.
-- [ ] **T9 — ClickUp → Claude Code (bonus).** ClickUp task webhook hands the task
-  to Claude Code to start working on it.
-- [ ] **T10 — Daily summary to Dror.** End of day: read run-log, send WhatsApp
-  summary of everything that ran.
+_(none — all tasks implemented in dry-run; remaining work is live-credential wiring
+tracked under Open Questions.)_
 
 ## In Progress
 
-- [ ] **T0 — Shared infrastructure** (`src/lib`): config loader, structured JSON
-  logging, retry/backoff HTTP client, run-log, WhatsApp template store, and API
-  client wrappers (CRM, Morning, Green API, Fillout, Google, ClickUp, Anthropic)
-  each with a dry-run/mock mode. Foundation for every task below.
+_(none)_
 
 ## Done
 
-_(none yet)_
+- [x] **T0 — Shared infrastructure** (`src/lib`): config loader, structured JSON
+  logging, retry/backoff, HTTP helper, run-log, WhatsApp template store, and API
+  client wrappers (CRM, Morning, Green API, Fillout, Google, ClickUp, Anthropic)
+  each with a dry-run/mock mode.
+- [x] **T1 — Lead → Google Contacts.** `src/automations/lead_to_contacts.py`.
+- [x] **T2 — Send questionnaire (WhatsApp).** `src/automations/send_questionnaire.py`.
+- [x] **T3 — Social-media prep report (AI).** `src/automations/social_prep.py`
+  (profile analysis reused by T8).
+- [x] **T4 — Send quote + capture signature.** `src/automations/send_quote.py`
+  (`send` + `signed` actions).
+- [x] **T5 — Onboarding (central).** `src/automations/onboarding.py`.
+- [x] **T6 — Monthly payment requests.** `src/automations/monthly_payment_requests.py`.
+- [x] **T7 — Monthly campaign summary.** `src/automations/campaign_summary.py`.
+- [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`.
+- [x] **T9 — ClickUp → Claude Code (bonus).** `src/automations/clickup_to_claude.py`.
+- [x] **T10 — Daily summary to Dror.** `src/automations/daily_summary.py`.
+- [x] **Webhook receiver** wiring all webhook triggers: `src/webhook_server.py`.
 
 ---
 
