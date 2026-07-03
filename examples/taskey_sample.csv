@@ -1,0 +1,4 @@
+שם לקוח,טלפון,מייל,סטטוס,סטטוס משני,מחיר חודשי,סוג שירות,נתיב תיקיית Drive,חוזה חתום,נתיב הקלטות,סטטוס Morning
+מכללת אלפא,+972501111111,alpha@example.com,לקוח פעיל,בעבודה,3500,ניהול קמפיינים,/Clients/Alpha,https://drive.google.com/contract-alpha,/Recordings/Alpha,active
+מכללת בטא,+972502222222,beta@example.com,ליד,פגישה ראשונית,,ייעוץ,,,,
+מכללת גמא,+972503333333,gamma@example.com,לקוח פעיל,חתומה,4200,ניהול קמפיינים + ייעוץ,/Clients/Gamma,https://drive.google.com/contract-gamma,,created

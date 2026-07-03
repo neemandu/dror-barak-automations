@@ -51,3 +51,52 @@ class ClickUpClient(BaseClient):
             json={"comment_text": text},
         )
         return resp.json()
+
+    def get_list_fields(self, list_id: str) -> list[dict[str, Any]]:
+        """Return the custom fields defined on a list (id, name, type)."""
+        if self.dry_run:
+            self._record("get_list_fields", list_id=list_id)
+            # A couple of fields exist; the rest of the CRM data falls back to
+            # the task description so the dry-run shows both paths.
+            return [
+                {"id": "field-price", "name": "מחיר חודשי", "type": "number"},
+                {"id": "field-service", "name": "סוג שירות", "type": "text"},
+            ]
+        resp = self._request(
+            "GET", f"{self.base_url}/list/{list_id}/field", headers=self._headers()
+        )
+        return resp.json().get("fields", [])
+
+    def create_task(
+        self,
+        list_id: str,
+        name: str,
+        *,
+        description: str | None = None,
+        custom_fields: list[dict[str, Any]] | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a task in a list. ``custom_fields`` is ``[{"id","value"}]``."""
+        if self.dry_run:
+            self._record(
+                "create_task",
+                list_id=list_id,
+                name=name,
+                custom_fields=custom_fields,
+                status=status,
+            )
+            return {"id": "clickup-task-mock", "url": "https://app.clickup.com/t/mock"}
+        body: dict[str, Any] = {"name": name}
+        if description:
+            body["description"] = description
+        if custom_fields:
+            body["custom_fields"] = custom_fields
+        if status:
+            body["status"] = status
+        resp = self._request(
+            "POST",
+            f"{self.base_url}/list/{list_id}/task",
+            headers=self._headers(),
+            json=body,
+        )
+        return resp.json()
