@@ -14,7 +14,7 @@ up, no action needed from him.
 |---|---|---|---|
 | 1 | ClickUp (CRM) | `CLICKUP_API_TOKEN`, `CLICKUP_LIST_ID`, `CLICKUP_WEBHOOK_SECRET` | Dror / us |
 | 2 | Morning | `MORNING_API_KEY`, `MORNING_API_SECRET` | Dror |
-| 3 | Green API (WhatsApp) | `GREEN_API_ID_INSTANCE`, `GREEN_API_TOKEN_INSTANCE` | Dror |
+| 3 | ManyChat (WhatsApp) | `MANYCHAT_API_KEY`, flow ids, `MANYCHAT_CONSENT_PHRASE` | Dror + us |
 | 4 | Google Workspace | `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_IMPERSONATE_SUBJECT`, Drive ids, `QUESTIONNAIRE_URL` | Us + one share from Dror |
 | 5 | Meta Ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID` | Dror |
 | 6 | Anthropic | `ANTHROPIC_API_KEY` | Us or Dror (billing) |
@@ -54,18 +54,43 @@ register the webhook. Used to prove inbound webhooks are really from ClickUp.
 
 → `MORNING_API_KEY`, `MORNING_API_SECRET`
 
-## 3. Green API — WhatsApp
+## 3. ManyChat — WhatsApp via the official Meta Business API
 
-1. Register at `green-api.com` (Google sign-in works)
-2. Create a new **Instance**
-3. Copy **idInstance** and **apiTokenInstance**
-4. Scan the **QR** shown on the instance screen from the WhatsApp of the number that
-   messages clients (WhatsApp → Settings → **Linked devices** → Link a device)
+**API key** — ManyChat → **Settings → API → Generate your API Key**. Requires a paid
+ManyChat plan.
+→ `MANYCHAT_API_KEY`
 
-→ `GREEN_API_ID_INSTANCE`, `GREEN_API_TOKEN_INSTANCE`
+**Flow ids** — one per outbound message we send (questionnaire, quote, payment,
+onboarding, daily summary). Each flow's id is under its `⋯` menu in ManyChat.
+→ `MANYCHAT_FLOW_QUESTIONNAIRE`, `MANYCHAT_FLOW_QUOTE`, `MANYCHAT_FLOW_PAYMENT`,
+  `MANYCHAT_FLOW_ONBOARDING`, `MANYCHAT_FLOW_DAILY_SUMMARY`
 
-> The number stays linked as long as that phone stays online. If Dror logs the
-> device out, messages stop until it's re-scanned.
+**Consent phrase** — Meta requires proof of opt-in when a contact is created through
+the API. This string is stored as that proof, so it must describe how the client
+actually consented (e.g. "gave his number on the initial call and agreed to WhatsApp
+updates"). It should be true, not decorative.
+→ `MANYCHAT_CONSENT_PHRASE`
+
+> ### Three constraints the official API brings that Green API did not
+>
+> **1. The 24-hour window.** Free-form messages can only be sent within 24 hours of
+> the client's last inbound message. Every one of Dror's flows is business-initiated
+> and therefore *outside* that window, so each one must be a **Meta-approved message
+> template**, submitted in advance and reviewed by Meta.
+>
+> **2. Message wording is no longer freely editable.** Dror asked for an editable
+> store of message bodies. Within a template, only the placeholder variables change —
+> altering the wording itself means resubmitting the template to Meta for approval.
+> `src/lib/whatsapp_templates.py` has to become a map of approved templates and their
+> variables, not free text.
+>
+> **3. Per-conversation billing.** Meta charges per conversation by template category
+> (utility vs marketing). Green API did not. The monthly payment-request run and the
+> daily summary each carry a real per-message cost.
+>
+> **Also:** the number, once connected to ManyChat, can only be messaged through
+> ManyChat's API — not Meta's Cloud API directly. That's a one-way door worth knowing
+> before connecting it.
 
 ## 4. Google Workspace — Contacts, Drive, Forms
 
