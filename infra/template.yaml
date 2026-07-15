@@ -57,7 +57,9 @@ Parameters:
     Description: The service-account key JSON, on one line.
   GoogleImpersonateSubject:
     Type: String
-    Default: dror@drorbrk.co.il
+    Description: >
+      The Workspace user the service account acts as. No default: a deploy that
+      silently impersonates someone is worse than one that asks.
   SignBaseUrl:
     Type: String
     Default: ""
