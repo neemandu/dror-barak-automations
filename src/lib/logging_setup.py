@@ -40,12 +40,28 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class _ContextAdapter(logging.LoggerAdapter):
+    """Adds the bound context to each record *without* dropping per-call extras.
+
+    ``logging.LoggerAdapter.process`` assigns ``kwargs["extra"] = self.extra``,
+    which silently throws away the ``extra=`` passed at the call site. That made
+    every log line carry only the automation name and run id — no reason on a
+    rejected webhook, no client_id, no detail — which is precisely the context
+    you need when reading production logs.
+    """
+
+    def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
+        merged = dict(self.extra or {})
+        merged.update(kwargs.get("extra") or {})  # call-site context wins
+        kwargs["extra"] = merged
+        return msg, kwargs
+
+
 def get_logger(automation: str, run_id: str | None = None) -> logging.LoggerAdapter:
     """Return a logger bound to an automation name and a run id.
 
-    The returned adapter injects ``automation`` and ``run_id`` into every record.
-    Extra context is passed per call via ``extra=...`` or keyword-style through a
-    helper, e.g. ``log.info("sent", extra={"client_id": "42"})``.
+    The returned adapter injects ``automation`` and ``run_id`` into every record,
+    and merges any per-call context: ``log.info("sent", extra={"client_id": "42"})``.
     """
     run_id = run_id or uuid.uuid4().hex[:12]
     logger = logging.getLogger(f"dror_barak.{automation}")
@@ -66,4 +82,4 @@ def get_logger(automation: str, run_id: str | None = None) -> logging.LoggerAdap
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
         logger.propagate = False
-    return logging.LoggerAdapter(logger, {"automation": automation, "run_id": run_id})
+    return _ContextAdapter(logger, {"automation": automation, "run_id": run_id})

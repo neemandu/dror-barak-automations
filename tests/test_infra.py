@@ -72,3 +72,24 @@ def test_config_require_raises_when_missing(monkeypatch):
     monkeypatch.delenv("SOME_UNSET_KEY", raising=False)
     with pytest.raises(config.ConfigError):
         config.require("SOME_UNSET_KEY")
+
+
+def test_per_call_context_survives_into_the_log_line(capsys):
+    """Regression: LoggerAdapter.process() used to overwrite kwargs["extra"].
+
+    Every `extra=` at every call site was silently discarded, so production logs
+    showed a rejection with no reason and an action with no client_id.
+    """
+    import json
+
+    from src.lib.logging_setup import get_logger
+
+    log = get_logger("test_ctx", "run123")
+    log.warning("rejected", extra={"reason": "bad signature", "status": 401})
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    record = json.loads(line)
+
+    assert record["reason"] == "bad signature"   # the call-site context
+    assert record["status"] == 401
+    assert record["automation"] == "test_ctx"    # the bound context
+    assert record["run_id"] == "run123"
