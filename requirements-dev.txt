@@ -1,0 +1,11 @@
+# Development and test dependencies. NOT packaged into the Lambda.
+-r requirements.txt
+
+pytest>=8.0
+
+# The Lambda runtime provides boto3; this is only for running the DynamoDB-backed
+# idempotency store locally.
+boto3>=1.34
+
+# Deploys the stack in infra/template.yaml.
+aws-sam-cli>=1.140

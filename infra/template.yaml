@@ -78,11 +78,11 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref Stage
-      Throttle:
+      DefaultRouteSettings:
         # A public endpoint. ClickUp sends a handful of events a day; this stops a
         # flood from turning into a Lambda bill.
-        BurstLimit: 20
-        RateLimit: 10
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
 
   WebhookFunction:
     Type: AWS::Serverless::Function

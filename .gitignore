@@ -33,6 +33,12 @@ yarn-error.log*
 dist/
 coverage/
 
+# ---- Build output ----
+# `sam build` stages the function plus its dependencies here. Rebuilt on demand,
+# and it copies the whole project, so it has no business in git.
+.aws-sam/
+samconfig.toml
+
 # ---- Logs / misc ----
 *.log
 logs/
