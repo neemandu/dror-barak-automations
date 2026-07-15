@@ -3,6 +3,18 @@
 .env.*
 !.env.example
 
+# Credential files. A Google service-account key downloads with a name like
+# `dror-automations-f9fa4f55023e.json` and lands wherever the browser puts it —
+# which was once this directory, one `git add -A` away from a public repo.
+# Keys belong outside the repo entirely (~/.secrets/); these patterns are the
+# backstop, not the plan.
+*-????????????.json
+*service*account*.json
+*credentials*.json
+client_secret*.json
+*.pem
+*.p12
+
 # ---- Client material (kept on disk, never published) ----
 # The repo is public. Dror's proposal, call notes and any client-supplied
 # document stay local only.
