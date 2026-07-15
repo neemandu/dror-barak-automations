@@ -375,3 +375,45 @@ def test_attachment_filenames_are_made_ascii():
     # Whatever comes out must be safe to put in a multipart header.
     for name in ["חוזה.pdf", "a/b\c.pdf", "..pdf", "x" * 5 + ".PDF"]:
         assert _ascii_filename(name).isascii()
+
+
+# ------------------------------------------------- the client's Drive folder
+
+
+def test_folder_id_is_recovered_from_whatever_dror_pasted():
+    from src.lib.client_folder import folder_id_from
+
+    assert folder_id_from("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp?hl=he") \
+        == "1AbCdEfGhIjKlMnOp"
+    assert folder_id_from("11lahFQDkte4k47t7oJ5MVzUiUYvXOhp0") == "11lahFQDkte4k47t7oJ5MVzUiUYvXOhp0"
+    assert folder_id_from("") is None
+    assert folder_id_from("not a link") is None
+
+
+def test_an_existing_folder_is_reused_not_duplicated():
+    # Signing creates the folder, then onboarding runs -- a second folder would
+    # leave Dror with two per client and neither complete.
+    from src.lib import client_folder
+
+    class FakeCrm:
+        wrote = []
+        def update_fields(self, cid, **f): self.wrote.append(f)
+
+    crm = FakeCrm()
+    client = {"id": "t1", "name": "מכללת אלפא",
+              "drive_folder_url": "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp"}
+    got = client_folder.ensure(crm, client, dry_run=True)
+    assert got["id"] == "1AbCdEfGhIjKlMnOp"
+    assert got["created"] is False
+    assert crm.wrote == [], "reusing a folder must not rewrite the CRM"
+
+
+def test_a_client_with_no_folder_gets_one():
+    from src.lib import client_folder
+
+    class FakeCrm:
+        def update_fields(self, cid, **f): pass
+
+    got = client_folder.ensure(FakeCrm(), {"id": "t2", "name": "מכללת בטא"}, dry_run=True)
+    assert got["created"] is True
+    assert got["id"]

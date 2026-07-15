@@ -29,7 +29,7 @@ import json
 from typing import Any, Optional
 from urllib.parse import parse_qs
 
-from .lib import config, contract, idempotency, pdf, signing
+from .lib import client_folder, config, contract, idempotency, pdf, signing
 from .lib.clients.crm import CrmClient
 from .lib.logging_setup import get_logger
 
@@ -326,8 +326,12 @@ def _finalise(
 
     pdf_bytes = pdf.html_to_pdf(document, name=name)
 
-    parent = client.get("drive_folder_id") or config.require("DRIVE_CLIENTS_PARENT_ID")
-    stored = pdf.upload_pdf(pdf_bytes, name, parent)
+    # The contract belongs in the client's own folder. Signing happens before
+    # onboarding — signing is what sets `חתם`, and `חתם` is what triggers
+    # onboarding — so whoever arrives first creates it. This is idempotent, and
+    # onboarding will find the same folder rather than make a second one.
+    folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=dry_run)
+    stored = pdf.upload_pdf(pdf_bytes, name, folder["id"])
     link = stored.get("webViewLink", "")
 
     # Attach to ClickUp. `חוזה חתום` is an Attachment field, so the PDF itself

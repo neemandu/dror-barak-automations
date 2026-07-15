@@ -45,13 +45,39 @@ def test_social_prep(read_log):
     assert "prep_report_ready" in _actions(read_log)
 
 
-def test_send_quote_send_and_signed(read_log):
+def test_send_quote_issues_a_signing_link(read_log, monkeypatch):
+    # Fillout is gone: the quote is now a link to our own signing page, and the
+    # page finalises the contract itself, so there is no `signed` half any more.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
     sent = send_quote.send("42", dry_run=True)
-    assert sent["link"]["submissionId"]
-    signed = send_quote.signed("42", "sub_123", dry_run=True)
-    assert signed["uploaded"]["webViewLink"]
-    actions = _actions(read_log)
-    assert {"quote_sent", "quote_signed"} <= actions
+    assert sent["url"].startswith("https://sign.example/dev/sign?t=")
+    assert "quote_sent" in _actions(read_log)
+
+
+def test_send_quote_refuses_without_a_price(read_log, monkeypatch):
+    # A client opening a contract that reads "סך של  ₪" has been shown a broken
+    # document, and the price is Dror's to set, not theirs to fill in.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "get_client",
+                        lambda self, cid: {"id": cid, "name": "מכללה", "monthly_price": None})
+    with pytest.raises(ValueError, match="no monthly price"):
+        send_quote.send("42", dry_run=True)
+    assert "no_price" in _actions(read_log)
+
+
+def test_send_quote_survives_undeliverable_whatsapp(read_log, monkeypatch):
+    # ManyChat is not configured yet. The link must still exist and reach the task
+    # -- refusing to produce it would make the button useless.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    monkeypatch.delenv("MANYCHAT_API_KEY", raising=False)
+    sent = send_quote.send("42", dry_run=True)
+    assert sent["url"]
+    assert sent["delivered"] == ""
 
 
 def test_onboarding(read_log):

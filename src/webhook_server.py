@@ -9,7 +9,6 @@ Routes:
   POST /crm/new-lead    -> T1 lead_to_contacts        (body: {"client_id"})
   POST /crm/status      -> T2/T5 by sub_status        (body: {"client_id","sub_status"})
   POST /forms/submit    -> T3 social_prep             (body: {"client_id"})
-  POST /fillout/signed  -> T4 send_quote.signed       (body: {"client_id","submission_id"})
   POST /clickup/task    -> T9 clickup_to_claude       (body: {"task_id"})
 
 Run:
@@ -40,7 +39,6 @@ def _dispatch(path: str, body: dict[str, Any]) -> dict[str, Any]:
         lead_to_contacts,
         onboarding,
         send_questionnaire,
-        send_quote,
         social_prep,
     )
 
@@ -55,10 +53,6 @@ def _dispatch(path: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"ignored": f"no automation for sub_status={sub}"}
     if path == "/forms/submit":
         return social_prep.run(body["client_id"], dry_run=DRY_RUN)
-    if path == "/fillout/signed":
-        return send_quote.signed(
-            body["client_id"], body["submission_id"], dry_run=DRY_RUN
-        )
     if path == "/clickup/task":
         return clickup_to_claude.run(body["task_id"], dry_run=DRY_RUN)
     raise KeyError(f"no route for {path}")

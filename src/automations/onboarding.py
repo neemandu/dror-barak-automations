@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..lib import config, whatsapp_templates
+from ..lib import client_folder, config, whatsapp_templates
 from ..lib.clients.crm import SUB_IN_WORK, CrmClient
 from ..lib.clients.google import GoogleClient
 from ..lib.clients.green_api import GreenApiClient
@@ -49,11 +49,17 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     name = client.get("name", f"client-{client_id}")
     result: dict[str, Any] = {}
 
-    # 1. Drive folder
-    parent = config.get("DRIVE_CLIENTS_PARENT_ID", "clients-root")
-    folder = google.create_folder(name, parent)
+    # 1. Drive folder — reused if the signing page already made it. Signing runs
+    # first (it is what sets `חתם`, which triggers this), so by the time onboarding
+    # arrives the folder usually exists and holds the signed contract. Creating a
+    # second one would leave Dror with two folders per client and neither complete.
+    folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=dry_run)
     result["folder"] = folder
-    auto.log_action("drive_folder_created", client_id=client_id, detail=folder.get("webViewLink"))
+    auto.log_action(
+        "drive_folder_created" if folder.get("created") else "drive_folder_reused",
+        client_id=client_id, url=folder["url"],
+        detail="נוצרה תיקייה חדשה" if folder.get("created") else "התיקייה כבר קיימת",
+    )
 
     # 2. Copy templates
     copied = []
@@ -78,10 +84,10 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     auto.log_action("whatsapp_channel_opened", client_id=client_id, detail=group.get("chatId"))
 
     # 5. Write results back to CRM
+    # client_folder.ensure has already recorded the Drive link (it must, or the
+    # next run would create a second folder), so it is not repeated here.
     crm.update_fields(
         client_id,
-        drive_folder_url=folder.get("webViewLink"),
-        drive_folder_id=folder.get("id"),
         morning_client_id=morning_client.get("id"),
         morning_status="created",
         sub_status=SUB_IN_WORK,
@@ -96,7 +102,7 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
             whatsapp_templates.render(
                 "onboarding_dror_prompt",
                 client_name=name,
-                drive_url=folder.get("webViewLink", ""),
+                drive_url=folder["url"],
             ),
         )
     auto.log_action("onboarding_done", client_id=client_id, detail=name)

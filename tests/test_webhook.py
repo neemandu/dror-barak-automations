@@ -39,11 +39,13 @@ def test_status_route_unknown_substatus_ignored():
     assert "ignored" in result
 
 
-def test_fillout_signed_route():
-    result = webhook_server._dispatch(
-        "/fillout/signed", {"client_id": "42", "submission_id": "sub_1"}
-    )
-    assert result["uploaded"]["webViewLink"]
+def test_the_retired_fillout_route_is_gone():
+    # Fillout was replaced by our own signing page, which finalises the contract
+    # itself -- there is no signature webhook to receive any more.
+    import pytest
+
+    with pytest.raises(KeyError):
+        webhook_server._dispatch("/fillout/signed", {"client_id": "42"})
 
 
 def test_clickup_route():
