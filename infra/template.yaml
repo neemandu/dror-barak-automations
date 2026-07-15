@@ -51,10 +51,16 @@ Parameters:
   DriveClientsParentId:
     Type: String
     Description: Drive folder that holds client folders; signed PDFs land here.
-  GoogleServiceAccountJson:
+  GoogleSecretArn:
     Type: String
-    NoEcho: true
-    Description: The service-account key JSON, on one line.
+    Description: >
+      Secrets Manager ARN holding the Google service-account key. The key is NOT a
+      parameter: Lambda caps all environment variables at 4KB combined and the key
+      alone is 2.3KB, CloudFormation splits parameter values on commas (which the
+      JSON is full of), and a credential passed as a parameter lingers in the
+      stack's history. Create it with:
+      aws secretsmanager create-secret --name dror/google-service-account
+      --secret-string file://key.json
   GoogleImpersonateSubject:
     Type: String
     Description: >
@@ -118,7 +124,7 @@ Globals:
         SIGN_LINK_SECRET: !Ref SignLinkSecret
         SIGN_BASE_URL: !Ref SignBaseUrl
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
-        GOOGLE_SERVICE_ACCOUNT_JSON: !Ref GoogleServiceAccountJson
+        GOOGLE_SECRET_ARN: !Ref GoogleSecretArn
         GOOGLE_IMPERSONATE_SUBJECT: !Ref GoogleImpersonateSubject
         # The contract refuses to render without these, so a deploy that omits
         # them breaks signing. They are not template defaults precisely so that
@@ -157,6 +163,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref GoogleSecretArn
       Events:
         ClickUpWebhook:
           Type: HttpApi

@@ -62,9 +62,11 @@ PAGE_CSS = """
 body { margin:0; background:#eef0f3; color:#14171a; font-family:system-ui,"Segoe UI",Arial,sans-serif; }
 .sheet { max-width:820px; margin:24px auto; background:#fff; padding:40px 48px;
   border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
-.brand-logo { max-width:300px; height:auto; display:block; margin:0 0 10px; }
-.brand-banner { height:120px; border-radius:8px; margin:0 0 22px;
-  background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%); }
+.brand-banner { border-radius:8px; margin:0 0 24px; padding:26px 30px;
+  background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%);
+  display:flex; align-items:center; }
+/* The logo is white-on-transparent: it only reads against the gradient. */
+.brand-logo { max-width:250px; height:auto; display:block; }
 .brand-footer { margin-top:34px; text-align:center; }
 .brand-footer img { max-width:100%; height:auto; }
 .contract h1 { font-size:24px; margin:0 0 6px; }

@@ -27,12 +27,16 @@
 -->
 <div class="contract" dir="rtl" lang="he">
 
-  <img class="brand-logo" src="{{asset_logo}}" alt="דרור ברק">
+  <!-- The logo sits ON the gradient, not above it: 96% of its visible pixels are
+       white on transparency, so on a white page only the small blue mark shows.
+       It was drawn for a coloured background — which is what the gradient is.
 
-  <!-- Dror's original had a 90KB PNG here that was nothing but a flat cyan-to-blue
-       gradient. This reproduces it in CSS: visually identical, ~50 bytes instead
-       of 90KB in every Lambda package, page load and signed PDF. -->
-  <div class="brand-banner"></div>
+       The gradient itself was a 90KB PNG in Dror's document containing nothing
+       but the gradient. In CSS it is one line: identical to look at, and 90KB
+       lighter in every Lambda package, page load and signed PDF. -->
+  <div class="brand-banner">
+    <img class="brand-logo" src="{{asset_logo}}" alt="דרור ברק">
+  </div>
 
   <h1>הסכם התקשרות ומפרט לאישורך</h1>
   <p class="lead">תהליך בניית אסטרטגיה, ליווי ופיתוח עסקי וניהול מערך שיווק ליצירת צמיחה ברווחים!</p>

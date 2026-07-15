@@ -37,7 +37,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/forms.responses.readonly",  # questionnaire
 ]
 
-_cache: dict[str, Any] = {"token": None, "expires_at": 0.0}
+_cache: dict[str, Any] = {"token": None, "expires_at": 0.0, "key_info": None}
 
 
 class GoogleAuthError(RuntimeError):
@@ -45,15 +45,75 @@ class GoogleAuthError(RuntimeError):
 
 
 def _key_info() -> dict[str, Any]:
-    """The service-account key, from the JSON env var or the file path."""
-    raw = config.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    """The service-account key: base64, raw JSON, or a file path.
+
+    Base64 is the form that survives a deploy. CloudFormation's ``Key=Value``
+    parameter shorthand splits on commas, and this JSON is full of them — passing
+    it raw delivered a single ``{`` to the Lambda and broke signing in production.
+    Base64 has no commas, spaces or quotes, so nothing in the chain can chew it.
+    """
+    import base64
+    import binascii
+
+    # Secrets Manager first: this is how the deployed Lambda gets the key, and it
+    # is where a credential belongs. Lambda caps ALL environment variables at 4KB
+    # combined; the key alone is 2.3KB, and base64 pushed the total to 4098 bytes
+    # and failed the deploy. Fetching it also keeps the key out of CloudFormation
+    # entirely, where it is visible in the template's parameter history.
+    arn = config.get("GOOGLE_SECRET_ARN")
+    if arn:
+        cached = _cache.get("key_info")
+        if cached:
+            return dict(cached)
+        try:
+            import boto3  # provided by the Lambda runtime
+
+            client = boto3.client(
+                "secretsmanager", region_name=config.get("AWS_REGION", "eu-central-1")
+            )
+            secret = client.get_secret_value(SecretId=arn)["SecretString"]
+            info = json.loads(secret)
+        except Exception as exc:  # noqa: BLE001
+            raise GoogleAuthError(
+                f"could not read the Google key from Secrets Manager ({arn}): {exc}"
+            ) from exc
+        _cache["key_info"] = info  # one fetch per container, not per call
+        return dict(info)
+
+    raw = config.get("GOOGLE_SERVICE_ACCOUNT_JSON_B64")
     if raw:
         try:
-            return json.loads(raw)
+            decoded = base64.b64decode(raw, validate=True).decode("utf-8")
+            return json.loads(decoded)
+        except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise GoogleAuthError(
+                "GOOGLE_SERVICE_ACCOUNT_JSON_B64 is not base64-encoded JSON. "
+                'Produce it with: python -c "import base64,pathlib;'
+                "print(base64.b64encode(pathlib.Path('key.json').read_bytes()).decode())\""
+            ) from exc
+
+    raw = config.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if raw:
+        # Tolerate a base64 blob in the JSON var too: it is an easy mix-up, and
+        # the failure it produces otherwise ("not valid JSON") points the wrong way.
+        text = raw.strip()
+        if not text.startswith("{"):
+            try:
+                text = base64.b64decode(text, validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError):
+                pass
+        try:
+            return json.loads(text)
         except json.JSONDecodeError as exc:
+            hint = ""
+            if len(raw) < 20:
+                # This is what a comma-split parameter looks like on arrival.
+                hint = (f" Only {len(raw)} character(s) arrived ({raw!r}) — the value "
+                        f"was truncated in transit. Use GOOGLE_SERVICE_ACCOUNT_JSON_B64 "
+                        f"for deploys: CloudFormation splits parameter values on commas.")
             raise GoogleAuthError(
                 "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON. Paste the whole key "
-                "file contents, including the braces."
+                "file contents, including the braces." + hint
             ) from exc
 
     path = config.get("GOOGLE_SERVICE_ACCOUNT_FILE")
@@ -117,6 +177,7 @@ def access_token(force_refresh: bool = False) -> str:
 
 
 def reset_cache() -> None:
-    """Drop the cached token. For tests, and after a credentials change."""
+    """Drop the cached token and key. For tests, and after a credentials change."""
     _cache["token"] = None
     _cache["expires_at"] = 0.0
+    _cache["key_info"] = None
