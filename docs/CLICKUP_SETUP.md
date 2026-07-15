@@ -135,13 +135,24 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 
 Any other field of Dror's is ignored — never read, never written.
 
-> **`חוזה חתום` must be type URL, not Attachment.** An Attachment field takes an
-> uploaded file; the automations write a *link* to the signed PDF in Drive. As an
-> Attachment field it can never be written. The checker flags this.
+> **`חוזה חתום` as an Attachment field is supported.** The signed PDF is uploaded
+> into ClickUp rather than linked, which keeps the contract visible on the task
+> itself. It takes two API calls (upload to the field, then point the task at the
+> returned attachment id) and goes through the **v3** API, which is
+> workspace-scoped — so it needs `CLICKUP_TEAM_ID` in `.env`. A URL field works
+> too; the code handles either.
+>
+> The PDF still lands in the client's Drive folder either way. On Free Forever mind
+> the 100MB workspace storage cap; contracts are small, so it is unlikely to bite.
 
 > **Field names are matched loosely**, in Hebrew or English — `מחיר חודשי`,
 > `מחיר חודשי ללא מעמ` and `price` all resolve to the same thing. Add a new
 > spelling to `ALIASES` in `src/lib/crm_fields.py` rather than renaming in ClickUp.
+>
+> **Dropdowns are matched by their options, not their name.** A field called plain
+> `סטטוס` could be either status; its options settle it — only the secondary status
+> has an option meaning "questionnaire sent". So `סטטוס`, `סטטוס משני` and
+> `Secondary status` all work, and the name can't put the code wrong.
 
 ### What goes where on a client task
 

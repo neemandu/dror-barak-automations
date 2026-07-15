@@ -309,6 +309,50 @@ class CrmClient(BaseClient):
 
         return {"id": client_id, "written": written, "skipped": skipped}
 
+    def attach_file(
+        self,
+        client_id: str,
+        canonical_field: str,
+        file_bytes: bytes,
+        filename: str,
+    ) -> dict[str, Any]:
+        """Upload a file into an Attachment custom field (e.g. the signed contract).
+
+        Two steps, per ClickUp's API: upload the file to the custom field entity to
+        get an attachment id, then point the task's field at that id. A plain
+        string cannot be written to an Attachment field.
+
+        Falls back to a URL field of the same name if that is how the list is set
+        up, so both layouts work.
+        """
+        field = self.fields().get(canonical_field)
+        if not field:
+            return {"skipped": f"no {canonical_field} field on the list"}
+        if self.dry_run:
+            return self._record(
+                "attach_file", client_id=client_id, field=field.get("name"),
+                filename=filename, bytes=len(file_bytes),
+            )
+        if str(field.get("type")) != "attachment":
+            return {"skipped": f"{field.get('name')!r} is not an Attachment field"}
+
+        workspace = config.require("CLICKUP_TEAM_ID")
+        upload = self._request(
+            "POST",
+            f"https://api.clickup.com/api/v3/workspaces/{workspace}"
+            f"/custom_fields/{field['id']}/attachments",
+            headers=self._headers(),
+            files={"attachment": (filename, file_bytes)},
+        )
+        attachment_id = upload.json().get("id")
+        self._request(
+            "POST",
+            f"{self.base_url}/task/{client_id}/field/{field['id']}",
+            headers=self._headers(),
+            json={"value": {"add": [attachment_id]}},
+        )
+        return {"id": attachment_id, "field": field.get("name"), "filename": filename}
+
     def append_automation_log(self, client_id: str, message: str) -> dict[str, Any]:
         """Append to the client's automation log — a comment on the task."""
         if self.dry_run:

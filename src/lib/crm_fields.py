@@ -24,7 +24,11 @@ ALIASES: dict[str, list[str]] = {
     "name": ["name", "client", "לקוח", "שם", "שם לקוח", "שם הלקוח"],
     "phone": ["phone", "mobile", "טלפון", "נייד", "מספר טלפון"],
     "email": ["email", "mail", "מייל", "אימייל", 'דוא"ל', "דואל"],
-    "status": ["status", "סטטוס", "סטטוס ראשי"],
+    # "סטטוס"/"status" on its own is ambiguous — it has been used for both the
+    # primary and the secondary status. Dropdowns are classified by their options
+    # instead (see classify_dropdown), which is decisive; these names are only the
+    # fallback for non-dropdown fields.
+    "status": ["סטטוס ראשי", "primary status"],
     "sub_status": ["sub status", "substatus", "סטטוס משני"],
     "monthly_price": [
         "monthly price", "price", "מחיר חודשי", "מחיר", "ריטיינר",
@@ -109,14 +113,45 @@ def canonical_sub_status(raw: str) -> Optional[str]:
     return _match(raw, SUB_STATUS_ALIASES)
 
 
+def classify_dropdown(field: dict[str, Any]) -> Optional[str]:
+    """Classify a dropdown as ``status`` / ``sub_status`` by its *options*.
+
+    A field's name is a weak signal — "סטטוס" has been used for both the primary
+    and the secondary status, and getting it backwards means reading the wrong
+    lifecycle entirely. The options are decisive: only the secondary status has an
+    option meaning "questionnaire sent".
+
+    Returns ``None`` for any dropdown that isn't clearly one of the two, so
+    ordinary dropdowns fall through to name matching.
+    """
+    if str(field.get("type") or "") != "drop_down":
+        return None
+    names = [
+        str(o.get("name") or "")
+        for o in (field.get("type_config") or {}).get("options") or []
+    ]
+    if not names:
+        return None
+    sub_hits = sum(1 for n in names if canonical_sub_status(n))
+    status_hits = sum(1 for n in names if canonical_status(n))
+    # Require a majority so one coincidental option can't flip the answer.
+    if sub_hits > status_hits and sub_hits >= len(names) / 2:
+        return "sub_status"
+    if status_hits > sub_hits and status_hits >= len(names) / 2:
+        return "status"
+    return None
+
+
 def resolve_fields(fields: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """``{canonical: field}`` for the list's custom fields we recognise.
 
-    Unrecognised fields are ignored — Dror may keep his own columns alongside ours.
+    Dropdowns are classified by their options first, then everything falls back to
+    name matching. Unrecognised fields are ignored — Dror keeps his own columns
+    alongside ours.
     """
     resolved: dict[str, dict[str, Any]] = {}
     for field in fields:
-        canonical = canonical_for(str(field.get("name") or ""))
+        canonical = classify_dropdown(field) or canonical_for(str(field.get("name") or ""))
         if canonical and canonical not in resolved:
             resolved[canonical] = field
     return resolved
@@ -178,11 +213,12 @@ def coerce_value(field: dict[str, Any], value: Any) -> Any:
     if ftype in NUMERIC_TYPES:
         return float(value) if value not in (None, "") else None
     if ftype == "attachment":
-        # Attachment fields take an uploaded file, not a URL string. Writing one
-        # would either fail or, worse, store a URL where a file is expected.
+        # Reached only if someone passes a bare string. The real path uploads the
+        # file first (CrmClient.attach_file) and sets the field to the resulting
+        # attachment id, so a raw string here is a caller mistake.
         raise ValueError(
-            f"{field.get('name')!r} is an Attachment field; the automations write a "
-            f"link, not a file. Change its type to URL in ClickUp."
+            f"{field.get('name')!r} is an Attachment field: it holds an uploaded "
+            f"file, not a string. Use CrmClient.attach_file(client_id, field, path)."
         )
     return value
 

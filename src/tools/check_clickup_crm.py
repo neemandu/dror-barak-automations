@@ -171,11 +171,12 @@ def check(list_id: str, token: str) -> bool:
                   f"(automations writing it will report it as skipped)")
             continue
         print(f"{OK}{canonical:18} -> {field['name']!r} ({field['type']})")
-        if str(field.get("type")) == "attachment":
-            # The automations store a link; an attachment field wants a file.
-            print(f"{BAD}{'':18}    ^ Attachment fields take an uploaded file, but the "
-                  f"automations write a link.\n{'':26}Change {field['name']!r} to type "
-                  f"URL, or it will never be written.")
+        if str(field.get("type")) == "attachment" and not config.get("CLICKUP_TEAM_ID"):
+            # Uploading to a custom field goes through the v3 API, which is
+            # workspace-scoped, so it needs the team id that v2 calls never did.
+            print(f"{BAD}{'':18}    ^ Attachment fields upload via the v3 API, which "
+                  f"needs CLICKUP_TEAM_ID.\n{'':26}Set it in .env "
+                  f"(--discover prints it), or the file cannot be uploaded.")
             ok = False
 
     sub = resolved.get("sub_status")

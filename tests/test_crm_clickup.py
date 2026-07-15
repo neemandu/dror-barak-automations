@@ -73,6 +73,46 @@ def test_sub_status_aliases(raw, expected):
     assert crm_fields.canonical_sub_status(raw) == expected
 
 
+def test_dropdown_named_just_status_is_classified_by_its_options():
+    # Dror renamed 'סטטוס משני' to 'סטטוס'. Matching on the name alone made the
+    # code read the secondary status as the primary one -- the options decide.
+    field = {"id": "x", "name": "סטטוס", "type": "drop_down",
+             "type_config": {"options": [
+                 {"id": "a", "name": "נעשתה פגישה ראשונית"},
+                 {"id": "b", "name": "נשלח שאלון"},
+                 {"id": "c", "name": "חתם"},
+             ]}}
+    assert crm_fields.classify_dropdown(field) == "sub_status"
+    assert crm_fields.resolve_fields([field])["sub_status"]["name"] == "סטטוס"
+    assert "status" not in crm_fields.resolve_fields([field])
+
+
+def test_dropdown_of_primary_options_classifies_as_status():
+    field = {"id": "y", "name": "סטטוס", "type": "drop_down",
+             "type_config": {"options": [
+                 {"id": "a", "name": "ליד"},
+                 {"id": "b", "name": "לקוח פעיל"},
+                 {"id": "c", "name": "מושהה"},
+             ]}}
+    assert crm_fields.classify_dropdown(field) == "status"
+
+
+def test_ordinary_dropdown_falls_through_to_name_matching():
+    field = {"id": "z", "name": "סוג שירות", "type": "drop_down",
+             "type_config": {"options": [
+                 {"id": "a", "name": "ניהול קמפיינים"}, {"id": "b", "name": "ייעוץ"},
+             ]}}
+    assert crm_fields.classify_dropdown(field) is None
+    assert crm_fields.resolve_fields([field])["service_type"]["name"] == "סוג שירות"
+
+
+def test_classify_ignores_non_dropdowns_and_empty_options():
+    assert crm_fields.classify_dropdown({"name": "סטטוס", "type": "short_text"}) is None
+    assert crm_fields.classify_dropdown(
+        {"name": "סטטוס", "type": "drop_down", "type_config": {"options": []}}
+    ) is None
+
+
 def test_resolve_fields_ignores_drors_own_columns():
     resolved = crm_fields.resolve_fields(LIST_FIELDS)
     assert set(resolved) == {"phone", "monthly_price", "drive_folder",
