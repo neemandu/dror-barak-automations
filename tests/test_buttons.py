@@ -234,3 +234,35 @@ def test_forged_button_press_gets_401_through_api_gateway(ran):
     })
     assert resp["statusCode"] == 401
     assert ran == []
+
+
+def test_clickup_test_button_gets_a_helpful_200_not_a_scary_400(ran):
+    # ClickUp's Automation editor Test button sends no task, because it cannot
+    # know which task the real button would be pressed on. A 400 here reads as
+    # "your button is broken" precisely when someone is checking it works.
+    result = lambda_handler.handle_action(
+        "send_quote", '{"body":"Test message from ClickUp Webhooks Service"}', TOKEN
+    )
+    assert result["ok"] is True
+    assert result["test"] is True
+    assert ran == [], "a test ping must not send a real quote"
+
+
+def test_test_ping_still_requires_authentication(ran):
+    with pytest.raises(lambda_handler.Rejected) as exc:
+        lambda_handler.handle_action(
+            "send_quote", '{"body":"Test message from ClickUp Webhooks Service"}', "wrong"
+        )
+    assert exc.value.status == 401
+
+
+def test_a_real_payload_is_never_mistaken_for_a_test_ping(ran):
+    # Only a lone `body` string counts. A real task payload must still run.
+    lambda_handler.handle_action("send_quote", body(), TOKEN)
+    assert ran == [("send_quote", "t1")]
+
+
+def test_body_key_alongside_a_task_is_not_a_test_ping(ran):
+    payload = json.dumps({"body": "note", "payload": {"id": "t7"}})
+    lambda_handler.handle_action("send_quote", payload, TOKEN)
+    assert ran == [("send_quote", "t7")]

@@ -161,8 +161,34 @@ def handle_action(
     except json.JSONDecodeError as exc:
         raise Rejected(400, f"body is not JSON: {exc}") from exc
 
+    if _is_clickup_test_ping(payload):
+        # ClickUp's Automation editor has a Test button that posts
+        # {"body": "Test message from ClickUp Webhooks Service"} — no task, because
+        # it cannot know which task you would press the real button on. Answering
+        # 400 is defensible but reads as "your button is broken" at the exact
+        # moment someone is checking whether their button works.
+        log.info("clickup_test_ping", extra={"action": action_key})
+        return {
+            "ok": True,
+            "test": True,
+            "action": action.key,
+            "message": "Webhook reachable and authenticated. This was ClickUp's "
+                       "Test button, which sends no task — press the real button "
+                       "on a client task to run the automation.",
+        }
+
     task_id = actions.task_id_of(payload)
     if not task_id:
+        # The body is the only useful evidence for this failure, and without it a
+        # misconfigured payload is indistinguishable from a test ping.
+        log.warning(
+            "action_payload_without_task",
+            extra={
+                "action": action_key,
+                "keys": sorted(payload.keys())[:20],
+                "body": raw_body[:800],
+            },
+        )
         raise Rejected(400, "payload has no task id")
 
     key = actions.click_key(action.key, task_id, payload)
@@ -187,6 +213,17 @@ def handle_action(
     idempotency.complete(key)
     _comment(task_id, action.confirm, dry_run)
     return {"ok": True, "action": action.key, "result": result}
+
+
+def _is_clickup_test_ping(payload: dict[str, Any]) -> bool:
+    """ClickUp's "Test" button in the Automation editor, not a real press.
+
+    Matched on shape rather than the exact sentence: a lone ``body`` string and
+    nothing else is never a real automation payload, which always carries a task.
+    """
+    if set(payload.keys()) != {"body"}:
+        return False
+    return isinstance(payload.get("body"), str)
 
 
 def _comment(task_id: str, message: str, dry_run: bool) -> None:
