@@ -337,12 +337,18 @@ class CrmClient(BaseClient):
             return {"skipped": f"{field.get('name')!r} is not an Attachment field"}
 
         workspace = config.require("CLICKUP_TEAM_ID")
+        # ClickUp will not accept a non-ASCII filename at all -- it answers
+        # "Filename can only contain letters, numbers, dots, underscores, hyphens,
+        # spaces...". Sent as a multipart header instead, a Hebrew name is silently
+        # stored as mojibake, which is worse. So the name is sanitised here; the
+        # Drive copy keeps the readable Hebrew one.
+        safe = _ascii_filename(filename, fallback=f"attachment-{client_id}")
         upload = self._request(
             "POST",
             f"https://api.clickup.com/api/v3/workspaces/{workspace}"
             f"/custom_fields/{field['id']}/attachments",
             headers=self._headers(),
-            files={"attachment": (filename, file_bytes)},
+            files={"attachment": (safe, file_bytes, "application/octet-stream")},
         )
         attachment_id = upload.json().get("id")
         self._request(
@@ -351,7 +357,7 @@ class CrmClient(BaseClient):
             headers=self._headers(),
             json={"value": {"add": [attachment_id]}},
         )
-        return {"id": attachment_id, "field": field.get("name"), "filename": filename}
+        return {"id": attachment_id, "field": field.get("name"), "filename": safe}
 
     def append_automation_log(self, client_id: str, message: str) -> dict[str, Any]:
         """Append to the client's automation log — a comment on the task."""
@@ -366,6 +372,22 @@ class CrmClient(BaseClient):
             json={"comment_text": message, "notify_all": False},
         )
         return resp.json()
+
+
+def _ascii_filename(name: str, fallback: str = "attachment") -> str:
+    """An ASCII filename safe for a multipart header, keeping the extension.
+
+    Multipart filenames are effectively latin-1; Hebrew sent there is mangled on
+    arrival. The readable name travels as a form field instead — this is only the
+    header's fallback, so it needs to be sane rather than pretty.
+    """
+    import os
+    import re
+
+    stem, ext = os.path.splitext(name or "")
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-")
+    ext = re.sub(r"[^A-Za-z0-9.]+", "", ext) or ".bin"
+    return f"{stem or fallback}{ext}"
 
 
 # Names the automations pass to update_fields -> canonical field.

@@ -40,6 +40,34 @@ Parameters:
     Description: The משימות list. Empty disables the Claude Code bridge.
   ClickUpTeamId:
     Type: String
+  SignLinkSecret:
+    Type: String
+    NoEcho: true
+    Description: >
+      Signs the per-client signing links. The client has no account, so the link
+      IS the credential: without this, guessing a client id would be enough to
+      open or sign someone's contract. Generate with:
+      python -c "import secrets;print(secrets.token_urlsafe(48))"
+  DriveClientsParentId:
+    Type: String
+    Description: Drive folder that holds client folders; signed PDFs land here.
+  GoogleServiceAccountJson:
+    Type: String
+    NoEcho: true
+    Description: The service-account key JSON, on one line.
+  GoogleImpersonateSubject:
+    Type: String
+    Default: dror@drorbrk.co.il
+  SignBaseUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Public base URL signing links are issued under, e.g.
+      https://xxx.execute-api.eu-central-1.amazonaws.com/dev — deliberately a
+      parameter rather than !Ref WebhookApi: the function's environment referring
+      to the API, while the API's routes come from the function, is a circular
+      dependency CloudFormation refuses. Read it from the SignBaseUrl output after
+      the first deploy and pass it on the next; the id is stable across updates.
   WebhookDryRun:
     Type: String
     Default: "1"
@@ -56,7 +84,7 @@ Globals:
     # Generous: onboarding calls Drive, Morning and WhatsApp in sequence. Well
     # under Lambda's 15-minute ceiling, but not so tight that a slow Drive call
     # times out mid-onboarding and leaves a half-created client.
-    Timeout: 120
+    Timeout: 180
     Architectures: [arm64]
     Environment:
       Variables:
@@ -68,6 +96,11 @@ Globals:
         CLICKUP_TASKS_LIST_ID: !Ref ClickUpTasksListId
         CLICKUP_TEAM_ID: !Ref ClickUpTeamId
         WEBHOOK_DRY_RUN: !Ref WebhookDryRun
+        SIGN_LINK_SECRET: !Ref SignLinkSecret
+        SIGN_BASE_URL: !Ref SignBaseUrl
+        DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
+        GOOGLE_SERVICE_ACCOUNT_JSON: !Ref GoogleServiceAccountJson
+        GOOGLE_IMPERSONATE_SUBJECT: !Ref GoogleImpersonateSubject
         # NOTE: /tmp is per-instance and vanishes. The run-log is the only source
         # for the dashboard and the daily email, so both will be empty until this
         # moves to DynamoDB. Tracked in TASKS.md.
@@ -110,6 +143,20 @@ Resources:
             ApiId: !Ref WebhookApi
             Path: /action
             Method: POST
+        # The client-facing signing page. Public by necessity -- the client has
+        # no account -- so the signed token in the URL is the credential.
+        SignPageGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /sign
+            Method: GET
+        SignPagePost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /sign
+            Method: POST
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
@@ -134,6 +181,9 @@ Outputs:
   WebhookUrl:
     Description: Register this in ClickUp (python -m src.tools.register_clickup_webhook)
     Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/clickup"
+  SignBaseUrlOut:
+    Description: Pass this back in as the SignBaseUrl parameter on the next deploy.
+    Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
   ActionUrl:
     Description: >
       Button endpoint. In each Button field's Automation, Call webhook to

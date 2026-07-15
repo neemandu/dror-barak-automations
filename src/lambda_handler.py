@@ -294,6 +294,10 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
     params = event.get("queryStringParameters") or {}
 
     try:
+        if path.endswith("/sign"):
+            # A client's browser, not ClickUp: HTML in, HTML out, and the token in
+            # the URL is the only credential — the client has no account.
+            return _sign_route(event, raw, params, headers, dry_run)
         if path.endswith("/action"):
             # A button press: an Automation webhook, authenticated by header
             # rather than signature, with the action named in the query string.
@@ -313,6 +317,60 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         # 500 so ClickUp retries; the claim has already been released.
         log.error("webhook_failed", extra={"error": str(exc)})
         return _response(500, {"ok": False, "error": str(exc)})
+
+
+def _sign_route(
+    event: dict[str, Any],
+    raw: str,
+    params: dict[str, Any],
+    headers: dict[str, str],
+    dry_run: bool,
+) -> dict[str, Any]:
+    """The client-facing signing page."""
+    from urllib.parse import parse_qs
+
+    from . import sign_page
+    from .lib import signing
+
+    method = str((event.get("requestContext") or {}).get("http", {}).get("method")
+                 or event.get("httpMethod") or "GET").upper()
+    token = str(params.get("t") or "")
+
+    try:
+        if method == "GET":
+            return _html(200, sign_page.handle_get(token, dry_run=dry_run))
+        if method == "POST":
+            ip = str((event.get("requestContext") or {}).get("http", {}).get("sourceIp") or "")
+            return _html(200, sign_page.handle_post(
+                token, parse_qs(raw), ip=ip,
+                user_agent=headers.get("user-agent", ""), dry_run=dry_run,
+            ))
+        return _html(405, sign_page.error_page("שיטה לא נתמכת"))
+    except signing.SigningError as exc:
+        # A bad or expired link is the client's problem to see, not a stack trace.
+        log.warning("sign_link_rejected", extra={"reason": str(exc)})
+        return _html(403, sign_page.error_page(str(exc)))
+    except Exception as exc:  # noqa: BLE001
+        log.error("sign_failed", extra={"error": str(exc)})
+        return _html(500, sign_page.error_page(
+            "אירעה שגיאה בשמירת ההסכם. לא בוצע חיוב ולא נשמרה חתימה — נסה/י שוב, "
+            "או פנה/י לדרור."
+        ))
+
+
+def _html(status: int, body: str) -> dict[str, Any]:
+    return {
+        "statusCode": status,
+        "headers": {
+            "Content-Type": "text/html; charset=utf-8",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+            # The page is a contract: it must never be framed by someone else's site.
+            "X-Frame-Options": "DENY",
+            "Cache-Control": "no-store",
+        },
+        "body": body,
+    }
 
 
 def _response(status: int, body: dict[str, Any]) -> dict[str, Any]:

@@ -359,3 +359,19 @@ def test_update_fields_reports_unknown_fields_instead_of_dropping_them(monkeypat
     # 'email' is not set up on this list — surfaced, not silently swallowed.
     assert "email" in result["skipped"]
     assert len(sent) == 2
+
+
+def test_attachment_filenames_are_made_ascii():
+    """ClickUp rejects non-ASCII filenames outright:
+    "Filename can only contain letters, numbers, dots, underscores, hyphens...".
+    Sent as a multipart header instead, Hebrew is silently stored as mojibake,
+    which is worse than the error. So the name is sanitised before it is sent.
+    """
+    from src.lib.clients.crm import _ascii_filename
+
+    assert _ascii_filename("quote v2 (final).pdf") == "quote-v2-final.pdf"
+    assert _ascii_filename("הסכם חתום — אלפא.pdf", fallback="attachment-t1") == "attachment-t1.pdf"
+    assert _ascii_filename("").endswith(".bin")
+    # Whatever comes out must be safe to put in a multipart header.
+    for name in ["חוזה.pdf", "a/b\c.pdf", "..pdf", "x" * 5 + ".PDF"]:
+        assert _ascii_filename(name).isascii()
