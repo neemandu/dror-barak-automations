@@ -74,8 +74,12 @@ def check() -> bool:
     print("\n5. the APIs respond as Dror")
     probes = [
         ("Drive", "https://www.googleapis.com/drive/v3/about", {"fields": "user"}),
-        ("People (Contacts)", "https://people.googleapis.com/v1/people/me",
-         {"personFields": "names"}),
+        # Probe the contact *list*, not people/me: reading your own profile needs a
+        # userinfo.profile scope we deliberately don't ask for, so people/me 403s
+        # on a perfectly good setup. connections.list uses the `contacts` scope,
+        # which is what create_contact actually needs.
+        ("People (Contacts)", "https://people.googleapis.com/v1/people/me/connections",
+         {"personFields": "names", "pageSize": "1"}),
     ]
     for label, url, params in probes:
         try:
