@@ -69,14 +69,38 @@ def test_send_quote_refuses_without_a_price(read_log, monkeypatch):
     assert "no_price" in _actions(read_log)
 
 
-def test_send_quote_survives_undeliverable_whatsapp(read_log, monkeypatch):
-    # ManyChat is not configured yet. The link must still exist and reach the task
-    # -- refusing to produce it would make the button useless.
+def test_send_quote_emails_the_client(read_log, monkeypatch):
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
     monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
-    monkeypatch.delenv("MANYCHAT_API_KEY", raising=False)
+    sent = send_quote.send("42", dry_run=True)
+    assert sent["delivered"] == "אימייל"
+
+
+def test_send_quote_survives_a_client_with_no_email(read_log, monkeypatch):
+    # The link must still exist and reach the task. Refusing to produce it because
+    # we cannot deliver it would make the button useless.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "get_client", lambda self, cid: {
+        "id": cid, "name": "מכללה", "monthly_price": 4900, "email": ""})
     sent = send_quote.send("42", dry_run=True)
     assert sent["url"]
+    assert sent["delivered"] == ""
+
+
+def test_send_quote_survives_a_broken_mail_server(read_log, monkeypatch):
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    from src.lib import emails
+
+    def boom(*a, **k):
+        raise emails.EmailError("SMTP is down")
+
+    monkeypatch.setattr(emails, "send_template", boom)
+    sent = send_quote.send("42", dry_run=True)
+    assert sent["url"], "the link must survive a delivery failure"
     assert sent["delivered"] == ""
 
 
@@ -93,10 +117,64 @@ def test_onboarding(read_log):
     } <= actions
 
 
-def test_monthly_payment_requests(read_log):
+def test_monthly_billing_issues_a_proforma_and_emails_it(read_log):
     result = monthly_payment_requests.run(dry_run=True, month="2026-07")
     assert result["count"] == 2  # two fixture active clients
-    assert "payment_requested" in _actions(read_log)
+    actions = _actions(read_log)
+    assert "proforma_created" in actions
+    assert "proforma_emailed" in actions
+
+
+def test_monthly_billing_skips_a_client_morning_has_never_heard_of(read_log, monkeypatch):
+    # Onboarding creates the Morning client. Billing without one would fail, or
+    # invent a second record for the same client.
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "list_active_clients", lambda self: [
+        {"id": "1", "name": "מכללה", "monthly_price": 4900, "morning_client_id": "",
+         "email": "a@b.co"}])
+    monthly_payment_requests.run(dry_run=True, month="2026-07")
+    assert "no_morning_client" in _actions(read_log)
+
+
+def test_monthly_billing_does_not_email_without_the_attachment(read_log, monkeypatch):
+    # "מצ״ב חשבון עסקה" with nothing attached is a mistake the client sees at once.
+    from src.lib.clients.morning import MorningClient
+
+    monkeypatch.setattr(MorningClient, "download_document", lambda self, d: b"")
+    monthly_payment_requests.run(dry_run=True, month="2026-07")
+    actions = _actions(read_log)
+    assert "proforma_created" in actions, "the document must still be issued"
+    assert "email_failed" in actions
+    assert "proforma_emailed" not in actions
+
+
+def test_one_clients_failure_does_not_stop_the_months_billing(read_log, monkeypatch):
+    from src.lib.clients.crm import CrmClient
+    from src.lib.clients.morning import MorningClient
+
+    monkeypatch.setattr(CrmClient, "list_active_clients", lambda self: [
+        {"id": "1", "name": "א", "monthly_price": 100, "morning_client_id": "m1", "email": "a@b.co"},
+        {"id": "2", "name": "ב", "monthly_price": 200, "morning_client_id": "m2", "email": "c@d.co"},
+    ])
+    calls = []
+
+    def flaky(self, **kw):
+        calls.append(kw)
+        if len(calls) == 1:
+            raise RuntimeError("Morning 500")
+        return {"id": "doc2", "url": {"he": "https://x"}}
+
+    monkeypatch.setattr(MorningClient, "create_proforma", flaky)
+    monthly_payment_requests.run(dry_run=True, month="2026-07")
+    actions = _actions(read_log)
+    assert "billing_error" in actions
+    assert "proforma_created" in actions, "the second client must still be billed"
+
+
+def test_the_month_is_written_for_a_human():
+    assert monthly_payment_requests._month_label("2026-07") == "יולי 2026"
+    assert monthly_payment_requests._month_label("nonsense") == "nonsense"
 
 
 def test_campaign_summary(read_log):

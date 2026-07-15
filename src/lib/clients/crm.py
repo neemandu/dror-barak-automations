@@ -71,8 +71,11 @@ def _fixture_client(client_id: str) -> dict[str, Any]:
         "drive_folder_url": "",
         "signed_contract_url": "",
         "recordings_path": "",
-        "morning_status": "",
-        "morning_client_id": "",
+        # An *active* client has been through onboarding by definition, so Morning
+        # knows them. A fixture without this represents a state that cannot occur,
+        # and made the billing tests exercise the skip path rather than the work.
+        "morning_status": "created",
+        "morning_client_id": "morning-client-mock",
         "url": "https://app.clickup.com/t/mock",
         "social_profiles": {
             "instagram": "https://instagram.com/example",

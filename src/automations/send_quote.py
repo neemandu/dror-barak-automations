@@ -25,9 +25,11 @@ from typing import Any
 
 from ..lib import contract, signing
 from ..lib.clients.crm import SUB_QUOTE_SENT, CrmClient
+from ..lib.logging_setup import get_logger
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "send_quote"
+_log = get_logger(NAME, "deliver")
 
 
 def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -72,21 +74,26 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
 def _deliver(crm: CrmClient, client: dict[str, Any], url: str, *, dry_run: bool) -> str:
     """Try to get the link to the client. Returns how, or "" if we could not.
 
-    Never raises: the link exists and is on the task either way, and a delivery
-    failure must not lose it.
+    Never raises: the link is on the task either way, and a delivery failure must
+    not lose it. Email first — it carries Dror's own wording and needs no Meta
+    approval; WhatsApp is added when ManyChat exists.
     """
-    from ..lib import config
+    from ..lib import emails
 
-    if not config.get("MANYCHAT_API_KEY"):
-        return ""  # not configured yet; the comment on the task is the fallback
+    to = str(client.get("email") or "").strip()
+    if not to:
+        _log.warning("no_client_email", extra={"client_id": client.get("id")})
+        return ""
     try:
-        from ..lib.clients.manychat import ManyChatClient  # not built yet
-
-        ManyChatClient(dry_run=dry_run).send_flow(
-            client["phone"], config.require("MANYCHAT_FLOW_QUOTE"), {"quote_url": url}
+        emails.send_template(
+            "sign_contract", to,
+            client_name=client.get("first_name") or client.get("name") or "",
+            cta_url=url,
+            dry_run=dry_run,
         )
-        return "WhatsApp"
-    except Exception:  # noqa: BLE001
+        return "אימייל"
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("email_failed", extra={"to": to, "error": str(exc)})
         return ""
 
 
