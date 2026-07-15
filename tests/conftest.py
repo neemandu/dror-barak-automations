@@ -18,6 +18,21 @@ def isolated_run_log(tmp_path, monkeypatch):
     for key in ("DROR_WHATSAPP", "DRIVE_DEFAULT_PARENT_ID", "DRIVE_TEMPLATE_IDS"):
         monkeypatch.delenv(key, raising=False)
 
+    # No Google credentials, and no reaching AWS. Once GOOGLE_SECRET_ARN existed
+    # in a developer's .env, the suite started calling Secrets Manager for real:
+    # slow, dependent on credentials, and it made the "missing credentials" tests
+    # pass or fail depending on which test ran first.
+    for key in ("GOOGLE_SECRET_ARN", "GOOGLE_SERVICE_ACCOUNT_JSON",
+                "GOOGLE_SERVICE_ACCOUNT_JSON_B64", "GOOGLE_SERVICE_ACCOUNT_FILE",
+                "GOOGLE_IMPERSONATE_SUBJECT"):
+        monkeypatch.delenv(key, raising=False)
+
+    # google_auth caches the key and token at module level, so one test's fetch
+    # would otherwise satisfy the next test's assertion that there is nothing.
+    from src.lib import google_auth
+
+    google_auth.reset_cache()
+
     # The contract refuses to render without the provider's details. Give the
     # tests obviously-fake ones rather than let them read the real .env: a suite
     # that passes only because a developer's .env happens to be filled in is a
