@@ -4,6 +4,11 @@
   Transcribed from Dror's Google Doc "הסכם התקשרות והצעת מחיר"; the original text
   is kept at docs/contract_source.txt so this can be diffed against it.
 
+  The provider's own details -- bank account, ח.פ, address, phone -- are NOT in
+  this file. They come from PROVIDER_* in .env, because this repo is public and a
+  bank account number in it is a fraud vector that cannot be recalled once
+  indexed. See docs/CREDENTIALS.md.
+
   It lives in the repo, not in Google Docs, deliberately. A contract has to be
   provable: this file's history says exactly what the terms were on any date, and
   the signed PDF freezes them at signing. A Doc that can be edited freely after
@@ -57,12 +62,12 @@
   <div class="parties">
     <div class="party">
       <p><strong>בין:</strong></p>
-      <p>דרור ברק<br>
-         עוסק מורשה / ח.פ: REDACTED_BUSINESS_ID<br>
-         כתובת: REDACTED_ADDRESS<br>
-         טלפון: REDACTED_PHONE<br>
-         דוא״ל: REDACTED_EMAIL</p>
-      <p>להלן: “נותן השירות” או “דרור ברק”</p>
+      <p>{{provider_name}}<br>
+         עוסק מורשה / ח.פ: {{provider_business_id}}<br>
+         כתובת: {{provider_address}}<br>
+         טלפון: {{provider_phone}}<br>
+         דוא״ל: {{provider_email}}</p>
+      <p>להלן: “נותן השירות” או “{{provider_name}}”</p>
     </div>
     <div class="party">
       <p><strong>לבין:</strong></p>
@@ -239,10 +244,10 @@
   <h3>10.4 תשלום</h3>
   <p>התשלום יוסדר בתחילת כל חודש עבודה משותף, ולא יאוחר מה־10 לכל חודש.</p>
   <p>פרטי העברה בנקאית:<br>
-     בנק: 12<br>
-     סניף: 170<br>
-     מספר חשבון: REDACTED_ACCOUNT<br>
-     שם בעל החשבון: דרור ברק</p>
+     בנק: {{provider_bank}}<br>
+     סניף: {{provider_bank_branch}}<br>
+     מספר חשבון: {{provider_bank_account}}<br>
+     שם בעל החשבון: {{provider_name}}</p>
   <p>מובהר כי הסכומים הנ״ל אינם כוללים מע״מ, וכי מע״מ יתווסף כחוק כנגד חשבונית מס / קבלה.</p>
 
   <hr>
@@ -382,7 +387,7 @@
   <div class="signatures">
     <div class="sig">
       <p><strong>נותן השירות</strong></p>
-      <p>שם: דרור ברק</p>
+      <p>שם: {{provider_name}}</p>
       <div class="sig-box provider">{{provider_signature}}</div>
       <p>תאריך: <span class="filled">{{sign_date}}</span></p>
     </div>

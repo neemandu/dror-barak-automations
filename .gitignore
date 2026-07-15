@@ -18,6 +18,9 @@ client_secret*.json
 # ---- Client material (kept on disk, never published) ----
 # The repo is public. Dror's proposal, call notes and any client-supplied
 # document stay local only.
+# Dror's original contract text: it carries his bank account and ח.פ.
+docs/contract_source.txt
+
 docs/*.pdf
 docs/*.docx
 docs/*.xlsx

@@ -27,7 +27,34 @@ def test_template_is_readable_and_has_the_expected_placeholders():
         "client_name", "client_business_id", "client_address", "client_phone",
         "client_email", "sign_date", "price_strategy", "price_campaigns",
         "price_total", "provider_signature", "client_signature",
+        # Dror's own side, including his bank account: these come from .env, not
+        # from the template, because this repo is public.
+        "provider_name", "provider_business_id", "provider_address",
+        "provider_phone", "provider_email", "provider_bank",
+        "provider_bank_branch", "provider_bank_account",
     }
+
+
+def test_the_template_carries_no_bank_details():
+    """The template is published; Dror's account number must not be in it.
+
+    A bank account number in a public repo is a fraud vector that cannot be
+    recalled once indexed.
+    """
+    raw = contract.template_path().read_text(encoding="utf-8")
+    for secret in ("REDACTED_ACCOUNT", "REDACTED_BUSINESS_ID", "REDACTED_PHONE", "REDACTED_EMAIL_USER"):
+        assert secret not in raw, f"{secret!r} is in the published template"
+
+
+def test_an_unconfigured_provider_refuses_rather_than_send_a_blank(monkeypatch):
+    # A contract with no account to pay into is not a contract.
+    for env in contract.PROVIDER_FIELDS.values():
+        monkeypatch.delenv(env, raising=False)
+    monkeypatch.setattr(contract.config, "get", lambda k, d=None: None)
+    f = contract.fields_from_client(CLIENT, price_strategy=4900, price_campaigns=0)
+    with pytest.raises(contract.ContractError) as exc:
+        contract.render(f)
+    assert "provider_bank_account" in str(exc.value)
 
 
 def test_prices_are_totalled_not_transcribed():
@@ -125,10 +152,16 @@ def test_sign_date_defaults_to_today_but_can_be_pinned():
 
 
 def test_contract_still_matches_drors_source_text():
-    """Guards the transcription: the legal clauses must not drift silently."""
+    """Guards the transcription: the legal clauses must not drift silently.
+
+    Skipped where Dror's source is not present — it is gitignored, since it
+    carries his bank account and this repo is public.
+    """
     from pathlib import Path
 
     source = Path(contract.template_path()).parents[1] / "docs" / "contract_source.txt"
+    if not source.exists():
+        pytest.skip("docs/contract_source.txt is local-only (gitignored)")
     original = source.read_text(encoding="utf-8")
     rendered = contract.render(
         contract.fields_from_client(CLIENT, price_strategy=4900, price_campaigns=2500),
@@ -140,8 +173,6 @@ def test_contract_still_matches_drors_source_text():
         "עד 4 פגישות עבודה בחודש",          # meetings included
         "הודעה מוקדמת בכתב של 14 ימים",     # notice period
         "1,000 ₪",                          # referral fee
-        "REDACTED_BUSINESS_ID",                        # Dror's company number
-        "מספר חשבון: REDACTED_ACCOUNT",               # bank details
     ]:
         assert clause in original, f"{clause!r} not in Dror's source — test is stale"
         assert clause in rendered, f"{clause!r} lost in transcription"

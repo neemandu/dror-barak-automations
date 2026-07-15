@@ -19,6 +19,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
+from . import config
+
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
@@ -34,6 +36,34 @@ REQUIRED_CLIENT_FIELDS = {
     "client_phone": "טלפון",
     "client_email": "דוא״ל",
 }
+
+# Dror's own side of the contract — including his bank account. Kept in .env, not
+# in the template: this repo is public, and a bank account number in it is a fraud
+# vector that cannot be recalled once indexed.
+PROVIDER_FIELDS = {
+    "provider_name": "PROVIDER_NAME",
+    "provider_business_id": "PROVIDER_BUSINESS_ID",
+    "provider_address": "PROVIDER_ADDRESS",
+    "provider_phone": "PROVIDER_PHONE",
+    "provider_email": "PROVIDER_EMAIL",
+    "provider_bank": "PROVIDER_BANK",
+    "provider_bank_branch": "PROVIDER_BANK_BRANCH",
+    "provider_bank_account": "PROVIDER_BANK_ACCOUNT",
+}
+
+
+def provider_fields() -> dict[str, str]:
+    """Dror's details from the environment.
+
+    Missing values are left empty on purpose rather than defaulted: ``render``
+    refuses on a blank, so an unconfigured deployment fails loudly instead of
+    sending a client a contract with no bank details to pay into.
+    """
+    return {key: str(config.get(env) or "") for key, env in PROVIDER_FIELDS.items()}
+
+
+def missing_provider() -> list[str]:
+    return [env for key, env in PROVIDER_FIELDS.items() if not config.get(env)]
 
 
 class ContractError(RuntimeError):
@@ -107,6 +137,7 @@ def fields_from_client(
         raise ContractError(f"cannot total {strategy!r} + {campaigns!r}") from exc
 
     return {
+        **provider_fields(),
         "client_name": str(client.get("name") or ""),
         "client_business_id": str(client.get("business_id") or ""),
         "client_address": str(client.get("address") or ""),
