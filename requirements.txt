@@ -6,3 +6,7 @@
 # locally (pip install -r requirements-dev.txt) if you exercise the DynamoDB path
 # on your machine.
 requests>=2.31
+
+# Mints Google access tokens from the service-account key. Tokens live one
+# hour, so a pasted token cannot work in production.
+google-auth>=2.28

@@ -114,3 +114,77 @@ def test_reserved_context_names_do_not_crash_the_automation(capsys):
     assert record["message_"] == "שלום"      # renamed, not lost
     assert record["filename_"] == "x.pdf"
     assert record["client_id"] == "42"       # untouched
+
+
+# --------------------------------------------------------------- google auth
+
+
+def test_google_auth_explains_missing_credentials(monkeypatch):
+    from src.lib import google_auth
+
+    for k in ("GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_SERVICE_ACCOUNT_FILE"):
+        monkeypatch.delenv(k, raising=False)
+    google_auth.reset_cache()
+    with pytest.raises(google_auth.GoogleAuthError) as exc:
+        google_auth.access_token()
+    assert "GOOGLE_SERVICE_ACCOUNT" in str(exc.value)
+
+
+def test_google_auth_requires_a_subject_to_impersonate(monkeypatch):
+    # Without it the service account has no Contacts and Drive files would be
+    # owned by the robot rather than by Dror -- a silent, confusing failure.
+    from src.lib import google_auth
+
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", '{"client_id":"1","type":"service_account"}')
+    monkeypatch.delenv("GOOGLE_IMPERSONATE_SUBJECT", raising=False)
+    google_auth.reset_cache()
+    with pytest.raises(google_auth.GoogleAuthError) as exc:
+        google_auth.access_token()
+    assert "GOOGLE_IMPERSONATE_SUBJECT" in str(exc.value)
+
+
+def test_google_auth_rejects_malformed_key_json(monkeypatch):
+    from src.lib import google_auth
+
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "not json")
+    google_auth.reset_cache()
+    with pytest.raises(google_auth.GoogleAuthError) as exc:
+        google_auth._key_info()
+    assert "not valid JSON" in str(exc.value)
+
+
+def test_google_token_is_cached_not_minted_per_call(monkeypatch):
+    # Onboarding makes several Drive calls in a row; minting a token for each
+    # would be wasteful and rate-limited.
+    from src.lib import google_auth
+
+    google_auth.reset_cache()
+    google_auth._cache["token"] = "cached-token"
+    google_auth._cache["expires_at"] = __import__("time").time() + 600
+    assert google_auth.access_token() == "cached-token"
+
+
+def test_expired_google_token_is_not_reused(monkeypatch):
+    from src.lib import google_auth
+
+    google_auth.reset_cache()
+    google_auth._cache["token"] = "stale"
+    google_auth._cache["expires_at"] = __import__("time").time() - 1
+    monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_FILE", raising=False)
+    # Rather than hand back a dead token, it tries to mint and reports why it can't.
+    with pytest.raises(google_auth.GoogleAuthError):
+        google_auth.access_token()
+
+
+def test_scopes_are_only_what_the_automations_need():
+    # Delegation grants these over the whole Workspace, so an extra scope is real
+    # standing access to Dror's data.
+    from src.lib.google_auth import SCOPES
+
+    assert SCOPES == [
+        "https://www.googleapis.com/auth/contacts",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/forms.responses.readonly",
+    ]
+    assert not any("gmail" in s or "spreadsheets" in s for s in SCOPES)

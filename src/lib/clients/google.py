@@ -5,8 +5,12 @@ Covers the Google touch-points across the automations:
   * Drive — create the client folder, copy templates, upload signed PDFs/reports.
   * Forms — read questionnaire responses.
 
-Live calls use the Google REST APIs with an OAuth/service-account access token
-(``GOOGLE_ACCESS_TOKEN``; a real deployment refreshes it — Open Question #6).
+Live calls authenticate with a service account impersonating Dror — see
+:mod:`src.lib.google_auth` for why, and docs/GOOGLE_SETUP.md for the setup. Tokens
+are minted per call from the cache rather than held on the instance: a Lambda
+container can outlive a token's one-hour life, and a client built at import time
+would then carry a dead token forever.
+
 Dry-run returns canned ids/urls. Note: employee hour-tracking Sheets are
 deliberately **not** touched (out of scope).
 """
@@ -15,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from .. import config
+from .. import google_auth
 from .base import BaseClient
 
 
@@ -24,11 +28,9 @@ class GoogleClient(BaseClient):
 
     def __init__(self, *, dry_run: bool = False):
         super().__init__(dry_run=dry_run)
-        if not dry_run:
-            self.token = config.require("GOOGLE_ACCESS_TOKEN")
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.token}"}
+        return {"Authorization": f"Bearer {google_auth.access_token()}"}
 
     # --- Contacts (People API) -------------------------------------------
     def create_contact(
