@@ -1,106 +1,148 @@
 # CLAUDE.md
 
 > **Fixed instructions — always apply:**
-> Before any work, read all files in `docs\`. Commit with a clear message after
-> every working milestone. Never reference or use anything from other client folders.
+> Before any work, read `docs\CREDENTIALS.md` and `README.md`. Commit with a clear
+> message after every working milestone. Never reference or use anything from other
+> client folders. This repository is **public** — never commit a secret, and never
+> commit a client-supplied document (see "Public repo" below).
 
-## Client Overview
+## What this is
 
-**Dror Barak — business consulting & campaign management.** Dror runs an agency
-that advises colleges/academies on enrolling more students, largely through
-webinars and marketing funnels, and also runs paid ad campaigns for clients. He
-charges variable monthly retainers.
+An automation system for **Dror Barak**, a consultancy that advises colleges and
+academies on student enrolment (webinars, marketing funnels) and runs paid ad
+campaigns for them.
 
-Today most of the sales, onboarding and service work is **manual**: coordinating
-Zoom calls, saving lead phone numbers, sending questionnaires, preparing for
-meetings by hand-reviewing each prospect's social media, editing quotes, opening
-Drive folders, issuing invoices, and writing monthly campaign reports.
+The sales, onboarding and service work used to be manual: saving lead phone
+numbers, sending questionnaires, researching each prospect's social media by hand,
+editing quotes, opening Drive folders, issuing invoices, writing monthly campaign
+reports. This system automates that path **from lead to active client** so Dror
+handles more clients in less time.
 
-**Goal:** one scalable, uniform, automated workflow that connects every stage
-**from lead to active client**, so Dror manages more clients in less time. The
-CRM (Taskey) should be the single pane of glass: from it Dror sees every client's
-Drive folder, an automation log of what ran, and he receives a **daily WhatsApp
-summary** so he is never in the dark.
+**ClickUp is the single pane of glass.** From it Dror sees every client's Drive
+folder and what the automations did. He also gets a **daily email report** and a
+**dashboard**, so he is never in the dark about what ran.
 
-The team also includes two campaign managers and one general worker (copywriting,
-market research). Task assignment + hourly logging for those workers lives in
-Google Sheets / Google Forms today. **Dror explicitly does not want us to touch
-employee hour-tracking** — that is out of scope.
+**Out of scope:** employee hour-tracking (the campaign managers' Google Forms and
+Sheets). Dror asked for that to be left alone. Don't automate it.
 
-## Systems & APIs
+## Systems
 
-| System | Role | Status | Integration notes |
-|---|---|---|---|
-| **Taskey** | CRM — manages the whole lead→client lifecycle | Existing | API access **unconfirmed** (see Open Questions). We integrate behind a `CrmClient` abstraction so a REST/webhook adapter can drop in once access is known. |
-| **Make** | Automation orchestration (proposal budgets $9–16/mo) | Existing | Original proposal assumed Make scenarios. We instead build **code** automations in `src\` (per these instructions) that can be triggered by cron/webhook/manual; Make can call them or be replaced. |
-| **Fillout** | Digital signature on quotes/contracts | Paid | REST API + webhooks. Used to send a quote/contract with a signature field; on completion we fetch the signed PDF. |
-| **Claude / AI** | Smart, uniform deliverables (social analysis, strategy, campaign recommendations) | Per-usage | Anthropic API (`claude-opus-4-8` / `claude-sonnet-5`). NotebookLM referenced for the "last 5 videos" prep bot. |
-| **Green API** | WhatsApp messaging (questionnaire link, payment link, daily summary, onboarding) | Existing | REST API keyed by `idInstance` + `apiTokenInstance`. All message bodies come from an editable template store. |
-| **Morning** (getmorning / חשבונית ירוקה) | Invoicing & monthly payment requests | Existing | REST API with token auth. Create client, create payment request (דרישת תשלום). |
-| **Google Workspace** | Contacts (save lead phone), Drive (client folders + templates + signed PDFs), Forms (questionnaire), Sheets (task board — read-only for us) | Existing | Google APIs via a service account / OAuth. |
-| **ClickUp** | Task system that should hand tasks to Claude Code (bonus module) | Existing | REST API + webhooks; a webhook receiver turns a new/updated task into a Claude Code run. |
+| System | Role | Integration notes |
+|---|---|---|
+| **ClickUp** | **The CRM.** Manages the whole lead→client lifecycle and triggers automations on status change | REST API + webhooks. One task per client. Replaced Taskey — see "History" below. |
+| **Morning** (חשבונית ירוקה) | Invoicing & monthly payment requests | REST API, key + secret. Create client, create payment request (דרישת תשלום). |
+| **ManyChat** | WhatsApp to clients, over the **official Meta Business API** | REST API. Read the 24-hour-window constraint below before touching any messaging code. |
+| **Google Workspace** | Contacts (lead phones), Drive (client folders, templates, signed PDFs), Forms (questionnaire), Sheets (task board — read-only) | Service account with domain-wide delegation. |
+| **Meta Ads** | Campaign numbers for the monthly report | Graph API, system-user token with `ads_read`. |
+| **Claude / Anthropic** | Social analysis, strategy, campaign recommendations | Anthropic API (`claude-opus-4-8` / `claude-sonnet-5`). |
+| **Signing page** | Digital signature on quotes/contracts | **Ours**, served by us. Replaced Fillout. |
 
-Auth for every system is loaded **only** from `.env` (see `.env.example`). No
-secret is ever hardcoded or read from another client's folder.
+Auth for every system is loaded **only** from `.env` (see `.env.example`, and
+`docs\CREDENTIALS.md` for how each value is obtained). No secret is ever hardcoded
+or read from another client's folder.
 
-### Taskey CRM data model (from the proposal)
+### ClickUp data model
 
 - **Primary status:** `lead` / `active` / `paused` / `finished`
 - **Secondary status:** `initial_meeting` / `questionnaire_sent` / `quote_sent` /
   `signed` / `in_work`
-- **Fields:** Drive folder path, signed-contract link, monthly price, service
-  type, recordings path, Morning status.
+- **Custom fields:** Drive folder path, signed-contract link, monthly price,
+  service type, recordings path, Morning status.
 
-## Automations To Build
+## Constraints that are easy to get wrong
 
-Ordered by dependency. Each is code in `src\`, config via `.env`, with retry +
-structured logging + a `--dry-run` mode. Trigger column: how it is meant to fire.
+**The WhatsApp 24-hour window.** On the official Meta API, a free-form message can
+only be sent within 24 hours of the client's *last inbound message*. Every one of
+Dror's flows is business-initiated and therefore outside it, so each outbound
+message must be a **Meta-approved template**, sent through ManyChat as a Flow.
+Consequences you must respect:
+
+- Message wording is **not** freely editable. Only the template's variables change;
+  rewording means resubmitting to Meta for approval.
+- Conversations are **billed per message** by category. Don't add chatty messages.
+- **Groups/channels cannot be created** via the official API. Anything that wants a
+  "WhatsApp channel per client" is not possible as originally proposed.
+- Dror's own daily digest therefore goes by **email**, not WhatsApp — it would
+  otherwise need its own approved template and be billed every day.
+
+**The dashboard is read-only.** Nothing is triggered from it, deliberately: a
+misclick that fires the monthly payment run would send real invoices and payment
+links to every active client, and those cannot be unsent. Adding triggers is a
+decision for Dror, not a refactor to slip in.
+
+**Money-touching automations are CLI-only** for the same reason:
+`monthly_payment_requests` and `send_quote`.
+
+## Automations
+
+Each is code in `src\automations\`, configured via `.env`, with retry, structured
+logging, and a `--dry-run` mode.
 
 | # | Automation | Trigger | Summary |
 |---|---|---|---|
-| 0 | **Shared infra** (`src/lib`) | — | Config, structured logging, retry/backoff HTTP, run-log, WhatsApp template store, API client wrappers (all with dry-run/mock mode). |
-| 1 | **Lead → Google Contacts** | Webhook (CRM: new lead) | On a new lead in the CRM, save the lead's phone number to Google Contacts. |
-| 2 | **Send questionnaire** | Webhook (CRM: secondary status → `initial_meeting` done) | Send a WhatsApp (Green API) message with the questionnaire (Google Forms) link. |
-| 3 | **Social-media prep report** | Webhook (Google Forms submit) / Manual | AI agent visits the social profiles from the questionnaire, produces a report per network (profile link, summary, recommendations from the last 5 videos) for Dror. Reused later by the strategy bot. |
-| 4 | **Send quote + capture signature** | Manual (CRM "send quote" button) + Webhook (Fillout signed) | Send a quote with a Fillout digital-signature field; on signature, store the signed PDF in Drive and write the link back to the CRM. |
-| 5 | **Onboarding** (central module) | Webhook (CRM: `signed`) | Create the client Drive folder, copy templates into it, create the client in Morning, open a WhatsApp channel, save the signed contract link + Drive path to the CRM, and ask Dror (via WhatsApp/email) which templates to copy. |
-| 6 | **Monthly payment requests** | Scheduled (1st of month) | Pull active clients from the CRM, create a payment request in Morning for each, and send a WhatsApp message with the payment link. |
-| 7 | **Monthly campaign summary** | Scheduled (month end) / Manual | Analyze the month's campaign results, fill Dror's report template, add AI recommendations, send to Dror for approval → forward to client + save to the client's Drive. |
-| 8 | **Strategy bot** | Manual (Claude Code skill) | From the client's questionnaire answers, analyze audience + competitors + digital presence, produce a full strategy, inject into templates, save to the client's Drive, and email/notify Dror. Reuses automation #3's profile analysis. |
-| 9 | **ClickUp → Claude Code** (bonus / gift) | Webhook (ClickUp task created/updated) | Each task defined in ClickUp is handed to Claude Code, which starts working on it automatically. |
-| 10 | **Daily summary to Dror** | Scheduled (end of day) | Read the run-log written by every automation and send Dror a WhatsApp end-of-day summary of what ran. |
+| 0 | **Shared infra** (`src\lib`) | — | Config, logging, retry/backoff HTTP, run-log, subjects, message templates, API clients (all with dry-run/mock mode). |
+| 1 | **Lead → Google Contacts** | Webhook (ClickUp: new lead) | Save the lead's phone number to Google Contacts. |
+| 2 | **Send questionnaire** | Webhook (ClickUp: `initial_meeting`) | WhatsApp the Google Forms questionnaire link. |
+| 3 | **Social-media prep report** | Webhook (Forms submit) / Manual | AI reads the social profiles from the questionnaire and writes a per-network prep report for Dror. Reused by #8. |
+| 4 | **Send quote + capture signature** | Manual + our signing page | Send a quote with a signature link; on signing, store the PDF in Drive and write the link back to ClickUp. |
+| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder, copy templates, create the client in Morning, write the contract link + Drive path back to ClickUp. |
+| 6 | **Monthly payment requests** | Scheduled (1st of month) | Active clients → Morning payment request → WhatsApp the payment link. |
+| 7 | **Monthly campaign summary** | Scheduled (month end) / Manual | Pull the month's Meta Ads results, fill Dror's report template, add AI recommendations, send to Dror to approve → forward to client + save to Drive. |
+| 8 | **Strategy bot** | Manual | From the questionnaire answers: audience + competitors + digital presence → full strategy → Drive → notify Dror. Reuses #3. |
+| 9 | **ClickUp → Claude Code** (bonus) | Webhook (ClickUp task) | Turns a ClickUp task into a Claude Code work brief. |
+| 10 | **Daily report** | Scheduled (end of day) | Emails Dror everything the automations did that day (`daily_email`). |
+| 11 | **Dashboard** | Always on | Read-only web page over the run-log, grouped by subject, with links out. `src\dashboard.py`. |
 
-## How Automations Run
+## How they run
 
-Three trigger modes (per `..\_shared\CONVENTIONS.md`), all supported by the same code:
+- **Scheduled** — cron / Task Scheduler runs `python -m src.automations.<name>`.
+- **Webhook** — `src\webhook_server.py` maps inbound webhooks to automations.
+- **Manual** — every automation has a CLI entrypoint with `--dry-run`.
 
-- **Scheduled** — cron / Windows Task Scheduler invokes `python -m src.automations.<name>`
-  (e.g. monthly payment requests on the 1st, daily summary at end of day, monthly
-  campaign report at month end).
-- **Webhook** — a small receiver (`src/webhook_server.py`) maps inbound webhooks
-  (CRM status change, Fillout signature, Google Forms submit, ClickUp task) to the
-  matching automation. Each automation is also importable/callable directly.
-- **Manual** — every automation exposes a CLI entrypoint with `--dry-run`, so Dror
-  (or we) can run any one on demand without hitting production.
-
-Every automation writes a structured record to the **run-log**, which feeds both
-the CRM automation log and the daily WhatsApp summary.
+Every automation writes to the **run-log** (`src\lib\run_log.py`) via
+`Automation.log_action`. That log is the only data source for both the dashboard
+and the daily email, so **if you add an automation, log through `log_action`** or it
+will be invisible to Dror. Pass links as `url=` rather than burying them in
+`detail=`.
 
 ## Conventions
 
-Follow the cross-client conventions in [`..\_shared\CONVENTIONS.md`](..\_shared\CONVENTIONS.md).
-Language: **Python** (best-supported HTTP/SDK story for Morning, Green API,
-Fillout, Google, ClickUp, and the Anthropic API; conventions prefer Python on a
-toss-up). Retry + backoff on all outbound calls, JSON structured logging, secrets
-from `.env` only, README run instructions per automation.
+Follow [`..\_shared\CONVENTIONS.md`](..\_shared\CONVENTIONS.md). Language:
+**Python**. Retry + backoff on all outbound calls, JSON structured logging, secrets
+from `.env` only, run instructions per automation in `README.md`.
 
-## How To Test
+## Public repo
+
+This repository is public so Dror can work in it with his own Claude Code. Two
+rules follow:
+
+1. **Never commit a secret.** `.env` is gitignored. Only `.env.example` — key names,
+   no values — belongs in git.
+2. **Never commit a client-supplied document.** Dror's proposal, call notes and any
+   client file stay on local disk. `.gitignore` blocks `docs\*.pdf`, `*.docx` and
+   `*.xlsx`. If you need a new document type, add it to `.gitignore` first.
+
+## How to test
 
 No production credentials are required to prove the code works:
 
-- Every automation supports **`--dry-run`**, which swaps live API clients for mock
-  clients that return canned, documented responses and records the actions it
-  *would* take.
-- `pytest` runs the full suite in dry-run mode plus unit tests for retry/backoff
-  and the WhatsApp template store: `python -m pytest` from the project root.
-- See `README.md` for per-automation run and dry-run commands.
+- Every automation supports **`--dry-run`**, swapping live clients for mocks that
+  return canned responses and record what they *would* do.
+- `python -m pytest` runs the whole suite in dry-run.
+- `python -m src.dashboard --dry-run` serves the dashboard on sample data with no
+  `.env` at all.
+- Dry-run is not proof on its own. If you change something with a real runtime
+  surface, drive it — the last two dashboard bugs both passed the tests.
+
+## History — things that changed, so old code makes sense
+
+- **Taskey → ClickUp.** Taskey was the original CRM; its API was never confirmed.
+  ClickUp replaced it. `src\tools\migrate_taskey_to_clickup.py` migrates a Taskey
+  CSV export. If you find a `CrmClient` still shaped around Taskey, that's the
+  leftover — ClickUp is the truth.
+- **Green API → ManyChat.** Green API was an unofficial WhatsApp bridge with no
+  template rules and the ability to make groups. The official API has neither.
+- **Fillout → our own signing page.** Dropped to remove the monthly fee. The cost is
+  that we now need a public HTTPS host and we own the signature audit trail.
+- **Make.** The original proposal budgeted Make as the orchestrator. This build
+  stands alone on cron + the webhook server; Make can call it or be dropped.

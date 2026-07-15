@@ -1,9 +1,13 @@
 # Dror Barak — Sales & Service Automations
 
 Automations that connect Dror Barak's workflow **from lead to active client** across
-Taskey (CRM), Morning (billing), Green API (WhatsApp), Fillout (e-signature),
-Google Workspace, ClickUp, and Claude/AI. See [`CLAUDE.md`](CLAUDE.md) for the full
-context and [`TASKS.md`](TASKS.md) for status + open questions.
+ClickUp (CRM), Morning (billing), ManyChat (WhatsApp via the official Meta API),
+Google Workspace, Meta Ads, and Claude/AI — plus a read-only dashboard and a daily
+email report so Dror can see everything that ran.
+
+See [`CLAUDE.md`](CLAUDE.md) for the full context, [`docs/CREDENTIALS.md`](docs/CREDENTIALS.md)
+for how to obtain each credential, and [`TASKS.md`](TASKS.md) for status + open
+questions.
 
 ## Quick start
 
@@ -24,16 +28,35 @@ run live.
 
 | Task | Module | Trigger | Manual / dry-run command |
 |---|---|---|---|
-| T1 | `lead_to_contacts` | Webhook: new CRM lead | `python -m src.automations.lead_to_contacts --client-id 42 --dry-run` |
+| T1 | `lead_to_contacts` | Webhook: new ClickUp lead | `python -m src.automations.lead_to_contacts --client-id 42 --dry-run` |
 | T2 | `send_questionnaire` | Webhook: status → initial meeting | `python -m src.automations.send_questionnaire --client-id 42 --dry-run` |
 | T3 | `social_prep` | Webhook: form submit / manual | `python -m src.automations.social_prep --client-id 42 --dry-run` |
-| T4 | `send_quote` | Manual send + Fillout webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
+| T4 | `send_quote` | Manual send + signing webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
 | T5 | `onboarding` | Webhook: status → signed | `python -m src.automations.onboarding --client-id 42 --dry-run` |
 | T6 | `monthly_payment_requests` | Scheduled: 1st of month | `python -m src.automations.monthly_payment_requests --dry-run` |
 | T7 | `campaign_summary` | Scheduled: month end / manual | `python -m src.automations.campaign_summary --client-id 42 --dry-run` |
 | T8 | `strategy_bot` | Manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
-| T10 | `daily_summary` | Scheduled: end of day | `python -m src.automations.daily_summary --dry-run` |
+| T10 | `daily_email` | Scheduled: end of day | `python -m src.automations.daily_email --dry-run` |
+| T11 | `dashboard` | Always on | `python -m src.dashboard --dry-run` |
+
+`daily_summary` (the WhatsApp version of T10) is superseded by `daily_email` — see
+the 24-hour-window note in [`CLAUDE.md`](CLAUDE.md).
+
+## Dashboard
+
+A read-only page over the run-log, grouped into subjects (invoices, leads, campaign
+reports), with links out to Drive / ClickUp / Morning. Failures are pinned to the
+top. Nothing can be triggered from it.
+
+```bash
+python -m src.dashboard --dry-run     # sample data, no .env needed → http://localhost:8080
+python -m src.dashboard               # live; requires DASHBOARD_PASSWORD in .env
+```
+
+It refuses to start without `DASHBOARD_PASSWORD` — it shows client names, phone
+numbers and prices, so an open dashboard would publish all of it. Serve it over
+HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 
 ## The three run modes
 
@@ -44,8 +67,8 @@ run live.
 ```cron
 # Monthly payment requests — 1st of month, 09:00
 0 9 1 * *  cd /path/to/dror_barak && python -m src.automations.monthly_payment_requests
-# Daily summary to Dror — every day 19:00
-0 19 * * * cd /path/to/dror_barak && python -m src.automations.daily_summary
+# Daily report to Dror — every day 19:00
+0 19 * * * cd /path/to/dror_barak && python -m src.automations.daily_email
 # Campaign summaries — last-day handling done in-script; run 28th 08:00
 0 8 28 * * cd /path/to/dror_barak && python -m src.automations.campaign_summary --client-id <id>
 ```
@@ -59,13 +82,15 @@ python -m src.webhook_server --dry-run  # dispatch automations in dry-run
 
 | System event | Route | Automation |
 |---|---|---|
-| CRM: new lead | `POST /crm/new-lead` | T1 |
-| CRM: status change | `POST /crm/status` | T2 (initial meeting) / T5 (signed) |
+| ClickUp: new lead | `POST /crm/new-lead` | T1 |
+| ClickUp: status change | `POST /crm/status` | T2 (initial meeting) / T5 (signed) |
 | Google Forms: submit | `POST /forms/submit` | T3 |
-| Fillout: signed | `POST /fillout/signed` | T4 (capture) |
+| Signing: signed | `POST /fillout/signed` | T4 (capture) |
 | ClickUp: task | `POST /clickup/task` | T9 |
 
-Put the receiver behind a reverse proxy with auth before exposing it publicly.
+**The receiver has no authentication of its own.** Put it behind a reverse proxy
+with auth before exposing it publicly — anyone who can reach `/crm/status` can
+trigger onboarding for any client id.
 
 ## How it's built (and why it runs without credentials)
 
@@ -75,8 +100,9 @@ Put the receiver behind a reverse proxy with auth before exposing it publicly.
   call they *would* have made — so the full pipeline is exercised and tested with
   no secrets. Live mode uses the real REST endpoints with retry + backoff.
 - Config/secrets come only from `.env`; logs are structured JSON; every run writes
-  to an append-only run-log (`logs/run_log.jsonl`) that feeds the CRM log and the
-  daily WhatsApp summary.
+  to an append-only run-log (`logs/run_log.jsonl`) via `Automation.log_action`. That
+  log is the only source for the ClickUp log, the dashboard and the daily email — so
+  an automation that doesn't log through it is invisible to Dror.
 
 ## Conventions
 
@@ -87,5 +113,8 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 24 tests: infra unit tests + a dry-run test per automation
+python -m pytest        # 50 tests: infra, dashboard/auth, and a dry-run test per automation
 ```
+
+Dry-run is not proof on its own. If you change something with a real runtime
+surface, drive it — both dashboard bugs found so far passed the test suite.
