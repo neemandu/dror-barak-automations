@@ -3,6 +3,13 @@
 .env.*
 !.env.example
 
+# ---- Client material (kept on disk, never published) ----
+# The repo is public. Dror's proposal, call notes and any client-supplied
+# document stay local only.
+docs/*.pdf
+docs/*.docx
+docs/*.xlsx
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
