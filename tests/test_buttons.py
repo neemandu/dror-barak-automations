@@ -103,9 +103,14 @@ def test_payment_run_is_not_reachable_as_a_button():
     assert "onboarding" not in actions.ACTIONS
 
 
-def test_task_id_read_from_nested_and_flat_payloads():
+def test_task_id_read_from_every_payload_shape_clickup_might_send():
+    # Current format: task nested under `payload`.
     assert actions.task_id_of(json.loads(body())) == "t1"
+    # Legacy format: task at the top level.
     assert actions.task_id_of({"id": "flat1"}) == "flat1"
+    # A custom body written by hand in the Automation UI.
+    assert actions.task_id_of({"task_id": "custom1"}) == "custom1"
+    assert actions.task_id_of({"payload": {"task_id": "nested1"}}) == "nested1"
     assert actions.task_id_of({}) is None
 
 

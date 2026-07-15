@@ -129,13 +129,20 @@ def get(key: str) -> Optional[Action]:
 def task_id_of(payload: dict[str, Any]) -> Optional[str]:
     """The task an Automation webhook fired on.
 
-    The task sits under ``payload.payload.id``; older automations posted the task
-    at the top level, so both are accepted.
+    ClickUp's current format nests the task under ``payload``; the legacy format
+    puts it at the top level; and a hand-written custom body in the Automation UI
+    tends to use ``task_id``. All three are accepted, because the alternative is a
+    400 that looks like "the button is broken" for a body we could have understood.
     """
     inner = payload.get("payload")
-    if isinstance(inner, dict) and inner.get("id"):
-        return str(inner["id"])
-    return str(payload["id"]) if payload.get("id") else None
+    if isinstance(inner, dict):
+        for key in ("id", "task_id"):
+            if inner.get(key):
+                return str(inner[key])
+    for key in ("id", "task_id"):
+        if payload.get(key):
+            return str(payload[key])
+    return None
 
 
 def click_key(action_key: str, task_id: str, payload: dict[str, Any]) -> str:
