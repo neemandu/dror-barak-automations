@@ -1,39 +1,62 @@
-"""Taskey CRM client.
+"""CRM client — ClickUp.
 
-The CRM is the hub of Dror's workflow — it triggers automations (status changes)
-and receives their results (Drive links, Morning status, an automation log).
+ClickUp is the CRM: one task per client. Task status changes drive the
+automations, and the automations write their results back onto the task.
 
-**Important:** Taskey's public API is unconfirmed (Open Question #1). This client
-is therefore an *abstraction*: automations depend only on the methods here, never
-on Taskey specifics. The live path is a generic REST adapter driven by
-``CRM_BASE_URL`` + ``CRM_API_TOKEN`` with endpoint paths that are provisional
-assumptions; swap in the real adapter once Taskey's API is documented. Dry-run
-returns realistic fixtures so all dependent automations are testable today.
+  * primary status (lead/active/paused/finished) → the ClickUp **task status**
+  * secondary status (initial_meeting/.../in_work) → a **dropdown custom field**
+  * everything else (phone, price, Drive folder, contract link) → custom fields
+  * the automation log → task **comments**, so it shows up where Dror already looks
+
+Custom fields cannot be created through ClickUp's API, so the list is built by
+hand in the UI once (see ``docs/CLICKUP_SETUP.md``) and everything here is matched
+by *name* at runtime via :mod:`src.lib.crm_fields` — no field ids in ``.env``, and
+nothing to re-copy if the list is rebuilt.
+
+This class keeps the interface the automations already depend on; it replaced a
+Taskey adapter whose API was never confirmed.
+
+Configure ``CLICKUP_API_TOKEN`` and ``CLICKUP_LIST_ID``. Check the list is set up
+correctly with::
+
+    python -m src.tools.check_clickup_crm
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from .. import config
+from .. import config, crm_fields
+from ..crm_fields import (  # re-exported: importers use these from the CRM client
+    STATUS_ACTIVE,
+    STATUS_FINISHED,
+    STATUS_LEAD,
+    STATUS_PAUSED,
+    SUB_INITIAL_MEETING,
+    SUB_IN_WORK,
+    SUB_QUESTIONNAIRE_SENT,
+    SUB_QUOTE_SENT,
+    SUB_SIGNED,
+)
 from .base import BaseClient
 
-# Primary statuses (proposal §2.1)
-STATUS_LEAD = "lead"
-STATUS_ACTIVE = "active"
-STATUS_PAUSED = "paused"
-STATUS_FINISHED = "finished"
+__all__ = [
+    "CrmClient",
+    "STATUS_LEAD", "STATUS_ACTIVE", "STATUS_PAUSED", "STATUS_FINISHED",
+    "SUB_INITIAL_MEETING", "SUB_QUESTIONNAIRE_SENT", "SUB_QUOTE_SENT",
+    "SUB_SIGNED", "SUB_IN_WORK",
+]
 
-# Secondary statuses (proposal §2.1)
-SUB_INITIAL_MEETING = "initial_meeting"
-SUB_QUESTIONNAIRE_SENT = "questionnaire_sent"
-SUB_QUOTE_SENT = "quote_sent"
-SUB_SIGNED = "signed"
-SUB_IN_WORK = "in_work"
+# Fields an automation cannot work without. check_clickup_crm reports on these.
+REQUIRED_FIELDS = ["phone", "sub_status", "monthly_price"]
+OPTIONAL_FIELDS = [
+    "email", "service_type", "drive_folder", "signed_contract",
+    "recordings_path", "morning_status", "morning_client_id",
+]
 
 
 def _fixture_client(client_id: str) -> dict[str, Any]:
-    """A representative CRM record used for dry-run/tests."""
+    """A representative client used for dry-run/tests."""
     return {
         "id": client_id,
         "name": "מכללת דוגמה",
@@ -50,6 +73,7 @@ def _fixture_client(client_id: str) -> dict[str, Any]:
         "recordings_path": "",
         "morning_status": "",
         "morning_client_id": "",
+        "url": "https://app.clickup.com/t/mock",
         "social_profiles": {
             "instagram": "https://instagram.com/example",
             "tiktok": "https://tiktok.com/@example",
@@ -59,61 +83,255 @@ def _fixture_client(client_id: str) -> dict[str, Any]:
 
 
 class CrmClient(BaseClient):
-    system = "taskey_crm"
+    system = "clickup_crm"
 
-    def __init__(self, *, dry_run: bool = False):
+    def __init__(self, *, dry_run: bool = False, list_id: Optional[str] = None):
         super().__init__(dry_run=dry_run)
+        self._fields_cache: Optional[dict[str, dict[str, Any]]] = None
+        self._statuses_cache: Optional[list[str]] = None
         if not dry_run:
-            self.base_url = config.require("CRM_BASE_URL").rstrip("/")
-            self.token = config.require("CRM_API_TOKEN")
+            self.base_url = config.get(
+                "CLICKUP_BASE_URL", "https://api.clickup.com/api/v2"
+            ).rstrip("/")
+            self.token = config.require("CLICKUP_API_TOKEN")
+            self.list_id = list_id or config.require("CLICKUP_LIST_ID")
+        else:
+            self.list_id = list_id or "mock-list"
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.token}"}
+        return {"Authorization": self.token}
+
+    # ------------------------------------------------------------- list schema
+
+    def fields(self) -> dict[str, dict[str, Any]]:
+        """``{canonical: field}`` for the clients list, fetched once per client."""
+        if self._fields_cache is None:
+            if self.dry_run:
+                self._fields_cache = crm_fields.resolve_fields(_MOCK_FIELDS)
+            else:
+                resp = self._request(
+                    "GET",
+                    f"{self.base_url}/list/{self.list_id}/field",
+                    headers=self._headers(),
+                )
+                self._fields_cache = crm_fields.resolve_fields(
+                    resp.json().get("fields", [])
+                )
+        return self._fields_cache
+
+    def statuses(self) -> list[str]:
+        """The list's task status names, as Dror named them."""
+        if self._statuses_cache is None:
+            if self.dry_run:
+                self._statuses_cache = ["ליד", "לקוח פעיל", "מושהה", "הסתיים"]
+            else:
+                resp = self._request(
+                    "GET", f"{self.base_url}/list/{self.list_id}", headers=self._headers()
+                )
+                self._statuses_cache = [
+                    s.get("status", "") for s in resp.json().get("statuses", [])
+                ]
+        return self._statuses_cache
+
+    def _status_name_for(self, canonical: str) -> Optional[str]:
+        """The list's actual status name for a canonical status, if present."""
+        for name in self.statuses():
+            if crm_fields.canonical_status(name) == canonical:
+                return name
+        return None
+
+    # ------------------------------------------------------------------- reads
+
+    def _to_client(self, task: dict[str, Any]) -> dict[str, Any]:
+        """Flatten a ClickUp task into the client dict the automations expect."""
+        by_id = {str(f.get("id")): f for f in task.get("custom_fields") or []}
+        resolved = self.fields()
+
+        def field_value(canonical: str) -> Any:
+            field = resolved.get(canonical)
+            if not field:
+                return ""
+            raw = by_id.get(str(field.get("id")), {}).get("value")
+            if raw in (None, ""):
+                return ""
+            if str(field.get("type")) == "drop_down":
+                return crm_fields.dropdown_label(field, raw) or ""
+            return raw
+
+        name = str(task.get("name") or "")
+        sub_raw = str(field_value("sub_status") or "")
+        status_raw = str((task.get("status") or {}).get("status") or "")
+        price = field_value("monthly_price")
+
+        drive = str(field_value("drive_folder") or "")
+        return {
+            "id": str(task.get("id") or ""),
+            "name": name,
+            # ClickUp has no separate first-name column; the greeting uses the
+            # first word of the client name, which is what Dror types today.
+            "first_name": name.split(" ")[0] if name else "",
+            "phone": str(field_value("phone") or ""),
+            "email": str(field_value("email") or ""),
+            "status": crm_fields.canonical_status(status_raw) or status_raw,
+            "sub_status": crm_fields.canonical_sub_status(sub_raw) or sub_raw,
+            "monthly_price": price if price != "" else None,
+            "service_type": str(field_value("service_type") or ""),
+            # Drive is one field in ClickUp; automations ask for either a path or
+            # a URL, so serve both from it and let the caller pick.
+            "drive_folder_path": drive,
+            "drive_folder_url": drive if drive.startswith("http") else "",
+            "signed_contract_url": str(field_value("signed_contract") or ""),
+            "recordings_path": str(field_value("recordings_path") or ""),
+            "morning_status": str(field_value("morning_status") or ""),
+            "morning_client_id": str(field_value("morning_client_id") or ""),
+            "url": str(task.get("url") or ""),
+            "social_profiles": {},
+            "questionnaire_answers": {},
+        }
 
     def get_client(self, client_id: str) -> dict[str, Any]:
         if self.dry_run:
             self._record("get_client", client_id=client_id)
             return _fixture_client(client_id)
         resp = self._request(
-            "GET", f"{self.base_url}/clients/{client_id}", headers=self._headers()
+            "GET",
+            f"{self.base_url}/task/{client_id}",
+            headers=self._headers(),
+            params={"include_subtasks": "false"},
         )
-        return resp.json()
+        return self._to_client(resp.json())
 
     def list_active_clients(self) -> list[dict[str, Any]]:
-        """Return all clients whose primary status is ``active``."""
+        """Every client whose primary status is ``active``."""
         if self.dry_run:
             self._record("list_active_clients")
             return [_fixture_client("1001"), _fixture_client("1002")]
-        resp = self._request(
-            "GET",
-            f"{self.base_url}/clients",
-            headers=self._headers(),
-            params={"status": STATUS_ACTIVE},
-        )
-        return resp.json().get("items", resp.json())
+
+        status_name = self._status_name_for(STATUS_ACTIVE)
+        if status_name is None:
+            # Better to say so than to bill nobody and look like a quiet success.
+            raise ValueError(
+                f"No status on list {self.list_id} maps to 'active'. "
+                f"Statuses found: {self.statuses()}. See docs/CLICKUP_SETUP.md."
+            )
+
+        out: list[dict[str, Any]] = []
+        page = 0
+        while True:  # ClickUp pages at 100 tasks; an agency will exceed that.
+            resp = self._request(
+                "GET",
+                f"{self.base_url}/list/{self.list_id}/task",
+                headers=self._headers(),
+                params={
+                    "archived": "false",
+                    "subtasks": "false",
+                    "page": str(page),
+                    "statuses[]": status_name,
+                },
+            )
+            body = resp.json()
+            tasks = body.get("tasks", [])
+            out.extend(self._to_client(t) for t in tasks)
+            if body.get("last_page") or not tasks:
+                return out
+            page += 1
+
+    # ------------------------------------------------------------------ writes
 
     def update_fields(self, client_id: str, **fields: Any) -> dict[str, Any]:
-        """Patch fields on a CRM record (Drive path, contract link, etc.)."""
+        """Write client fields back onto the task.
+
+        Accepts the canonical names plus the aliases the automations already use
+        (``drive_folder_url``, ``signed_contract_url``, ...). Unknown or
+        not-configured fields are reported back rather than silently dropped, so a
+        missing column shows up in the run-log instead of vanishing.
+        """
         if self.dry_run:
             return self._record("update_fields", client_id=client_id, fields=fields)
-        resp = self._request(
-            "PATCH",
-            f"{self.base_url}/clients/{client_id}",
-            headers=self._headers(),
-            json=fields,
-        )
-        return resp.json()
+
+        resolved = self.fields()
+        written: dict[str, Any] = {}
+        skipped: dict[str, str] = {}
+
+        for key, value in fields.items():
+            canonical = _CALLER_ALIASES.get(key, key)
+
+            if canonical == "status":
+                name = self._status_name_for(str(value)) or str(value)
+                self._request(
+                    "PUT",
+                    f"{self.base_url}/task/{client_id}",
+                    headers=self._headers(),
+                    json={"status": name},
+                )
+                written[key] = name
+                continue
+
+            field = resolved.get(canonical)
+            if not field:
+                skipped[key] = "no such field on the list"
+                continue
+            try:
+                api_value = crm_fields.coerce_value(field, value)
+            except ValueError as exc:
+                skipped[key] = str(exc)
+                continue
+            self._request(
+                "POST",
+                f"{self.base_url}/task/{client_id}/field/{field['id']}",
+                headers=self._headers(),
+                json={"value": api_value},
+            )
+            written[key] = value
+
+        return {"id": client_id, "written": written, "skipped": skipped}
 
     def append_automation_log(self, client_id: str, message: str) -> dict[str, Any]:
-        """Append a line to the client's automation log shown inside the CRM."""
+        """Append to the client's automation log — a comment on the task."""
         if self.dry_run:
             return self._record(
                 "append_automation_log", client_id=client_id, message=message
             )
         resp = self._request(
             "POST",
-            f"{self.base_url}/clients/{client_id}/automation-log",
+            f"{self.base_url}/task/{client_id}/comment",
             headers=self._headers(),
-            json={"message": message},
+            json={"comment_text": message, "notify_all": False},
         )
         return resp.json()
+
+
+# Names the automations pass to update_fields -> canonical field.
+_CALLER_ALIASES: dict[str, str] = {
+    "drive_folder_url": "drive_folder",
+    "drive_folder_path": "drive_folder",
+    "signed_contract_url": "signed_contract",
+    "sub_status": "sub_status",
+    "status": "status",
+}
+
+# Shape of a correctly configured list, for dry-run and tests.
+_MOCK_FIELDS: list[dict[str, Any]] = [
+    {"id": "f-phone", "name": "טלפון", "type": "phone"},
+    {"id": "f-email", "name": "מייל", "type": "email"},
+    {"id": "f-price", "name": "מחיר חודשי", "type": "number"},
+    {"id": "f-service", "name": "סוג שירות", "type": "short_text"},
+    {"id": "f-drive", "name": "תיקיית Drive", "type": "url"},
+    {"id": "f-contract", "name": "חוזה חתום", "type": "url"},
+    {"id": "f-recordings", "name": "נתיב הקלטות", "type": "short_text"},
+    {"id": "f-morning", "name": "סטטוס Morning", "type": "short_text"},
+    {
+        "id": "f-sub",
+        "name": "סטטוס משני",
+        "type": "drop_down",
+        "type_config": {
+            "options": [
+                {"id": "o-meet", "name": "פגישה ראשונית"},
+                {"id": "o-quest", "name": "נשלח שאלון"},
+                {"id": "o-quote", "name": "נשלחה הצעת מחיר"},
+                {"id": "o-signed", "name": "חתם"},
+                {"id": "o-work", "name": "בעבודה"},
+            ]
+        },
+    },
+]

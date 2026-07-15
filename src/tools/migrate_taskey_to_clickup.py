@@ -28,44 +28,19 @@ import csv
 import json
 from typing import Any, Optional
 
-from ..lib import config
+from ..lib import config, crm_fields
 from ..lib.clients.clickup import ClickUpClient
 from ..automations.base import Automation
 
 NAME = "migrate_taskey_to_clickup"
 
-# Canonical client fields -> possible Taskey/ClickUp column names (normalized).
-ALIASES: dict[str, list[str]] = {
-    "name": ["name", "client", "לקוח", "שם", "שם לקוח", "שם הלקוח"],
-    "phone": ["phone", "mobile", "טלפון", "נייד", "מספר טלפון"],
-    "email": ["email", "mail", "מייל", "אימייל", 'דוא"ל', "דואל"],
-    "status": ["status", "סטטוס", "סטטוס ראשי"],
-    "sub_status": ["sub status", "substatus", "סטטוס משני"],
-    "monthly_price": ["monthly price", "price", "מחיר חודשי", "מחיר", "ריטיינר"],
-    "service_type": ["service type", "service", "סוג שירות"],
-    "drive_folder": [
-        "drive", "drive folder", "נתיב תיקיית drive", "תיקיית drive", "דרייב"
-    ],
-    "signed_contract": ["signed contract", "contract", "חוזה חתום", "חוזה"],
-    "recordings_path": ["recordings", "נתיב הקלטות", "הקלטות"],
-    "morning_status": ["morning", "morning status", "סטטוס morning"],
-}
-
-# Fields that should be sent to ClickUp as numbers rather than text.
-NUMERIC_FIELDS = {"monthly_price"}
-
-
-def _normalize(text: str) -> str:
-    return " ".join((text or "").strip().casefold().split())
-
-
-def _canonical_for(header: str) -> Optional[str]:
-    """Return the canonical field a raw column/field name maps to, if any."""
-    norm = _normalize(header)
-    for canonical, names in ALIASES.items():
-        if norm in names or norm == canonical:
-            return canonical
-    return None
+# The field/status alias tables live in src.lib.crm_fields, shared with the CRM
+# client — a migration that named columns differently from the client that later
+# reads them would produce a list the automations cannot see.
+ALIASES = crm_fields.ALIASES
+NUMERIC_FIELDS = crm_fields.NUMERIC_FIELDS
+_normalize = crm_fields.normalize
+_canonical_for = crm_fields.canonical_for
 
 
 def _map_headers(headers: list[str], overrides: dict[str, str]) -> dict[str, str]:
