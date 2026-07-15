@@ -256,7 +256,7 @@ def _client_fields(client: dict[str, Any]) -> dict[str, str]:
 
 def handle_get(token: str, dry_run: bool = False) -> str:
     """Render the signing page for a token."""
-    client_id = signing.read_token(token)
+    client_id = signing.resolve(token)
     client = CrmClient(dry_run=dry_run).get_client(client_id)
     return render_sign_page(token, _client_fields(client))
 
@@ -270,7 +270,7 @@ def handle_post(
     dry_run: bool = False,
 ) -> str:
     """Capture a signature: render, convert, store, attach, advance the status."""
-    client_id = signing.read_token(token)
+    client_id = signing.resolve(token)
     crm = CrmClient(dry_run=dry_run)
     client = crm.get_client(client_id)
 

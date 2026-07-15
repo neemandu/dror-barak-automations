@@ -26,6 +26,7 @@ import hashlib
 import hmac
 import json
 import re
+import secrets
 import time
 from typing import Any, Optional
 
@@ -90,8 +91,101 @@ def read_token(token: str) -> str:
     return str(payload["c"])
 
 
-def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS) -> str:
-    """The full URL to send a client."""
+# Short codes are stored, not packed. 8 chars of url-safe base64 is ~48 bits of
+# randomness: guessing one inside its two-week life is not a realistic attack, and
+# a stored code can be revoked, which a self-contained token never can.
+SHORT_CODE_BYTES = 6
+
+
+def make_short_code(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS) -> str:
+    """A short code standing for a client's contract, recorded in DynamoDB."""
+    from . import idempotency
+
+    code = _b64(secrets.token_bytes(SHORT_CODE_BYTES))
+    store = idempotency._store()  # same table; a link is a short-lived record too
+    key = f"signlink:{code}"
+    # claim() writes with a TTL and refuses to overwrite — which doubles as
+    # collision protection, however unlikely.
+    if not store.claim(key, ttl):
+        raise SigningError("could not allocate a signing code; try again")
+    _remember(key, client_id, ttl)
+    return code
+
+
+def _remember(key: str, client_id: str, ttl: int) -> None:
+    """Attach the client id to a stored code."""
+    from . import config as _config
+    from . import idempotency
+
+    table = _config.get("IDEMPOTENCY_TABLE")
+    if not table:
+        # File store (local/dev): keep the mapping beside the claim.
+        store = idempotency._FileStore()
+        data = store._read()
+        data.setdefault(key, {})["client_id"] = client_id
+        store._write(data)
+        return
+
+    import boto3
+
+    boto3.resource(
+        "dynamodb", region_name=_config.get("AWS_REGION", "eu-central-1")
+    ).Table(table).update_item(
+        Key={"pk": key},
+        UpdateExpression="SET client_id = :c",
+        ExpressionAttributeValues={":c": client_id},
+    )
+
+
+def read_short_code(code: str) -> str:
+    """The client id behind a short code, or raise."""
+    from . import config as _config
+    from . import idempotency
+
+    key = f"signlink:{code}"
+    table = _config.get("IDEMPOTENCY_TABLE")
+    if not table:
+        entry = idempotency._FileStore()._read().get(key) or {}
+        client_id = entry.get("client_id")
+        if not client_id:
+            raise SigningError("this signing link is not valid")
+        if entry.get("expires_at", 0) < time.time():
+            raise SigningError("this signing link has expired")
+        return str(client_id)
+
+    import boto3
+
+    item = (
+        boto3.resource("dynamodb", region_name=_config.get("AWS_REGION", "eu-central-1"))
+        .Table(table)
+        .get_item(Key={"pk": key})
+        .get("Item")
+    )
+    if not item or not item.get("client_id"):
+        raise SigningError("this signing link is not valid")
+    if float(item.get("expires_at", 0)) < time.time():
+        # DynamoDB's TTL sweep is lazy — check rather than trust it.
+        raise SigningError("this signing link has expired")
+    return str(item["client_id"])
+
+
+def resolve(token: str) -> str:
+    """The client id behind either link form.
+
+    Long self-contained tokens carry a "."; short codes never do. Both are
+    accepted so links already sent to clients keep working.
+    """
+    if "." in token:
+        return read_token(token)
+    return read_short_code(token)
+
+
+def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS, short: bool = True) -> str:
+    """The URL to send a client.
+
+    Short by default: this goes in an email and a WhatsApp message, where a
+    150-character URL of opaque base64 looks like something you should not click.
+    """
     base = config.get("SIGN_BASE_URL") or config.get("AWS_API_BASE_URL")
     if not base:
         raise SigningError(
@@ -99,7 +193,8 @@ def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS) -> str:
             "the contract. Use the deployed API base, e.g. "
             "https://xxx.execute-api.eu-central-1.amazonaws.com/dev"
         )
-    return f"{base.rstrip('/')}/sign?t={make_token(client_id, ttl=ttl)}"
+    token = make_short_code(client_id, ttl=ttl) if short else make_token(client_id, ttl=ttl)
+    return f"{base.rstrip('/')}/sign?t={token}"
 
 
 _DATA_URL = re.compile(r"^data:image/png;base64,([A-Za-z0-9+/=]+)$")

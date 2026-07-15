@@ -242,3 +242,54 @@ def test_the_page_never_hardcodes_a_stage():
     page = sign_page.handle_get(signing.make_token("c1"), dry_run=True)
     for stage in ("/dev/", "/prod/"):
         assert stage not in page, f"{stage!r} is baked into the page"
+
+
+# ------------------------------------------------------------- short links
+
+
+def test_a_short_code_resolves_to_its_client():
+    code = signing.make_short_code("c1")
+    assert len(code) <= 10, "the point is that it fits in an email"
+    assert signing.resolve(code) == "c1"
+
+
+def test_short_codes_are_unguessable_and_unique():
+    codes = {signing.make_short_code(f"c{i}") for i in range(30)}
+    assert len(codes) == 30, "codes must not collide"
+    # ~48 bits of randomness: not brute-forceable inside a two-week life.
+    assert all(len(c) >= 8 for c in codes)
+
+
+def test_an_unknown_code_is_refused():
+    with pytest.raises(signing.SigningError) as exc:
+        signing.resolve("aaaaaaaa")
+    assert "not valid" in str(exc.value)
+
+
+def test_an_expired_code_is_refused():
+    code = signing.make_short_code("c1", ttl=-1)
+    with pytest.raises(signing.SigningError) as exc:
+        signing.resolve(code)
+    assert "expired" in str(exc.value)
+
+
+def test_links_already_sent_to_clients_keep_working():
+    # A quote sits in someone's inbox for two weeks; changing the link format
+    # must not strand it.
+    long_token = signing.make_token("c1")
+    assert signing.resolve(long_token) == "c1"
+
+
+def test_a_short_link_is_actually_short():
+    url = signing.sign_url("c1")
+    assert len(url) < len(signing.sign_url("c1", short=False)) / 1.8
+
+
+def test_the_page_opens_from_a_short_code(monkeypatch):
+    from src import sign_page
+
+    code = signing.make_short_code("c1")
+    page = sign_page.handle_get(code, dry_run=True)
+    assert "הסכם התקשרות" in page
+    # The form must carry the same code back, not a regenerated one.
+    assert f'action="?t={code}"' in page
