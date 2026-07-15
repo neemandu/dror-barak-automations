@@ -35,15 +35,24 @@ def test_template_is_readable_and_has_the_expected_placeholders():
     }
 
 
-def test_the_template_carries_no_bank_details():
-    """The template is published; Dror's account number must not be in it.
+def test_the_template_carries_no_provider_details():
+    """The template is published; Dror's bank account must not be in it.
 
-    A bank account number in a public repo is a fraud vector that cannot be
-    recalled once indexed.
+    Checked against whatever PROVIDER_* actually holds, never against literals: a
+    test that hardcoded the account number in order to assert its absence would
+    itself publish it — which is exactly the bug it is meant to prevent, and is
+    how an earlier version of this test ended up needing purging from history.
     """
+    from src.lib import config
+
+    config.load_dotenv()
     raw = contract.template_path().read_text(encoding="utf-8")
-    for secret in ("REDACTED_ACCOUNT", "REDACTED_BUSINESS_ID", "REDACTED_PHONE", "REDACTED_EMAIL_USER"):
-        assert secret not in raw, f"{secret!r} is in the published template"
+    for env in contract.PROVIDER_FIELDS.values():
+        value = config.get(env)
+        # Short values like a bank code ("12") would match anything.
+        if not value or len(str(value)) < 5:
+            continue
+        assert str(value) not in raw, f"{env} is in the published template"
 
 
 def test_an_unconfigured_provider_refuses_rather_than_send_a_blank(monkeypatch):
