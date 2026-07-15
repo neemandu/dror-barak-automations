@@ -25,7 +25,18 @@ is unaffected — these are the adapters underneath them.
 - [ ] **Replace onboarding's "open a WhatsApp channel" step.** The official API
   cannot create groups; `onboarding.py` still calls `create_group`.
 - [ ] **Point `campaign_summary` at the Meta Ads API** for real campaign numbers.
-- [ ] **Add auth to `webhook_server.py`** before it is exposed publicly.
+- [ ] **Move the run-log to DynamoDB.** It is a local JSONL file, and Lambda's
+  filesystem is ephemeral — so on AWS it vanishes between invocations. It is the
+  only source for the dashboard *and* the daily email, so both will be empty until
+  this moves. The interface is small (`record` / `read_all` / `read_since`), so it
+  is a backend swap behind the existing functions.
+- [ ] **Make the dashboard's sessions stateless** before it runs on Lambda. The
+  `_sessions` dict dies with each instance, so Dror would be logged out at random.
+  A signed cookie replaces it.
+- [ ] **Deploy the webhook stack** (`infra/template.yaml`) and register the webhook.
+  Deploy with `WebhookDryRun=1` first — real events, no side effects — then flip it.
+- [ ] **Add auth to `webhook_server.py`**, the local stdlib receiver, or retire it
+  now that the Lambda is the real entrypoint.
 
 ## Done
 
@@ -47,6 +58,10 @@ is unaffected — these are the adapters underneath them.
 - [x] **Webhook receiver.** `src/webhook_server.py`.
 - [x] **Taskey → ClickUp migration.** `src/tools/migrate_taskey_to_clickup.py`.
 - [x] **Credentials guide.** `docs/CREDENTIALS.md`.
+- [x] **ClickUp webhook receiver on AWS.** `src/lambda_handler.py` +
+  `infra/template.yaml` (API Gateway → Lambda → DynamoDB), with signature
+  verification and two layers of idempotency (`src/lib/idempotency.py`).
+- [x] **ClickUp webhook registration.** `src/tools/register_clickup_webhook.py`.
 
 ---
 

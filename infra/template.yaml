@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Dror Barak automations — ClickUp webhook receiver.
+
+  API Gateway fronts a Lambda that verifies ClickUp's signature, de-duplicates the
+  delivery against a DynamoDB table, and dispatches to the automation.
+
+  Deploy:
+    sam build && sam deploy --guided --stack-name dror-automations-dev
+  Test locally, no AWS:
+    sam local start-api
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  ClickUpWebhookSecret:
+    Type: String
+    NoEcho: true
+    Description: Returned by ClickUp when the webhook is registered.
+  ClickUpApiToken:
+    Type: String
+    NoEcho: true
+  ClickUpListId:
+    Type: String
+    Description: The לקוחות list.
+  ClickUpTasksListId:
+    Type: String
+    Default: ""
+    Description: The משימות list. Empty disables the Claude Code bridge.
+  ClickUpTeamId:
+    Type: String
+  WebhookDryRun:
+    Type: String
+    Default: "1"
+    AllowedValues: ["0", "1"]
+    Description: >
+      1 = accept real ClickUp events and prove the wiring, but let the automations
+      touch nothing (no Drive folders, no Morning clients, no WhatsApp). Deploy
+      with 1 first, watch the logs, then redeploy with 0 to go live.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 512
+    # Generous: onboarding calls Drive, Morning and WhatsApp in sequence. Well
+    # under Lambda's 15-minute ceiling, but not so tight that a slow Drive call
+    # times out mid-onboarding and leaves a half-created client.
+    Timeout: 120
+    Architectures: [arm64]
+    Environment:
+      Variables:
+        IDEMPOTENCY_TABLE: !Ref IdempotencyTable
+        CLICKUP_WEBHOOK_SECRET: !Ref ClickUpWebhookSecret
+        CLICKUP_API_TOKEN: !Ref ClickUpApiToken
+        CLICKUP_LIST_ID: !Ref ClickUpListId
+        CLICKUP_TASKS_LIST_ID: !Ref ClickUpTasksListId
+        CLICKUP_TEAM_ID: !Ref ClickUpTeamId
+        WEBHOOK_DRY_RUN: !Ref WebhookDryRun
+        # NOTE: /tmp is per-instance and vanishes. The run-log is the only source
+        # for the dashboard and the daily email, so both will be empty until this
+        # moves to DynamoDB. Tracked in TASKS.md.
+        RUN_LOG_PATH: /tmp/run_log.jsonl
+
+Resources:
+  WebhookApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      Throttle:
+        # A public endpoint. ClickUp sends a handful of events a day; this stops a
+        # flood from turning into a Lambda bill.
+        BurstLimit: 20
+        RateLimit: 10
+
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dror-webhook-${Stage}"
+      CodeUri: ../
+      Handler: src.lambda_handler.lambda_handler
+      Description: Receives ClickUp webhooks, verifies, de-duplicates, dispatches.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+      Events:
+        ClickUpWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /clickup
+            Method: POST
+
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "dror-idempotency-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        # DynamoDB expires old claims itself, so the table cannot grow forever.
+        # The window is far longer than any ClickUp retry.
+        AttributeName: expires_at
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+
+Outputs:
+  WebhookUrl:
+    Description: Register this in ClickUp (python -m src.tools.register_clickup_webhook)
+    Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/clickup"
+  IdempotencyTableName:
+    Value: !Ref IdempotencyTable
