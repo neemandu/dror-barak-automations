@@ -24,8 +24,24 @@ from . import config
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
+# Dror's branding, lifted from his original document. Kept as real .png files
+# rather than pasted into the template as base64: git can diff and store binaries
+# sensibly, while 160KB of base64 in the middle of the contract would make every
+# future change to the legal text unreadable.
+#
+# They are inlined as data URIs at render time because the document has to be
+# self-contained — Drive converts it to PDF without fetching anything, and the
+# signed PDF must not depend on a URL that could rot.
+ASSET_FIELDS = {
+    "asset_logo": "logo_header.png",
+    "asset_footer": "footer.png",
+}
+
 # Filled by the signing page, not from the CRM.
 SIGNATURE_FIELDS = {"provider_signature", "client_signature"}
+
+# Inserted as markup rather than escaped: these are ours, not client data.
+RAW_FIELDS = SIGNATURE_FIELDS | set(ASSET_FIELDS)
 
 # What the client must tell us before a contract can exist. These are what make it
 # enforceable — you cannot sue a company you cannot identify.
@@ -92,6 +108,24 @@ def load_template() -> str:
 
 def placeholders_in(text: str) -> set[str]:
     return set(_PLACEHOLDER.findall(text))
+
+
+def assets() -> dict[str, str]:
+    """Dror's branding as data URIs, so the document stands alone."""
+    import base64
+
+    root = template_path().parent / "assets"
+    out: dict[str, str] = {}
+    for field, filename in ASSET_FIELDS.items():
+        path = root / filename
+        if not path.exists():
+            # Branding is cosmetic: a missing logo must not stop a contract going
+            # out. The clause text is what matters.
+            out[field] = ""
+            continue
+        encoded = base64.b64encode(path.read_bytes()).decode()
+        out[field] = f"data:image/png;base64,{encoded}"
+    return out
 
 
 def _shekels(value: Any) -> str:
@@ -173,8 +207,9 @@ def render(
     """
     text = template if template is not None else load_template()
     signatures = signatures or {}
+    raw = {**assets(), **signatures}
 
-    needed = placeholders_in(text) - SIGNATURE_FIELDS
+    needed = placeholders_in(text) - RAW_FIELDS
     absent = sorted(n for n in needed if not str(fields.get(n) or "").strip())
     if absent:
         raise ContractError(
@@ -186,8 +221,8 @@ def render(
 
     def substitute(match: re.Match[str]) -> str:
         name = match.group(1)
-        if name in SIGNATURE_FIELDS:
-            return signatures.get(name, "")
+        if name in RAW_FIELDS:
+            return raw.get(name, "")
         return html.escape(str(fields[name]))
 
     out = _PLACEHOLDER.sub(substitute, text)

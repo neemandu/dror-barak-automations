@@ -70,6 +70,23 @@ Parameters:
       to the API, while the API's routes come from the function, is a circular
       dependency CloudFormation refuses. Read it from the SignBaseUrl output after
       the first deploy and pass it on the next; the id is stable across updates.
+  ProviderName:
+    Type: String
+    Description: The provider's side of the contract — see PROVIDER_* in .env.example.
+  ProviderBusinessId:
+    Type: String
+  ProviderAddress:
+    Type: String
+  ProviderPhone:
+    Type: String
+  ProviderEmail:
+    Type: String
+  ProviderBank:
+    Type: String
+  ProviderBankBranch:
+    Type: String
+  ProviderBankAccount:
+    Type: String
   WebhookDryRun:
     Type: String
     Default: "1"
@@ -103,6 +120,17 @@ Globals:
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
         GOOGLE_SERVICE_ACCOUNT_JSON: !Ref GoogleServiceAccountJson
         GOOGLE_IMPERSONATE_SUBJECT: !Ref GoogleImpersonateSubject
+        # The contract refuses to render without these, so a deploy that omits
+        # them breaks signing. They are not template defaults precisely so that
+        # failure is loud rather than a contract with no account to pay into.
+        PROVIDER_NAME: !Ref ProviderName
+        PROVIDER_BUSINESS_ID: !Ref ProviderBusinessId
+        PROVIDER_ADDRESS: !Ref ProviderAddress
+        PROVIDER_PHONE: !Ref ProviderPhone
+        PROVIDER_EMAIL: !Ref ProviderEmail
+        PROVIDER_BANK: !Ref ProviderBank
+        PROVIDER_BANK_BRANCH: !Ref ProviderBankBranch
+        PROVIDER_BANK_ACCOUNT: !Ref ProviderBankAccount
         # NOTE: /tmp is per-instance and vanishes. The run-log is the only source
         # for the dashboard and the daily email, so both will be empty until this
         # moves to DynamoDB. Tracked in TASKS.md.

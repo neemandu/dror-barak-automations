@@ -215,3 +215,30 @@ def test_signing_twice_files_one_contract(monkeypatch):
     sign_page.handle_post(token, form, dry_run=True)
     sign_page.handle_post(token, form, dry_run=True)
     assert len(calls) == 1, "a double submit must not file two signed contracts"
+
+
+def test_the_form_posts_relative_so_it_survives_the_stage_prefix():
+    """Regression: the form used action="/sign", which drops the /dev stage.
+
+    The browser posted to /sign, API Gateway answered 404, and the client saw
+    "Not Found" AFTER signing. Every test called handle_post directly, so none of
+    them went through the form -- which is why only a real browser found it.
+    """
+    import re
+
+    from src import sign_page
+
+    page = sign_page.handle_get(signing.make_token("c1"), dry_run=True)
+    action = re.search(r'<form[^>]*action="([^"]*)"', page).group(1)
+    assert not action.startswith("/"), (
+        f"action={action!r} is absolute and will lose the stage prefix"
+    )
+    assert action.startswith("?t="), "the token must survive the post"
+
+
+def test_the_page_never_hardcodes_a_stage():
+    from src import sign_page
+
+    page = sign_page.handle_get(signing.make_token("c1"), dry_run=True)
+    for stage in ("/dev/", "/prod/"):
+        assert stage not in page, f"{stage!r} is baked into the page"

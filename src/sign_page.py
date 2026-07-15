@@ -62,6 +62,11 @@ PAGE_CSS = """
 body { margin:0; background:#eef0f3; color:#14171a; font-family:system-ui,"Segoe UI",Arial,sans-serif; }
 .sheet { max-width:820px; margin:24px auto; background:#fff; padding:40px 48px;
   border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
+.brand-logo { max-width:300px; height:auto; display:block; margin:0 0 10px; }
+.brand-banner { height:120px; border-radius:8px; margin:0 0 22px;
+  background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%); }
+.brand-footer { margin-top:34px; text-align:center; }
+.brand-footer img { max-width:100%; height:auto; }
 .contract h1 { font-size:24px; margin:0 0 6px; }
 .contract h2 { font-size:17px; margin:26px 0 8px; }
 .contract h3 { font-size:15px; margin:16px 0 6px; }
@@ -141,7 +146,14 @@ def _form_html(fields: dict[str, str]) -> str:
 def render_sign_page(
     token: str, fields: dict[str, str], error: str = ""
 ) -> str:
-    """The contract, a form for the missing details, and a signature pad."""
+    """The contract, a form for the missing details, and a signature pad.
+
+    The form's action is **relative** (``?t=...``). The page is served under a
+    stage prefix — ``/dev/sign`` — so an absolute ``/sign`` posts to a path that
+    does not exist, and API Gateway answers 404 *after* the client has signed.
+    Relative keeps whatever path the page was loaded from, and works unchanged
+    under /prod or a custom domain.
+    """
     # Placeholders the client is about to fill get a visible marker rather than a
     # blank, so the document never looks like it has holes in it.
     display = dict(fields)
@@ -163,7 +175,7 @@ def render_sign_page(
     return _page("הסכם התקשרות — לחתימה", f"""
 <div class="sheet">
   {err}
-  <form method="post" action="/sign?t={_esc(token)}" id="f">
+  <form method="post" action="?t={_esc(token)}" id="f">
     {body}
     {_form_html(fields)}
     <div class="form">

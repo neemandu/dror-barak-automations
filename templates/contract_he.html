@@ -27,6 +27,13 @@
 -->
 <div class="contract" dir="rtl" lang="he">
 
+  <img class="brand-logo" src="{{asset_logo}}" alt="דרור ברק">
+
+  <!-- Dror's original had a 90KB PNG here that was nothing but a flat cyan-to-blue
+       gradient. This reproduces it in CSS: visually identical, ~50 bytes instead
+       of 90KB in every Lambda package, page load and signed PDF. -->
+  <div class="brand-banner"></div>
+
   <h1>הסכם התקשרות ומפרט לאישורך</h1>
   <p class="lead">תהליך בניית אסטרטגיה, ליווי ופיתוח עסקי וניהול מערך שיווק ליצירת צמיחה ברווחים!</p>
 
@@ -398,6 +405,14 @@
       <div class="sig-box client">{{client_signature}}</div>
       <p>תאריך: <span class="filled">{{sign_date}}</span></p>
     </div>
+  </div>
+
+  <!-- From Dror's original: a testimonials call-to-action. It says "click to
+       view" but carried no link in his document, so it is wrapped in one here —
+       an image inviting a click that does nothing is worse than no image.
+       TESTIMONIALS_URL is optional; without it the image is shown unlinked. -->
+  <div class="brand-footer">
+    <img src="{{asset_footer}}" alt="לקוחות מספרים על התהליך עם דרור">
   </div>
 
 </div>

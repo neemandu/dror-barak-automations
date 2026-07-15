@@ -32,7 +32,40 @@ def test_template_is_readable_and_has_the_expected_placeholders():
         "provider_name", "provider_business_id", "provider_address",
         "provider_phone", "provider_email", "provider_bank",
         "provider_bank_branch", "provider_bank_account",
+        # Dror's branding, inlined from templates/assets/ at render time.
+        "asset_logo", "asset_footer",
     }
+
+
+def test_drors_branding_is_inlined_so_the_document_stands_alone():
+    """The PDF must not depend on a URL that could rot.
+
+    Drive converts the contract to PDF without fetching anything, and a signed
+    contract whose logo 404s in a year is a signed contract that has changed.
+    """
+    a = contract.assets()
+    assert a["asset_logo"].startswith("data:image/png;base64,")
+    assert a["asset_footer"].startswith("data:image/png;base64,")
+
+    out = contract.render(
+        contract.fields_from_client(CLIENT, price_strategy=4900, price_campaigns=0),
+        signatures={"provider_signature": "", "client_signature": ""},
+    )
+    assert "data:image/png;base64," in out
+    assert "http://" not in out and "googleusercontent" not in out
+
+
+def test_a_missing_logo_does_not_stop_a_contract(monkeypatch):
+    # Branding is cosmetic; the clauses are what matter. A contract that will not
+    # send because a PNG moved would be a bad trade.
+    monkeypatch.setattr(contract, "ASSET_FIELDS", {"asset_logo": "nope.png",
+                                                   "asset_footer": "nope.png"})
+    assert contract.assets() == {"asset_logo": "", "asset_footer": ""}
+    out = contract.render(
+        contract.fields_from_client(CLIENT, price_strategy=4900, price_campaigns=0),
+        signatures={"provider_signature": "", "client_signature": ""},
+    )
+    assert "הסכם התקשרות" in out
 
 
 def test_the_template_carries_no_provider_details():
