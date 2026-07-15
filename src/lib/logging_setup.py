@@ -40,6 +40,13 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+# Names the stdlib already puts on a LogRecord. Passing one as context makes
+# logging raise KeyError, which would take the automation down with it.
+_RECORD_ATTRS = set(vars(logging.makeLogRecord({})).keys()) | {
+    "message", "asctime", "taskName",
+}
+
+
 class _ContextAdapter(logging.LoggerAdapter):
     """Adds the bound context to each record *without* dropping per-call extras.
 
@@ -48,12 +55,19 @@ class _ContextAdapter(logging.LoggerAdapter):
     every log line carry only the automation name and run id — no reason on a
     rejected webhook, no client_id, no detail — which is precisely the context
     you need when reading production logs.
+
+    Context whose name collides with a built-in LogRecord attribute is suffixed
+    rather than passed through: ``logging`` raises ``KeyError`` on a collision,
+    and a log line must never be able to fail the work it is describing.
+    ``daily_summary`` passing ``message=`` is a real instance of this.
     """
 
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
         merged = dict(self.extra or {})
         merged.update(kwargs.get("extra") or {})  # call-site context wins
-        kwargs["extra"] = merged
+        kwargs["extra"] = {
+            (f"{k}_" if k in _RECORD_ATTRS else k): v for k, v in merged.items()
+        }
         return msg, kwargs
 
 

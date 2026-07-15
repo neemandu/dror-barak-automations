@@ -93,3 +93,24 @@ def test_per_call_context_survives_into_the_log_line(capsys):
     assert record["status"] == 401
     assert record["automation"] == "test_ctx"    # the bound context
     assert record["run_id"] == "run123"
+
+
+def test_reserved_context_names_do_not_crash_the_automation(capsys):
+    """`message` is a LogRecord attribute; logging raises KeyError on collision.
+
+    daily_summary really does log `message=...`. A log line must never be able to
+    fail the work it describes, so collisions are renamed, not raised.
+    """
+    import json
+
+    from src.lib.logging_setup import get_logger
+
+    log = get_logger("test_reserved", "run1")
+    log.info("summary_sent", extra={"message": "שלום", "filename": "x.pdf",
+                                    "client_id": "42"})
+    record = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+    assert record["msg"] == "summary_sent"
+    assert record["message_"] == "שלום"      # renamed, not lost
+    assert record["filename_"] == "x.pdf"
+    assert record["client_id"] == "42"       # untouched
