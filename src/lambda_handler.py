@@ -26,7 +26,7 @@ import hmac
 import json
 from typing import Any
 
-from .lib import config, idempotency
+from .lib import actions, config, idempotency
 from .lib.clients.crm import SUB_INITIAL_MEETING, SUB_SIGNED
 from .lib.crm_fields import canonical_sub_status
 from .lib.logging_setup import get_logger
@@ -129,6 +129,76 @@ def route(payload: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
     return {"ignored": f"no automation for event {event}"}
 
 
+def verify_automation_token(supplied: str) -> None:
+    """Authenticate a button press.
+
+    ClickUp's Automation webhooks are configured in the UI and are **not** signed
+    the way API-registered webhooks are — the only thing distinguishing a genuine
+    press from anyone on the internet is a header we ask ClickUp to send. Without
+    it this endpoint would send quotes to Dror's clients on request.
+    """
+    expected = config.get("AUTOMATION_TOKEN")
+    if not expected:
+        raise Rejected(500, "AUTOMATION_TOKEN is not set; refusing to serve")
+    if not supplied:
+        raise Rejected(401, "missing X-Automation-Token")
+    if not hmac.compare_digest(expected.encode("utf-8"), supplied.encode("utf-8")):
+        raise Rejected(401, "bad automation token")
+
+
+def handle_action(
+    action_key: str, raw_body: str, token: str, dry_run: bool = False
+) -> dict[str, Any]:
+    """Run the automation behind a ClickUp button press."""
+    verify_automation_token(token)
+
+    action = actions.get(action_key)
+    if not action:
+        raise Rejected(400, f"unknown action {action_key!r}; "
+                            f"expected one of {sorted(actions.ACTIONS)}")
+    try:
+        payload = json.loads(raw_body or "{}")
+    except json.JSONDecodeError as exc:
+        raise Rejected(400, f"body is not JSON: {exc}") from exc
+
+    task_id = actions.task_id_of(payload)
+    if not task_id:
+        raise Rejected(400, "payload has no task id")
+
+    key = actions.click_key(action.key, task_id, payload)
+    if not idempotency.claim(key):
+        log.info("duplicate_click_ignored", extra={"key": key})
+        return {"ok": True, "duplicate": True, "action": action.key}
+
+    if action.once_only:
+        once = idempotency.guard(action.key, task_id)
+        if not idempotency.claim(once):
+            return {"ok": True, "skipped": f"{action.key} already ran for this client"}
+
+    try:
+        result = action.run(task_id, dry_run)
+    except Exception as exc:  # noqa: BLE001
+        idempotency.release(key)
+        # Dror pressed a button and is waiting. Silence would leave him wondering
+        # whether the quote went out; say so where he pressed it.
+        _comment(task_id, f"❌ {action.label} נכשל: {exc}", dry_run)
+        raise
+
+    idempotency.complete(key)
+    _comment(task_id, action.confirm, dry_run)
+    return {"ok": True, "action": action.key, "result": result}
+
+
+def _comment(task_id: str, message: str, dry_run: bool) -> None:
+    """Report back on the task. Never let feedback break the actual work."""
+    try:
+        from .lib.clients.crm import CrmClient
+
+        CrmClient(dry_run=dry_run).append_automation_log(task_id, message)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("comment_failed", extra={"task_id": task_id, "error": str(exc)})
+
+
 def handle(raw_body: str, signature: str, dry_run: bool = False) -> dict[str, Any]:
     """Verify, dedupe, dispatch. Returns the response body."""
     verify_signature(raw_body, signature)
@@ -173,8 +243,22 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
     # creating a live Morning client.
     dry_run = config.get_bool("WEBHOOK_DRY_RUN")
 
+    path = str((event.get("requestContext") or {}).get("http", {}).get("path")
+               or event.get("rawPath") or "")
+    params = event.get("queryStringParameters") or {}
+
     try:
-        body = handle(raw, signature, dry_run=dry_run)
+        if path.endswith("/action"):
+            # A button press: an Automation webhook, authenticated by header
+            # rather than signature, with the action named in the query string.
+            body = handle_action(
+                str(params.get("action") or ""),
+                raw,
+                headers.get("x-automation-token", ""),
+                dry_run=dry_run,
+            )
+        else:
+            body = handle(raw, signature, dry_run=dry_run)
         return _response(200, {**body, "dry_run": dry_run} if dry_run else body)
     except Rejected as exc:
         log.warning("rejected", extra={"status": exc.status, "reason": exc.reason})

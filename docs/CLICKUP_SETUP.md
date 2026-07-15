@@ -192,6 +192,51 @@ That field is the whole link. It makes the client task show its work, and lets
 > it does move his team's task board out of the tool they use now. Confirm he wants
 > that before building it.
 
+## Step 2b — the buttons (הצעת מחיר and friends)
+
+Some work isn't a lifecycle event: Dror decides *when* to send a quote or build a
+strategy. That's a **Button Custom Field** — clicking it runs an Automation, and
+the Automation calls our webhook.
+
+Buttons are better than a checkbox or a tag for this: a button holds no value, so
+there is nothing to clear afterwards and no chance of our own cleanup re-firing
+the automation.
+
+For each button below: on the `לקוחות` list, add a **Button** Custom Field, set
+its text, then configure its Automation as **Call webhook**:
+
+- **URL:** `<ActionUrl>?action=<key>` — `ActionUrl` is a stack output
+- **Method:** POST
+- **Header:** `X-Automation-Token` = the `AutomationToken` given to the stack
+
+| Button text | `?action=` | Does |
+|---|---|---|
+| `שלח הצעת מחיר` | `send_quote` | Sends the quote with a signature link |
+| `שלח שאלון` | `send_questionnaire` | Re-sends the questionnaire link |
+| `בנה דוח רשתות` | `social_prep` | Builds the social-media prep report |
+| `בנה אסטרטגיה` | `strategy_bot` | Builds the full strategy into Drive |
+| `בנה דוח קמפיין` | `campaign_summary` | Builds the monthly campaign report |
+
+Each press comments its result back on the task — `✅ נשלחה הצעת מחיר ללקוח`, or the
+error if it failed. Dror pressed a button; he shouldn't have to wonder.
+
+> **Why the header token.** ClickUp signs API-registered webhooks, but **not**
+> Automation webhooks. That header is the only thing separating a real press from
+> anyone who finds the URL — and this endpoint sends quotes to clients. The Lambda
+> refuses to serve if `AUTOMATION_TOKEN` is unset rather than defaulting to open.
+
+> **Pressing twice.** A retried delivery of one press is de-duplicated. A *second,
+> deliberate* press sends again — which is correct: a revised quote must go out.
+
+> **What is deliberately not a button.** Onboarding (fires on `חתם`, and is guarded
+> so it can't create two Drive folders) and the monthly payment run — a button that
+> bills every active client sits one mis-tap from invoicing the whole list, and the
+> WhatsApp messages cannot be unsent. That stays CLI-only.
+
+> **On Free Forever:** button presses run ClickUp Automations, capped at **100
+> actions/month**. Fine for Dror's volume. Whether the button field itself consumes
+> Custom Field uses is worth watching, given the 60 cap.
+
 ## Step 3 — point the code at both lists
 
 ```

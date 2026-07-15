@@ -20,6 +20,14 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Returned by ClickUp when the webhook is registered.
+  AutomationToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      Shared secret for the button endpoint. ClickUp's Automation webhooks are not
+      signed, so this header is the only thing separating a genuine button press
+      from anyone who finds the URL. Generate with:
+      python -c "import secrets;print(secrets.token_urlsafe(32))"
   ClickUpApiToken:
     Type: String
     NoEcho: true
@@ -54,6 +62,7 @@ Globals:
       Variables:
         IDEMPOTENCY_TABLE: !Ref IdempotencyTable
         CLICKUP_WEBHOOK_SECRET: !Ref ClickUpWebhookSecret
+        AUTOMATION_TOKEN: !Ref AutomationToken
         CLICKUP_API_TOKEN: !Ref ClickUpApiToken
         CLICKUP_LIST_ID: !Ref ClickUpListId
         CLICKUP_TASKS_LIST_ID: !Ref ClickUpTasksListId
@@ -92,6 +101,15 @@ Resources:
             ApiId: !Ref WebhookApi
             Path: /clickup
             Method: POST
+        # Button presses. Same Lambda, different path: this one is authenticated
+        # by header rather than signature, because Automation webhooks are not
+        # signed the way API-registered webhooks are.
+        ButtonAction:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /action
+            Method: POST
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
@@ -116,5 +134,10 @@ Outputs:
   WebhookUrl:
     Description: Register this in ClickUp (python -m src.tools.register_clickup_webhook)
     Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/clickup"
+  ActionUrl:
+    Description: >
+      Button endpoint. In each Button field's Automation, Call webhook to
+      <this>?action=send_quote with header X-Automation-Token.
+    Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/action"
   IdempotencyTableName:
     Value: !Ref IdempotencyTable
