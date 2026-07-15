@@ -227,11 +227,20 @@ def _is_clickup_test_ping(payload: dict[str, Any]) -> bool:
 
 
 def _comment(task_id: str, message: str, dry_run: bool) -> None:
-    """Report back on the task. Never let feedback break the actual work."""
+    """Report back on the task. Never let feedback break the actual work.
+
+    Posted for real **even in dry-run**, and labelled as such. A comment on Dror's
+    own task is feedback to him, not an outward side effect: dry-run exists to
+    keep us from creating Drive folders and messaging clients, not to hide from
+    Dror whether his button worked. Mocking it left a press with no visible
+    result, which is indistinguishable from a broken button.
+    """
+    if dry_run:
+        message = f"🧪 הרצת ניסיון (לא בוצע בפועל): {message}"
     try:
         from .lib.clients.crm import CrmClient
 
-        CrmClient(dry_run=dry_run).append_automation_log(task_id, message)
+        CrmClient(dry_run=False).append_automation_log(task_id, message)
     except Exception as exc:  # noqa: BLE001
         log.warning("comment_failed", extra={"task_id": task_id, "error": str(exc)})
 

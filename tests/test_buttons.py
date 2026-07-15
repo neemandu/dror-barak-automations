@@ -266,3 +266,24 @@ def test_body_key_alongside_a_task_is_not_a_test_ping(ran):
     payload = json.dumps({"body": "note", "payload": {"id": "t7"}})
     lambda_handler.handle_action("send_quote", payload, TOKEN)
     assert ran == [("send_quote", "t7")]
+
+
+def test_dry_run_still_comments_but_says_it_was_a_test(monkeypatch):
+    # Dry-run exists to avoid creating Drive folders and messaging clients -- not
+    # to hide from Dror whether his button worked. A press with no visible result
+    # is indistinguishable from a broken button.
+    # The comment posts for real, so the live client needs its config present.
+    monkeypatch.setenv("CLICKUP_API_TOKEN", "pk_test")
+    monkeypatch.setenv("CLICKUP_LIST_ID", "123")
+    monkeypatch.setitem(actions._RUNNERS, "send_quote", lambda c, d: {"ok": True})
+    said = []
+    monkeypatch.setattr(
+        "src.lib.clients.crm.CrmClient.append_automation_log",
+        lambda self, tid, msg: said.append((self.dry_run, msg)),
+    )
+    lambda_handler.handle_action("send_quote", body(), TOKEN, dry_run=True)
+
+    assert len(said) == 1, "dry-run must still tell Dror what happened"
+    posted_with_dry_run, msg = said[0]
+    assert posted_with_dry_run is False, "the comment itself must really post"
+    assert "הרצת ניסיון" in msg, "and must say nothing actually went out"
