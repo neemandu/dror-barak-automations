@@ -160,9 +160,14 @@ def test_status_name_lookup_maps_canonical_to_drors_wording(client):
     assert client._status_name_for("nonexistent") is None
 
 
-def test_list_active_clients_raises_when_no_status_maps_to_active():
+def test_list_active_clients_raises_when_nothing_maps_to_active():
     # Silently returning [] would look like "no clients to bill this month".
     c = CrmClient(dry_run=True)
+    # A list with default statuses and no 'סטטוס ראשי' field: nowhere to read
+    # the primary status from at all.
+    c._fields_cache = crm_fields.resolve_fields(
+        [{"id": "f1", "name": "טלפון", "type": "phone"}]
+    )
     c._statuses_cache = ["to do", "in progress", "complete"]
     c.dry_run = False  # take the live branch without making a request
     c.list_id = "L1"
@@ -177,6 +182,110 @@ def test_list_active_clients_raises_when_no_status_maps_to_active():
 def test_update_fields_dry_run_records_rather_than_writes(client):
     result = client.update_fields("abc123", drive_folder_url="https://x")
     assert result["client_id"] == "abc123"
+
+
+# ------------------------------------- Dror's actual layout (status as a field)
+
+# What he built: the primary status is a 'סטטוס ראשי' dropdown, and the list's
+# real statuses are still the ClickUp defaults.
+DROR_FIELDS = [
+    {"id": "s1", "name": "סטטוס ראשי", "type": "drop_down",
+     "type_config": {"options": [
+         {"id": "p1", "name": "ליד"},
+         {"id": "p2", "name": "לקוח פעיל"},
+         {"id": "p3", "name": "מושהה"},
+         {"id": "p4", "name": "הסתיים"},
+     ]}},
+    {"id": "s2", "name": "סטטוס משני", "type": "drop_down",
+     "type_config": {"options": [{"id": "q1", "name": "נעשתה פגישה ראשונית"}]}},
+    {"id": "s3", "name": "מחיר חודשי ללא מעמ", "type": "currency"},
+    {"id": "s4", "name": "נתיב לגוגל דרייב", "type": "url"},
+    {"id": "s5", "name": "מזהה מורנינג", "type": "short_text"},
+    {"id": "s6", "name": "חוזה חתום", "type": "attachment"},
+]
+
+DROR_TASK = {
+    "id": "t1", "name": "מכללת אלפא",
+    "status": {"status": "לקוחות"},  # the default list status — meaningless
+    "custom_fields": [
+        {"id": "s1", "value": "p2"},          # לקוח פעיל
+        {"id": "s2", "value": "q1"},
+        {"id": "s3", "value": 3500},
+        {"id": "s4", "value": "https://drive.google.com/drive/folders/y"},
+    ],
+}
+
+
+@pytest.fixture
+def dror_client():
+    c = CrmClient(dry_run=True)
+    c._fields_cache = crm_fields.resolve_fields(DROR_FIELDS)
+    c._statuses_cache = ["לקוחות", "in progress", "complete"]
+    return c
+
+
+def test_his_field_names_are_recognised():
+    resolved = crm_fields.resolve_fields(DROR_FIELDS)
+    assert resolved["monthly_price"]["name"] == "מחיר חודשי ללא מעמ"
+    assert resolved["drive_folder"]["name"] == "נתיב לגוגל דרייב"
+    assert resolved["morning_client_id"]["name"] == "מזהה מורנינג"
+    assert resolved["status"]["name"] == "סטטוס ראשי"
+
+
+def test_primary_status_read_from_the_field_not_the_task_status(dror_client):
+    c = dror_client._to_client(DROR_TASK)
+    # The task status says 'לקוחות'; the real answer is in the field.
+    assert c["status"] == "active"
+    assert c["sub_status"] == "initial_meeting"
+    assert c["monthly_price"] == 3500
+
+
+def test_primary_in_field_detects_the_layout(dror_client, client):
+    assert dror_client.primary_in_field() is True
+    assert client.primary_in_field() is False  # LIST_FIELDS has no סטטוס ראשי
+
+
+def test_currency_field_coerces_like_a_number():
+    assert crm_fields.coerce_value(DROR_FIELDS[2], "3500") == 3500.0
+
+
+def test_attachment_field_refuses_a_link_rather_than_writing_nonsense():
+    # onboarding writes a URL; an attachment field wants an uploaded file.
+    with pytest.raises(ValueError) as exc:
+        crm_fields.coerce_value(DROR_FIELDS[5], "https://drive.google.com/x")
+    assert "Attachment" in str(exc.value)
+
+
+def test_attachment_field_reads_back_the_first_url():
+    field = DROR_FIELDS[5]
+    raw = [{"url": "https://files.clickup.com/contract.pdf"}]
+    assert crm_fields.read_value(field, raw) == "https://files.clickup.com/contract.pdf"
+    assert crm_fields.read_value(field, None) == ""
+
+
+def test_active_filter_works_when_status_is_a_field(monkeypatch, dror_client):
+    dror_client.dry_run = False
+    dror_client.base_url = "https://api.clickup.test"
+    dror_client.token = "pk_test"
+    other = {**DROR_TASK, "id": "t2",
+             "custom_fields": [{"id": "s1", "value": "p1"}]}  # ליד
+
+    monkeypatch.setattr(dror_client, "_all_clients",
+                        lambda: [dror_client._to_client(DROR_TASK),
+                                 dror_client._to_client(other)])
+    active = dror_client.list_active_clients()
+    assert [c["id"] for c in active] == ["t1"]
+
+
+def test_billing_raises_rather_than_silently_billing_nobody(monkeypatch, dror_client):
+    # Every client a lead => returning [] would read as "nothing to bill".
+    dror_client.dry_run = False
+    lead = {**DROR_TASK, "custom_fields": [{"id": "s1", "value": "p1"}]}
+    monkeypatch.setattr(dror_client, "_all_clients",
+                        lambda: [dror_client._to_client(lead)])
+    with pytest.raises(ValueError) as exc:
+        dror_client.list_active_clients()
+    assert "none with a primary status" in str(exc.value)
 
 
 def test_caller_aliases_reach_the_right_field():

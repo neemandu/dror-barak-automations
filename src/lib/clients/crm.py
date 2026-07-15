@@ -133,6 +133,15 @@ class CrmClient(BaseClient):
                 ]
         return self._statuses_cache
 
+    def primary_in_field(self) -> bool:
+        """True when the primary status is a custom field, not the task status.
+
+        Both layouts are supported. Dror built a `סטטוס ראשי` dropdown rather than
+        customising the list's statuses, and forcing a rebuild would throw away
+        working setup — but the choice has costs, so see docs/CLICKUP_SETUP.md.
+        """
+        return "status" in self.fields()
+
     def _status_name_for(self, canonical: str) -> Optional[str]:
         """The list's actual status name for a canonical status, if present."""
         for name in self.statuses():
@@ -152,15 +161,15 @@ class CrmClient(BaseClient):
             if not field:
                 return ""
             raw = by_id.get(str(field.get("id")), {}).get("value")
-            if raw in (None, ""):
-                return ""
-            if str(field.get("type")) == "drop_down":
-                return crm_fields.dropdown_label(field, raw) or ""
-            return raw
+            return crm_fields.read_value(field, raw)
 
         name = str(task.get("name") or "")
         sub_raw = str(field_value("sub_status") or "")
-        status_raw = str((task.get("status") or {}).get("status") or "")
+        # The primary status can live in either place (see primary_in_field), so
+        # prefer a 'סטטוס ראשי' custom field and fall back to the task status.
+        status_raw = str(field_value("status") or "") if self.primary_in_field() else ""
+        if not status_raw:
+            status_raw = str((task.get("status") or {}).get("status") or "")
         price = field_value("monthly_price")
 
         drive = str(field_value("drive_folder") or "")
@@ -201,20 +210,8 @@ class CrmClient(BaseClient):
         )
         return self._to_client(resp.json())
 
-    def list_active_clients(self) -> list[dict[str, Any]]:
-        """Every client whose primary status is ``active``."""
-        if self.dry_run:
-            self._record("list_active_clients")
-            return [_fixture_client("1001"), _fixture_client("1002")]
-
-        status_name = self._status_name_for(STATUS_ACTIVE)
-        if status_name is None:
-            # Better to say so than to bill nobody and look like a quiet success.
-            raise ValueError(
-                f"No status on list {self.list_id} maps to 'active'. "
-                f"Statuses found: {self.statuses()}. See docs/CLICKUP_SETUP.md."
-            )
-
+    def _all_clients(self) -> list[dict[str, Any]]:
+        """Every non-archived client task, paged."""
         out: list[dict[str, Any]] = []
         page = 0
         while True:  # ClickUp pages at 100 tasks; an agency will exceed that.
@@ -222,12 +219,7 @@ class CrmClient(BaseClient):
                 "GET",
                 f"{self.base_url}/list/{self.list_id}/task",
                 headers=self._headers(),
-                params={
-                    "archived": "false",
-                    "subtasks": "false",
-                    "page": str(page),
-                    "statuses[]": status_name,
-                },
+                params={"archived": "false", "subtasks": "false", "page": str(page)},
             )
             body = resp.json()
             tasks = body.get("tasks", [])
@@ -235,6 +227,35 @@ class CrmClient(BaseClient):
             if body.get("last_page") or not tasks:
                 return out
             page += 1
+
+    def list_active_clients(self) -> list[dict[str, Any]]:
+        """Every client whose primary status is ``active``.
+
+        Filtered here rather than by ClickUp's ``statuses[]`` param, because that
+        param only sees task statuses — and the primary status may be a custom
+        field. Filtering client-side works for both layouts.
+        """
+        if self.dry_run:
+            self._record("list_active_clients")
+            return [_fixture_client("1001"), _fixture_client("1002")]
+
+        # Refuse rather than bill nobody and report a quiet success.
+        if not self.primary_in_field() and self._status_name_for(STATUS_ACTIVE) is None:
+            raise ValueError(
+                f"No status on list {self.list_id} maps to 'active', and there is no "
+                f"'סטטוס ראשי' field either. Statuses found: {self.statuses()}. "
+                f"See docs/CLICKUP_SETUP.md."
+            )
+
+        clients = self._all_clients()
+        active = [c for c in clients if c.get("status") == STATUS_ACTIVE]
+        if clients and not active:
+            raise ValueError(
+                f"{len(clients)} clients on list {self.list_id}, none with a primary "
+                f"status meaning 'active'. Saw: {sorted({c.get('status') for c in clients})}. "
+                f"See docs/CLICKUP_SETUP.md."
+            )
+        return active
 
     # ------------------------------------------------------------------ writes
 
@@ -256,7 +277,9 @@ class CrmClient(BaseClient):
         for key, value in fields.items():
             canonical = _CALLER_ALIASES.get(key, key)
 
-            if canonical == "status":
+            # The primary status is a task status unless a 'סטטוס ראשי' field
+            # exists, in which case it falls through to the custom-field path.
+            if canonical == "status" and not self.primary_in_field():
                 name = self._status_name_for(str(value)) or str(value)
                 self._request(
                     "PUT",

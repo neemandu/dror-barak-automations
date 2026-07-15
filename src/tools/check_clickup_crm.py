@@ -111,25 +111,47 @@ def check(list_id: str, token: str) -> bool:
     print(f"\nlist {list_id}: {meta.get('name')}")
     ok = True
 
-    print("\nstatuses (the primary status — lead/active/paused/finished):")
-    names = [s.get("status", "") for s in meta.get("statuses", [])]
-    found = {crm_fields.canonical_status(n): n for n in names if crm_fields.canonical_status(n)}
-    for canonical in (crm_fields.STATUS_LEAD, crm_fields.STATUS_ACTIVE,
-                      crm_fields.STATUS_PAUSED, crm_fields.STATUS_FINISHED):
-        if canonical in found:
-            print(f"{OK}{canonical:9} -> {found[canonical]!r}")
-        else:
-            # Only 'active' is load-bearing: the monthly billing run selects on it.
-            required = canonical == crm_fields.STATUS_ACTIVE
-            print(f"{BAD if required else MISS}{canonical:9} -> no matching status"
-                  f"{'   (REQUIRED — the monthly billing run selects on it)' if required else ''}")
-            ok = ok and not required
-    unmapped = [n for n in names if not crm_fields.canonical_status(n)]
-    if unmapped:
-        print(f"       (not recognised, ignored: {unmapped})")
-
     fields = _api(f"/list/{list_id}/field", token).get("fields", [])
     resolved = crm_fields.resolve_fields(fields)
+    status_field = resolved.get("status")
+
+    print("\nprimary status (lead/active/paused/finished):")
+    if status_field:
+        # Supported, but not free: a dropdown burns a Custom Field use per client,
+        # and ClickUp's board/automation features key off task statuses.
+        print(f"{OK}held in the custom field {status_field['name']!r} "
+              f"({status_field['type']}), not the task status.")
+        options = (status_field.get("type_config") or {}).get("options") or []
+        by_canonical = {
+            crm_fields.canonical_status(str(o.get("name"))): o.get("name") for o in options
+        }
+        for canonical in (crm_fields.STATUS_LEAD, crm_fields.STATUS_ACTIVE,
+                          crm_fields.STATUS_PAUSED, crm_fields.STATUS_FINISHED):
+            if canonical in by_canonical:
+                print(f"{OK}{canonical:9} -> {by_canonical[canonical]!r}")
+            else:
+                required = canonical == crm_fields.STATUS_ACTIVE
+                print(f"{BAD if required else MISS}{canonical:9} -> no matching option"
+                      f"{'   (REQUIRED — the monthly billing run selects on it)' if required else ''}")
+                ok = ok and not required
+        print(f"{MISS}note: as a field this costs one Custom Field use per client, and")
+        print("       ClickUp cannot show the pipeline as a board or trigger on it.")
+        print("       Task statuses are free and native — see docs/CLICKUP_SETUP.md.")
+    else:
+        names = [s.get("status", "") for s in meta.get("statuses", [])]
+        found = {crm_fields.canonical_status(n): n for n in names if crm_fields.canonical_status(n)}
+        for canonical in (crm_fields.STATUS_LEAD, crm_fields.STATUS_ACTIVE,
+                          crm_fields.STATUS_PAUSED, crm_fields.STATUS_FINISHED):
+            if canonical in found:
+                print(f"{OK}{canonical:9} -> status {found[canonical]!r}")
+            else:
+                required = canonical == crm_fields.STATUS_ACTIVE
+                print(f"{BAD if required else MISS}{canonical:9} -> no matching status"
+                      f"{'   (REQUIRED — the monthly billing run selects on it)' if required else ''}")
+                ok = ok and not required
+        unmapped = [n for n in names if not crm_fields.canonical_status(n)]
+        if unmapped:
+            print(f"       (not recognised, ignored: {unmapped})")
 
     print("\nrequired custom fields:")
     for canonical in REQUIRED_FIELDS:
@@ -144,9 +166,17 @@ def check(list_id: str, token: str) -> bool:
     print("\noptional custom fields:")
     for canonical in OPTIONAL_FIELDS:
         field = resolved.get(canonical)
-        print(f"{OK}{canonical:18} -> {field['name']!r} ({field['type']})" if field
-              else f"{MISS}{canonical:18} -> not set up "
-                   f"(automations writing it will report it as skipped)")
+        if not field:
+            print(f"{MISS}{canonical:18} -> not set up "
+                  f"(automations writing it will report it as skipped)")
+            continue
+        print(f"{OK}{canonical:18} -> {field['name']!r} ({field['type']})")
+        if str(field.get("type")) == "attachment":
+            # The automations store a link; an attachment field wants a file.
+            print(f"{BAD}{'':18}    ^ Attachment fields take an uploaded file, but the "
+                  f"automations write a link.\n{'':26}Change {field['name']!r} to type "
+                  f"URL, or it will never be written.")
+            ok = False
 
     sub = resolved.get("sub_status")
     if sub:

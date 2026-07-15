@@ -81,19 +81,25 @@ it with a filter. The per-client view is not lost: it's the Relationship field.
 
 In space **Team Space**, create a list named **`לקוחות`**.
 
-### Statuses — this *is* the primary status
+### The primary status — two ways, both supported
 
-List → `⋯` → **Statuses**. Make them exactly these four:
+The code reads the primary status from a **`סטטוס ראשי` dropdown field** if one
+exists, and otherwise from the **task status**. Either works.
 
-| Meaning | Name it | Also accepted |
-|---|---|---|
-| Lead | `ליד` | `lead` |
-| Active client | `לקוח פעיל` | `פעיל`, `active` |
-| Paused | `מושהה` | `בהמתנה`, `paused` |
-| Finished | `הסתיים` | `סיום`, `finished`, `complete` |
+**As it is built today:** a `סטטוס ראשי` dropdown with the options `ליד`,
+`לקוח פעיל`, `מושהה`, `הסתיים`.
 
-> `לקוח פעיל` is **required** — the monthly billing run selects clients by it.
-> Without it that automation refuses to run rather than quietly bill nobody.
+**The recommended layout** is the list's task statuses instead (List → `⋯` →
+**Statuses**), with the same four names. It is better in three ways:
+
+- **Free.** Statuses cost nothing; a dropdown burns one Custom Field use per
+  client, which matters a lot on Free Forever (see the cap above).
+- **It's the pipeline view.** ClickUp's Board view groups by status, so the
+  lead→active pipeline becomes a kanban. It cannot do that with a field.
+- **Triggers.** ClickUp automations and webhooks fire natively on status change.
+
+Whichever is used, `לקוח פעיל` is **required** — the monthly billing run selects
+clients by it, and refuses to run rather than quietly bill nobody.
 
 ### Required custom fields
 
@@ -119,15 +125,23 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 
 | Field name | Type | Used by |
 |---|---|---|
-| `מייל` | Email | Sending the quote |
+| `מייל` / `אימייל` | Email | Sending the quote |
 | `סוג שירות` | Text | Strategy bot, campaign report |
-| `תיקיית Drive` | URL | Onboarding writes the client's folder here |
-| `חוזה חתום` | URL | The signed contract link |
+| `תיקיית Drive` / `נתיב לגוגל דרייב` | **URL** | Onboarding writes the client's folder here |
+| `חוזה חתום` | **URL** | The signed contract link |
 | `נתיב הקלטות` | Text | Meeting recordings |
 | `סטטוס Morning` | Text | Whether the client exists in Morning |
-| `מזהה Morning` | Text | The Morning client id |
+| `מזהה Morning` / `מזהה מורנינג` | Text | The Morning client id |
 
 Any other field of Dror's is ignored — never read, never written.
+
+> **`חוזה חתום` must be type URL, not Attachment.** An Attachment field takes an
+> uploaded file; the automations write a *link* to the signed PDF in Drive. As an
+> Attachment field it can never be written. The checker flags this.
+
+> **Field names are matched loosely**, in Hebrew or English — `מחיר חודשי`,
+> `מחיר חודשי ללא מעמ` and `price` all resolve to the same thing. Add a new
+> spelling to `ALIASES` in `src/lib/crm_fields.py` rather than renaming in ClickUp.
 
 ### What goes where on a client task
 

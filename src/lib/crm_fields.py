@@ -26,18 +26,30 @@ ALIASES: dict[str, list[str]] = {
     "email": ["email", "mail", "מייל", "אימייל", 'דוא"ל', "דואל"],
     "status": ["status", "סטטוס", "סטטוס ראשי"],
     "sub_status": ["sub status", "substatus", "סטטוס משני"],
-    "monthly_price": ["monthly price", "price", "מחיר חודשי", "מחיר", "ריטיינר"],
+    "monthly_price": [
+        "monthly price", "price", "מחיר חודשי", "מחיר", "ריטיינר",
+        # Dror's field is explicitly ex-VAT. Morning adds מע"מ when it issues the
+        # document, so an ex-VAT amount is the correct thing to send it.
+        "מחיר חודשי ללא מעמ", 'מחיר חודשי ללא מע"מ', "מחיר ללא מעמ",
+    ],
     "service_type": ["service type", "service", "סוג שירות"],
     "drive_folder": [
-        "drive", "drive folder", "נתיב תיקיית drive", "תיקיית drive", "דרייב"
+        "drive", "drive folder", "נתיב תיקיית drive", "תיקיית drive", "דרייב",
+        "נתיב לגוגל דרייב", "תיקיית גוגל דרייב", "גוגל דרייב",
     ],
     "signed_contract": ["signed contract", "contract", "חוזה חתום", "חוזה"],
     "recordings_path": ["recordings", "נתיב הקלטות", "הקלטות"],
-    "morning_status": ["morning", "morning status", "סטטוס morning"],
-    "morning_client_id": ["morning client id", "morning id", "מזהה morning"],
+    "morning_status": ["morning", "morning status", "סטטוס morning", "סטטוס מורנינג"],
+    "morning_client_id": [
+        "morning client id", "morning id", "מזהה morning", "מזהה מורנינג",
+    ],
 }
 
 NUMERIC_FIELDS = {"monthly_price"}
+
+# ClickUp field types that hold a number. 'currency' is what a price field
+# naturally becomes in the UI, and it returns a plain number.
+NUMERIC_TYPES = {"number", "currency"}
 
 # Primary status — the ClickUp task status.
 STATUS_LEAD = "lead"
@@ -60,7 +72,9 @@ STATUS_ALIASES: dict[str, list[str]] = {
 }
 
 SUB_STATUS_ALIASES: dict[str, list[str]] = {
-    SUB_INITIAL_MEETING: ["initial meeting", "פגישה ראשונית", "פגישת היכרות"],
+    SUB_INITIAL_MEETING: [
+        "initial meeting", "פגישה ראשונית", "פגישת היכרות", "נעשתה פגישה ראשונית",
+    ],
     SUB_QUESTIONNAIRE_SENT: ["questionnaire sent", "נשלח שאלון", "שאלון נשלח"],
     SUB_QUOTE_SENT: ["quote sent", "נשלחה הצעת מחיר", "הצעת מחיר נשלחה"],
     SUB_SIGNED: ["signed", "חתם", "נחתם", "חוזה חתום"],
@@ -161,6 +175,29 @@ def coerce_value(field: dict[str, Any], value: Any) -> Any:
                 f"Options: {[o.get('name') for o in (field.get('type_config') or {}).get('options', [])]}"
             )
         return option_id
-    if ftype == "number":
+    if ftype in NUMERIC_TYPES:
         return float(value) if value not in (None, "") else None
+    if ftype == "attachment":
+        # Attachment fields take an uploaded file, not a URL string. Writing one
+        # would either fail or, worse, store a URL where a file is expected.
+        raise ValueError(
+            f"{field.get('name')!r} is an Attachment field; the automations write a "
+            f"link, not a file. Change its type to URL in ClickUp."
+        )
     return value
+
+
+def read_value(field: dict[str, Any], raw: Any) -> Any:
+    """Convert a value ClickUp returned into a plain Python value."""
+    if raw in (None, ""):
+        return ""
+    ftype = str(field.get("type") or "")
+    if ftype == "drop_down":
+        return dropdown_label(field, raw) or ""
+    if ftype == "attachment":
+        # ClickUp returns a list of attachment objects; surface the first URL so a
+        # contract uploaded by hand is at least readable.
+        if isinstance(raw, list) and raw:
+            return str(raw[0].get("url") or "")
+        return ""
+    return raw
