@@ -40,6 +40,40 @@ def _api(path: str, token: str) -> dict[str, Any]:
     return resp.json()
 
 
+def plan_report(token: str) -> bool:
+    """Report the plan and the custom-field headroom. True when unconstrained.
+
+    Free Forever caps the whole workspace at 60 Custom Field *uses*, counted each
+    time a value is set on a task's field and never reset. The CRM puts ~10 fields
+    on a client, so Free runs out at roughly 6 clients — worth knowing before the
+    setup rather than when writes start failing.
+    """
+    teams = _api("/team", token).get("teams", [])
+    if not teams:
+        print(f"{BAD}no workspace visible to this token.")
+        return False
+    ok = True
+    for team in teams:
+        plan = _api(f"/team/{team['id']}/plan", token)
+        name = str(plan.get("plan_name", "?"))
+        seats = _api(f"/team/{team['id']}/seats", token).get("members", {})
+        print(f"\nworkspace {team['id']}: {team['name']}")
+        print(f"  plan:  {name}")
+        print(f"  seats: {seats.get('filled_members_seats')}/{seats.get('total_member_seats')} members")
+        if "free" in name.casefold():
+            ok = False
+            print(f"{BAD}Free Forever caps the WORKSPACE at 60 Custom Field uses.")
+            print("       A 'use' = one value set on one task's custom field, and")
+            print("       uses accumulate across the workspace and never reset.")
+            print("       The CRM puts ~10 fields on a client -> ~6 clients, total.")
+            print("       The automations then cannot write Drive links, contract")
+            print("       links or Morning status at all.")
+            print("       -> Upgrade, or use Plan B in docs/CLICKUP_SETUP.md.")
+        else:
+            print(f"{OK}paid plan — Custom Field uses are unlimited.")
+    return ok
+
+
 def discover(token: str) -> None:
     """Print every list in the workspace so the clients list can be identified."""
     teams = _api("/team", token).get("teams", [])
@@ -147,6 +181,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Check the ClickUp CRM list setup")
     parser.add_argument("--discover", action="store_true",
                         help="List every list in the workspace with its id.")
+    parser.add_argument("--plan", action="store_true",
+                        help="Report the plan tier and the custom-field cap.")
     parser.add_argument("--list-id", help="List to check (default: CLICKUP_LIST_ID).")
     args = parser.parse_args()
     config.load_dotenv()
@@ -155,13 +191,33 @@ def main() -> None:
     if args.discover:
         discover(token)
         return
+    if args.plan:
+        sys.exit(0 if plan_report(token) else 1)
 
     list_id = args.list_id or config.get("CLICKUP_LIST_ID")
     if not list_id:
         print("No list to check. Pass --list-id, or set CLICKUP_LIST_ID in .env.\n"
               "Run with --discover to see the lists in the workspace.")
         sys.exit(1)
-    sys.exit(0 if check(str(list_id), token) else 1)
+
+    # The plan gates everything else: a perfectly configured list still cannot be
+    # written to once the workspace is out of Custom Field uses.
+    plan_ok = plan_report(token)
+    list_ok = check(str(list_id), token)
+
+    tasks_list = config.get("CLICKUP_TASKS_LIST_ID")
+    if tasks_list:
+        meta = _api(f"/list/{tasks_list}", token)
+        print(f"\ntasks list {tasks_list}: {meta.get('name', '?')}")
+        fields = _api(f"/list/{tasks_list}/field", token).get("fields", [])
+        rel = [f for f in fields if str(f.get("type")) in ("list_relationship", "tasks")]
+        print(f"{OK}'{rel[0]['name']}' links work tasks to clients." if rel
+              else f"{MISS}no Relationship field — work tasks cannot point at a client. "
+                   f"See docs/CLICKUP_SETUP.md step 2.")
+    else:
+        print(f"\n{MISS}CLICKUP_TASKS_LIST_ID not set — per-client tasks not configured.")
+
+    sys.exit(0 if (plan_ok and list_ok) else 1)
 
 
 if __name__ == "__main__":

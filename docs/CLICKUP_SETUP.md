@@ -1,31 +1,89 @@
-# ClickUp CRM — how to set up the clients list
+# ClickUp CRM — the design, and how to build it
 
-ClickUp is the CRM: **one task per client**. The automations read the task to know
-who the client is, and write their results back onto it.
+ClickUp holds two different things, and the design turns on keeping them apart:
 
-**This is a one-time manual job.** ClickUp's API cannot create custom fields — it
-can only read them and set values on fields that already exist. So the list has to
-be built by hand in the ClickUp UI, once. After that everything is automatic.
+- **a client** — a long-lived record with a lifecycle (`ליד → לקוח פעיל`)
+- **a task for a client** — a unit of work with an assignee and a due date
 
-**You do not need to copy any field ids.** The code matches fields, statuses and
-dropdown options by *name*, in Hebrew or English. Name things as below and it just
-works. Rename something and the checker will tell you.
+They get **one list each**, linked. Everything below follows from that.
 
-## Current state
+```
+Workspace: Drorbrk
+└── Space: Team Space
+    ├── List: לקוחות     ← THE CLIENT lives here. One task per client.
+    │     status      = ליד / לקוח פעיל / מושהה / הסתיים   (the lifecycle)
+    │     fields      = phone, price, Drive folder, contract, Morning...
+    │     comments    = the automation log
+    │     → .env: CLICKUP_LIST_ID
+    │
+    └── List: משימות     ← THE WORK lives here. One task per work item.
+          status      = to do / בעבודה / בבדיקה / הושלם
+          assignee    = campaign manager / general worker
+          לקוח (Relationship) → points at a task in לקוחות
+          → .env: CLICKUP_TASKS_LIST_ID
+```
 
-The workspace (`Drorbrk`, team `90182874674`) is still the default ClickUp
-template: lists called `Project 1`, `Project 2` and `Get Started with ClickUp`,
-with default statuses and no custom fields. **None of the CRM exists yet.**
+**To see one client's tasks:** open the client's task in `לקוחות` — the `לקוח`
+relationship lists every work task pointing at it. Or open `משימות` and
+**Group by → לקוח**.
 
-## Step 1 — create the list
+---
 
-In space **Team Space**, create a list called **לקוחות** (or anything — you'll put
-its id in `.env`).
+## ⚠️ Read this first: the workspace is on Free Forever
 
-## Step 2 — set the list's statuses
+The plan caps the whole workspace at **60 Custom Field uses**, where a "use" is
+counted **each time a value is set on a task's custom field**, accumulating across
+the workspace and never resetting.
 
-These are the **primary status**. In the list → `⋯` → **Statuses** → customise, so
-the statuses are exactly these four (any of the accepted names works):
+The CRM design below puts ~10 fields on each client. That is **~6 clients before
+ClickUp stops accepting custom field values** — and the automations write to those
+fields constantly (Drive folder, contract link, Morning status, secondary status).
+
+**This design needs a paid ClickUp tier.** Paid plans lift the cap to unlimited;
+check ClickUp's current pricing for the per-member cost, and note it bills per
+member, so adding the campaign managers adds seats. For a system that runs the
+business this is a small line item — but it is a real one, and it wasn't in the
+original proposal's budget.
+
+**If Dror will not upgrade,** see [Plan B](#plan-b--staying-on-free-forever) at the
+bottom. It works, but it's worse in specific ways, and you should read them before
+choosing it.
+
+Check the plan any time:
+
+```bash
+python -m src.tools.check_clickup_crm --plan
+```
+
+---
+
+## Why two lists (and not the obvious alternatives)
+
+**Why not subtasks under the client?** It's the first thing you'd reach for, and
+ClickUp breaks it: subtasks live in their parent's list, so they share its
+statuses. "Write an Instagram post" would have to be `ליד` / `לקוח פעיל` /
+`מושהה` / `הסתיים`. There's no way to give subtasks a different status set. It also
+breaks the ClickUp→Claude Code bridge, which watches a list for new tasks — every
+client status change would fire it.
+
+**Why not a list per client (a folder of clients)?** ClickUp lists cannot hold
+custom fields, so the client's own data — phone, price, Morning status — would have
+nowhere to live. Billing would also have to query every list instead of one, and
+each new client would need its list wired up before anything worked.
+
+**Why one `משימות` list rather than per-client lists?** Because "all of Ronen's
+tasks, across every client" is a question Dror actually asks, and one list answers
+it with a filter. The per-client view is not lost: it's the Relationship field.
+
+---
+
+## Step 1 — the `לקוחות` list (the CRM)
+
+In space **Team Space**, create a list named **`לקוחות`**.
+
+### Statuses — this *is* the primary status
+
+List → `⋯` → **Statuses**. Make them exactly these four:
 
 | Meaning | Name it | Also accepted |
 |---|---|---|
@@ -34,24 +92,18 @@ the statuses are exactly these four (any of the accepted names works):
 | Paused | `מושהה` | `בהמתנה`, `paused` |
 | Finished | `הסתיים` | `סיום`, `finished`, `complete` |
 
-> **`לקוח פעיל` is required.** The monthly billing run selects clients by it. Without
-> it, that automation refuses to run rather than quietly bill nobody.
+> `לקוח פעיל` is **required** — the monthly billing run selects clients by it.
+> Without it that automation refuses to run rather than quietly bill nobody.
 
-## Step 3 — add the custom fields
-
-List → `+` in the header row → **New field**. Name and type matter; order doesn't.
-
-### Required
+### Required custom fields
 
 | Field name | Type | Used by |
 |---|---|---|
-| `טלפון` | Phone | Saving the lead to Contacts, every WhatsApp message |
+| `טלפון` | Phone | Google Contacts, every WhatsApp message |
 | `מחיר חודשי` | Number | The monthly payment request |
 | `סטטוס משני` | **Dropdown** | Triggers the questionnaire and onboarding |
 
-### The `סטטוס משני` dropdown options
-
-Add these five, exactly (or their accepted alternatives):
+`סטטוס משני` options, exactly these five:
 
 | Meaning | Name it | Also accepted |
 |---|---|---|
@@ -61,87 +113,139 @@ Add these five, exactly (or their accepted alternatives):
 | Signed | `חתם` | `נחתם`, `חוזה חתום` |
 | In work | `בעבודה` | `in work` |
 
-### Optional
+### Optional custom fields
 
-Skip any of these and the automations that write to them will log a "skipped"
-line — nothing breaks, the value just has nowhere to go.
+Skip any and the automation that writes it logs a "skipped" line — nothing breaks.
 
 | Field name | Type | Used by |
 |---|---|---|
 | `מייל` | Email | Sending the quote |
-| `סוג שירות` | Text | The strategy bot, the campaign report |
+| `סוג שירות` | Text | Strategy bot, campaign report |
 | `תיקיית Drive` | URL | Onboarding writes the client's folder here |
 | `חוזה חתום` | URL | The signed contract link |
 | `נתיב הקלטות` | Text | Meeting recordings |
 | `סטטוס Morning` | Text | Whether the client exists in Morning |
 | `מזהה Morning` | Text | The Morning client id |
 
-You can keep any other fields of your own alongside these — anything not in this
-table is ignored, never read and never written.
+Any other field of Dror's is ignored — never read, never written.
 
-## Step 4 — point the code at the list
+### What goes where on a client task
 
-Open the list in the browser. The URL looks like:
+| Thing | Where |
+|---|---|
+| Client name | The task name (`מכללת אלפא`) |
+| Lifecycle | The task **status** |
+| Everything else | Custom fields above |
+| What the automations did | Task **comments** — the automation log |
+
+## Step 2 — the `משימות` list (work per client)
+
+Create a second list named **`משימות`** in the same space.
+
+**Statuses:** `to do` / `בעבודה` / `בבדיקה` / `הושלם`. These are ordinary work
+statuses and are not read by the CRM code — name them however the team works.
+
+**One custom field:**
+
+| Field name | Type | Points at |
+|---|---|---|
+| `לקוח` | **Relationship** → tasks in `לקוחות` | The client this work is for |
+
+That field is the whole link. It makes the client task show its work, and lets
+`משימות` group by client.
+
+**Assignee** on each task is the campaign manager or the general worker.
+
+> **The people aren't in the workspace yet.** It currently has two members: Dror and
+> `office@smartflows.academy`. The two campaign managers and the general worker are
+> not there. A `משימות` list assigned to nobody is a to-do list Dror keeps for
+> himself — the value only arrives when the team is in it. On a paid plan each of
+> them is a billable seat.
+
+> **Scope check.** Task assignment and hour logging live in Google Sheets today, and
+> Dror asked for hour-tracking to be left alone. `משימות` does not touch hours, but
+> it does move his team's task board out of the tool they use now. Confirm he wants
+> that before building it.
+
+## Step 3 — point the code at both lists
 
 ```
-https://app.clickup.com/90182874674/v/li/901819505305
-                                          ^^^^^^^^^^^^ this is the list id
+CLICKUP_LIST_ID=901819505305         # לקוחות
+CLICKUP_TASKS_LIST_ID=901819505306   # משימות
 ```
 
-Put it in `.env`:
-
-```
-CLICKUP_LIST_ID=901819505305
-```
-
-Or find it without the browser:
+Find the ids without hunting through URLs:
 
 ```bash
 python -m src.tools.check_clickup_crm --discover
 ```
 
-## Step 5 — check the setup
+## Step 4 — check the setup
 
 ```bash
 python -m src.tools.check_clickup_crm
 ```
 
-It reports every status, field and dropdown option — present, missing, or
-misnamed — and exits non-zero until the required ones are there. It never writes
-to ClickUp.
+Reports every status, field and dropdown option — present, missing or misnamed —
+plus the plan and how close the workspace is to the 60-use cap. Exits non-zero
+until the required pieces exist. It never writes to ClickUp.
 
-```
-  [ok]  active    -> 'לקוח פעיל'
-  [!!]  phone              -> MISSING. Name it one of: ['phone', 'mobile', 'טלפון']
-```
+## Step 5 — webhooks
 
-## Step 6 — migrate the existing clients (optional)
+| Event | Route | Fires |
+|---|---|---|
+| Task created in `לקוחות` | `POST /crm/new-lead` | Save the phone to Google Contacts |
+| `סטטוס משני` → `פגישה ראשונית` | `POST /crm/status` | Send the questionnaire |
+| `סטטוס משני` → `חתם` | `POST /crm/status` | Onboarding |
+| Task created in `משימות` | `POST /clickup/task` | Hand the task to Claude Code |
 
-If there is a Taskey export:
+Point the ClickUp→Claude Code webhook at **`משימות` only**. Aimed at `לקוחות` it
+would fire on every client status change.
+
+The webhook server has **no authentication of its own** — put it behind a proxy
+with auth first. Anyone who can reach `/crm/status` can trigger onboarding for any
+client id.
+
+## Step 6 — migrate existing clients (optional)
 
 ```bash
-# Always look at the plan first — no writes, no credentials needed:
+# Look at the plan first — no writes, no credentials needed:
 python -m src.tools.migrate_taskey_to_clickup --input taskey_export.csv --dry-run
 
 # Then a few rows as a live smoke test:
 python -m src.tools.migrate_taskey_to_clickup --input taskey_export.csv \
-    --list-id 901819505305 --limit 3
+    --list-id <לקוחות id> --limit 3
 ```
 
-The migration matches CSV columns by the same names as above, so a `מחיר חודשי`
-column lands in the `מחיר חודשי` field.
+It matches CSV columns by the same names as above, and writes every column into the
+task description as well — so nothing is lost even if a field doesn't exist yet.
 
-## Step 7 — webhooks
+> On Free Forever, migrating 6 clients with 10 fields each **is** the 60-use cap.
+> Upgrade before migrating, or migrate with `--limit` and accept that fields stop
+> saving partway through.
 
-So ClickUp triggers the automations on status change, register a webhook pointing
-at the public webhook server:
+---
 
-| Event | Route | Fires |
-|---|---|---|
-| Task created | `POST /crm/new-lead` | Save the phone to Google Contacts |
-| Status changed → `פגישה ראשונית` | `POST /crm/status` | Send the questionnaire |
-| Status changed → `חתם` | `POST /crm/status` | Onboarding |
+## Plan B — staying on Free Forever
 
-The webhook server has **no authentication of its own** — put it behind a proxy
-with auth first. Anyone who can reach `/crm/status` can trigger onboarding for any
-client.
+Only if Dror won't upgrade. Both substitutions dodge the custom-field cap, because
+**statuses, tags, comments and descriptions are all unlimited and free**.
+
+**Client data → the task description.** A structured block the automations parse
+instead of custom fields. The migration tool already writes this block, so the data
+survives either way.
+
+- Costs: no filtering or sorting by price/status in ClickUp's UI, no dropdown for
+  `סטטוס משני` (it becomes a **tag**, which is free and unlimited), and a typo in
+  the description is a parse failure rather than an impossible value.
+
+**Client on a work task → a tag** (`לקוח:אלפא`) instead of the Relationship field.
+
+- Costs: no clickable link from client to work, no backlink on the client task, and
+  a renamed client silently orphans its tasks.
+
+**Keep the two required fields only** — `טלפון` and `מחיר חודשי` — at 2 uses per
+client, giving ~30 clients before the cap. Everything else goes in the description.
+
+Plan B is real, and it works. It is meaningfully worse to use day to day, and it
+trades a $-per-month line item for permanent fragility. Recommend the upgrade.
