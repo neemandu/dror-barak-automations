@@ -133,6 +133,30 @@ recommendations.
 > Decide whose card this sits on. If it's Dror's, he creates the key; if it's ours,
 > the usage is billed to us and rebilled.
 
+## 7a. The signing domain — sign.drorbrk.co.il
+
+Two DNS records at **Wix** (the domain's DNS is hosted there: ns14/ns15.wixdns.net).
+Wix Dashboard → Domains → drorbrk.co.il → Advanced → Edit DNS → CNAME → Add.
+
+This is not cosmetic. A client asked to open
+`e3670c4ju8.execute-api.eu-central-1.amazonaws.com`, sign a contract and type in
+their ח.פ is being asked to do exactly what everyone is told never to do — and
+spam filters take the same view.
+
+  1. **Ownership** — proves the domain is Dror's, so AWS will issue a certificate.
+     `python -m src.tools.check_domain` prints the exact record.
+  2. **Routing** — points the subdomain at API Gateway.
+     `python -m src.tools.setup_domain --apply` prints it, once the cert is issued.
+
+Check progress any time (read-only):
+
+```bash
+python -m src.tools.check_domain
+```
+
+Then set `SIGN_BASE_URL=https://sign.drorbrk.co.il` and redeploy. Links become
+`https://sign.drorbrk.co.il/sign?t=xxxxxxxx` — 42 characters, and recognisably Dror.
+
 ## 7. Signing page — replaces Fillout
 
 We host the page that clients open to sign their quote, so there is no Fillout
