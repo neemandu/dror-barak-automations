@@ -67,7 +67,6 @@ _AUTOMATION_RULES: dict[str, str] = {
     "send_questionnaire": "whatsapp",
     "send_quote": "quotes",
     "onboarding": "drive",
-    "monthly_payment_requests": "morning",
     "campaign_summary": "meta",
     "social_prep": "ai",
     "strategy_bot": "ai",

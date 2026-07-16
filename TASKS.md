@@ -48,7 +48,6 @@ is unaffected — these are the adapters underneath them.
 - [x] **T3 — Social-media prep report (AI).** `src/automations/social_prep.py`.
 - [x] **T4 — Send quote + capture signature.** `src/automations/send_quote.py`.
 - [x] **T5 — Onboarding (central).** `src/automations/onboarding.py`.
-- [x] **T6 — Monthly payment requests.** `src/automations/monthly_payment_requests.py`.
 - [x] **T7 — Monthly campaign summary.** `src/automations/campaign_summary.py`.
 - [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`.
 - [x] **T9 — ClickUp → Claude Code (bonus).** `src/automations/clickup_to_claude.py`.
@@ -89,13 +88,11 @@ Previously open, now settled:
    approval? Nothing can send until they exist and are approved.
 3. **The per-client WhatsApp channel.** Impossible on the official API. What
    replaces it in onboarding?
-4. **ClickUp custom fields.** The field ids for status, price, Drive path, contract
-   link and Morning status — needed by the CRM client and the migration tool.
+4. **ClickUp custom fields.** The field ids for status, price, Drive path and
+   contract link — needed by the CRM client and the migration tool.
 5. **Template inventory.** Which Drive template files exist (contract, quote,
    strategy, campaign report) and their ids. Is the set fixed or per-client?
 6. **Anthropic billing.** Whose account and card.
-7. **Morning payment requests.** Confirm the דרישת תשלום payload and the
-   client-creation fields.
-8. **NotebookLM.** The "last 5 videos" prep runs via the Anthropic API today.
+7. **NotebookLM.** The "last 5 videos" prep runs via the Anthropic API today.
    NotebookLM has no public API — confirm it stays out.
 9. **Make.** Orchestrator, or dropped? The build stands alone on cron + webhooks.

@@ -30,7 +30,11 @@ Sheets). Dror asked for that to be left alone. Don't automate it.
 | System | Role | Integration notes |
 |---|---|---|
 | **ClickUp** | **The CRM.** Manages the whole lead→client lifecycle and triggers automations on status change | REST API + webhooks. One task per client. Replaced Taskey — see "History" below. |
-| **Morning** (חשבונית ירוקה) | Invoicing & monthly payment requests | REST API, key + secret. Create client, create payment request (דרישת תשלום). |
+<!-- Morning (חשבונית ירוקה) billing was removed: Dror handles invoicing himself.
+     The monthly-billing automation and the Morning API client are gone. The
+     מזהה מורנינג / סטטוס Morning columns may still exist on his ClickUp list;
+     they are simply ignored. -->
+
 | **ManyChat** | WhatsApp to clients, over the **official Meta Business API** | REST API. Read the 24-hour-window constraint below before touching any messaging code. |
 | **Google Workspace** | Contacts (lead phones), Drive (client folders, templates, signed PDFs), Forms (questionnaire), Sheets (task board — read-only) | Service account with domain-wide delegation. |
 | **Meta Ads** | Campaign numbers for the monthly report | Graph API, system-user token with `ads_read`. |
@@ -47,7 +51,7 @@ or read from another client's folder.
 - **Secondary status:** `initial_meeting` / `questionnaire_sent` / `quote_sent` /
   `signed` / `in_work`
 - **Custom fields:** Drive folder path, signed-contract link, monthly price,
-  service type, recordings path, Morning status.
+  service type, recordings path.
 
 ## Constraints that are easy to get wrong
 
@@ -66,12 +70,11 @@ Consequences you must respect:
   otherwise need its own approved template and be billed every day.
 
 **The dashboard is read-only.** Nothing is triggered from it, deliberately: a
-misclick that fires the monthly payment run would send real invoices and payment
-links to every active client, and those cannot be unsent. Adding triggers is a
+misclick that fires onboarding would create a duplicate Drive folder. Adding triggers is a
 decision for Dror, not a refactor to slip in.
 
-**Money-touching automations are CLI-only** for the same reason:
-`monthly_payment_requests` and `send_quote`.
+**`send_quote` is CLI/button-only, never automatic** — sending a client a
+contract is Dror's decision, not something a status change should trigger.
 
 ## Automations
 
@@ -85,8 +88,8 @@ logging, and a `--dry-run` mode.
 | 2 | **Send questionnaire** | Webhook (ClickUp: `initial_meeting`) | WhatsApp the Google Forms questionnaire link. |
 | 3 | **Social-media prep report** | Webhook (Forms submit) / Manual | AI reads the social profiles from the questionnaire and writes a per-network prep report for Dror. Reused by #8. |
 | 4 | **Send quote + capture signature** | Manual + our signing page | Send a quote with a signature link; on signing, store the PDF in Drive and write the link back to ClickUp. |
-| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder, copy templates, create the client in Morning, write the contract link + Drive path back to ClickUp. |
-| 6 | **Monthly payment requests** | Scheduled (1st of month) | Active clients → Morning payment request → WhatsApp the payment link. |
+| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder, copy templates, open a WhatsApp channel, advance the status. |
+| ~~6~~ | ~~Monthly payment requests~~ | — | **Removed.** Dror invoices clients himself; the system does not touch Morning. |
 | 7 | **Monthly campaign summary** | Scheduled (month end) / Manual | Pull the month's Meta Ads results, fill Dror's report template, add AI recommendations, send to Dror to approve → forward to client + save to Drive. |
 | 8 | **Strategy bot** | Manual | From the questionnaire answers: audience + competitors + digital presence → full strategy → Drive → notify Dror. Reuses #3. |
 | 9 | **ClickUp → Claude Code** (bonus) | Webhook (ClickUp task) | Turns a ClickUp task into a Claude Code work brief. |

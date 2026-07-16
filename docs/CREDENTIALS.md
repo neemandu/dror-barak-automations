@@ -1,5 +1,7 @@
 # Credentials — what we need, how to get it, where it goes
 
+> **Morning (חשבונית ירוקה) is out of scope.** Dror invoices clients himself; the system does not create documents or payment requests. Any Morning references left in older docs are historical.
+
 Every value below goes in **`.env`** in the project root (copy `.env.example` to
 `.env` first). `.env` is gitignored and never committed — the public repo only
 ever contains `.env.example`, which has the key names and no values.
@@ -13,7 +15,6 @@ up, no action needed from him.
 | # | System | Value(s) | Who |
 |---|---|---|---|
 | 1 | ClickUp (CRM) | `CLICKUP_API_TOKEN`, `CLICKUP_LIST_ID`, `CLICKUP_WEBHOOK_SECRET` | Dror / us |
-| 2 | Morning | `MORNING_API_KEY`, `MORNING_API_SECRET` | Dror |
 | 3 | ManyChat (WhatsApp) | `MANYCHAT_API_KEY`, flow ids, `MANYCHAT_CONSENT_PHRASE` | Dror + us |
 | 4 | Google Workspace | `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_IMPERSONATE_SUBJECT`, Drive ids, `QUESTIONNAIRE_URL` | Us + one share from Dror |
 | 5 | Meta Ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID` | Dror |
@@ -47,14 +48,6 @@ register the webhook. Used to prove inbound webhooks are really from ClickUp.
 >
 > Verify the setup any time with `python -m src.tools.check_clickup_crm`.
 
-## 2. Morning (חשבונית ירוקה) — invoices and payment requests
-
-1. Log in to `app.greeninvoice.co.il`
-2. **הגדרות → כללי → ממשק למתכנתים (API)**
-3. **יצירת מפתח / Generate**
-4. Copy both values. ⚠️ The **Secret is displayed once only** — save it immediately.
-
-→ `MORNING_API_KEY`, `MORNING_API_SECRET`
 
 ## 3. ManyChat — WhatsApp via the official Meta Business API
 

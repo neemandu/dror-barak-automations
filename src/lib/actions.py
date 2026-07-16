@@ -75,12 +75,9 @@ ACTIONS: dict[str, Action] = {
     ),
 }
 
-# Deliberately NOT buttons:
-#   onboarding  — fires on `חתם`, and is guarded because it creates a Drive folder
-#                 and a Morning client that nobody wants duplicated.
-#   monthly_payment_requests — bills every active client at once. A button for that
-#                 sits one mis-tap away from invoicing Dror's whole client list,
-#                 and the WhatsApp messages cannot be unsent. Stays CLI-only.
+# Deliberately NOT a button:
+#   onboarding — fires on `חתם`, and is guarded because it creates a Drive folder
+#                nobody wants duplicated. A manual re-run risks a second one.
 
 
 def _send_quote(client_id: str, dry_run: bool) -> dict[str, Any]:

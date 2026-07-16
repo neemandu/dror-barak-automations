@@ -26,12 +26,12 @@ def _reset_state(monkeypatch):
 ENTRIES = [
     {"ts": "2026-07-15T09:00:00Z", "automation": "onboarding", "action": "drive_folder_created",
      "status": "ok", "client_id": "אלפא", "detail": "https://drive.google.com/drive/folders/x1"},
-    {"ts": "2026-07-15T10:00:00Z", "automation": "onboarding", "action": "morning_client_created",
-     "status": "ok", "client_id": "אלפא", "detail": "לקוח 44"},
+    {"ts": "2026-07-15T10:00:00Z", "automation": "onboarding", "action": "whatsapp_channel_opened",
+     "status": "ok", "client_id": "אלפא", "detail": "group-mock@g.us"},
     {"ts": "2026-07-15T11:00:00Z", "automation": "campaign_summary",
      "action": "campaign_report_built", "status": "error", "client_id": "בטא",
      "detail": "token expired"},
-    {"ts": "2026-07-15T12:00:00Z", "automation": "monthly_payment_requests",
+    {"ts": "2026-07-15T12:00:00Z", "automation": "send_quote",
      "action": "no_price", "status": "skipped", "client_id": "גמא", "detail": "no price"},
 ]
 
@@ -42,13 +42,13 @@ ENTRIES = [
 def test_action_beats_automation_so_onboarding_splits_across_subjects():
     # Both entries come from `onboarding`, but they belong to different subjects.
     assert subjects.subject_for(ENTRIES[0]).key == "drive"
-    assert subjects.subject_for(ENTRIES[1]).key == "morning"
+    assert subjects.subject_for(ENTRIES[1]).key == "whatsapp"
 
 
 def test_grouping_omits_empty_subjects_and_keeps_declared_order():
     grouped = subjects.group_by_subject(ENTRIES)
     keys = [s.key for s, _ in grouped]
-    assert keys == ["morning", "meta", "drive"]  # declaration order, no empties
+    assert keys == ["quotes", "meta", "whatsapp", "drive"]  # declaration order, no empties
 
 
 def test_links_are_found_in_free_text_detail():
@@ -129,7 +129,7 @@ def test_page_renders_subjects_links_and_failures():
     page = dashboard._dashboard_page(ENTRIES, {}).decode("utf-8")
     assert "לוח בקרה" in page
     assert "דורש טיפול" in page          # failures pinned to the top
-    assert "חשבוניות ותשלומים" in page   # subject heading
+    assert "קמפיינים ודוחות" in page     # subject heading
     assert 'href="https://drive.google.com/drive/folders/x1"' in page
     assert 'dir="rtl"' in page
 
@@ -151,8 +151,7 @@ def test_empty_state():
 
 
 def test_filters_narrow_the_list():
-    # Two: morning_client_created by action, and no_price via its automation.
-    assert len(dashboard._filter(ENTRIES, {"subject": "morning"})) == 2
+    assert len(dashboard._filter(ENTRIES, {"subject": "whatsapp"})) == 1
     assert len(dashboard._filter(ENTRIES, {"client": "אלפא"})) == 2
     assert len(dashboard._filter(ENTRIES, {"q": "token expired"})) == 1
     assert len(dashboard._filter(ENTRIES, {"client": "nobody"})) == 0
@@ -185,7 +184,7 @@ def test_daily_email_html_groups_by_subject_and_flags_errors():
 
     html = daily_email.build_html(ENTRIES, "2026-07-15", "https://dash.example/")
     assert "דורש טיפול" in html
-    assert "חשבוניות ותשלומים" in html
+    assert "קמפיינים ודוחות" in html
     assert 'dir="rtl"' in html
     assert "https://dash.example/" in html
 

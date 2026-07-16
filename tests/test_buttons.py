@@ -96,10 +96,8 @@ def test_unknown_action_is_rejected(ran):
     assert ran == []
 
 
-def test_payment_run_is_not_reachable_as_a_button():
-    # Billing every active client is one mis-tap from disaster and the WhatsApp
-    # messages cannot be unsent. It stays CLI-only, by design.
-    assert "monthly_payment_requests" not in actions.ACTIONS
+def test_onboarding_is_not_reachable_as_a_button():
+    # It fires on `חתם` and creates a Drive folder; a manual re-run risks a second.
     assert "onboarding" not in actions.ACTIONS
 
 

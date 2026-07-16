@@ -131,13 +131,12 @@ def test_a_single_day_is_one_query():
 def test_the_dashboard_and_the_daily_email_read_the_same_entries(read_log):
     from src.lib import subjects
 
-    run_log.record("monthly_payment_requests", "proforma_created", client_id="c1",
-                   detail="4900₪")
+    run_log.record("send_quote", "quote_sent", client_id="c1", detail="https://sign/x")
     run_log.record("campaign_summary", "campaign_report_built", "error", client_id="c2",
                    detail="token expired")
 
     entries = run_log.read_all()
     assert subjects.counts(entries) == {"total": 2, "ok": 1, "error": 1,
                                         "skipped": 0, "dry_run": 0}
-    assert [s.key for s, _ in subjects.group_by_subject(entries)] == ["morning", "meta"]
+    assert [s.key for s, _ in subjects.group_by_subject(entries)] == ["quotes", "meta"]
     assert len(subjects.failures(entries)) == 1

@@ -1,7 +1,7 @@
 # Dror Barak — Sales & Service Automations
 
 Automations that connect Dror Barak's workflow **from lead to active client** across
-ClickUp (CRM), Morning (billing), ManyChat (WhatsApp via the official Meta API),
+ClickUp (CRM), ManyChat (WhatsApp via the official Meta API),
 Google Workspace, Meta Ads, and Claude/AI — plus a read-only dashboard and a daily
 email report so Dror can see everything that ran.
 
@@ -33,7 +33,6 @@ run live.
 | T3 | `social_prep` | Webhook: form submit / manual | `python -m src.automations.social_prep --client-id 42 --dry-run` |
 | T4 | `send_quote` | Manual send + signing webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
 | T5 | `onboarding` | Webhook: status → signed | `python -m src.automations.onboarding --client-id 42 --dry-run` |
-| T6 | `monthly_payment_requests` | Scheduled: 1st of month | `python -m src.automations.monthly_payment_requests --dry-run` |
 | T7 | `campaign_summary` | Scheduled: month end / manual | `python -m src.automations.campaign_summary --client-id 42 --dry-run` |
 | T8 | `strategy_bot` | Manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
@@ -46,7 +45,7 @@ the 24-hour-window note in [`CLAUDE.md`](CLAUDE.md).
 ## Dashboard
 
 A read-only page over the run-log, grouped into subjects (invoices, leads, campaign
-reports), with links out to Drive / ClickUp / Morning. Failures are pinned to the
+reports), with links out to Drive / ClickUp. Failures are pinned to the
 top. Nothing can be triggered from it.
 
 ```bash
@@ -65,8 +64,6 @@ HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 **Scheduled** — point cron / Windows Task Scheduler at the module. Examples:
 
 ```cron
-# Monthly payment requests — 1st of month, 09:00
-0 9 1 * *  cd /path/to/dror_barak && python -m src.automations.monthly_payment_requests
 # Daily report to Dror — every day 19:00
 0 19 * * * cd /path/to/dror_barak && python -m src.automations.daily_email
 # Campaign summaries — last-day handling done in-script; run 28th 08:00

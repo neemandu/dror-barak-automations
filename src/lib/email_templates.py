@@ -58,20 +58,6 @@ TEMPLATES: dict[str, EmailTemplate] = {
             "האונבורדינג יוצא לדרך אוטומטית."
         ),
     ),
-    # Sent on the 1st, once the חשבון עסקה exists. "מצ״ב" is a promise: the PDF is
-    # attached, so this template must never be sent without it.
-    "monthly_proforma": EmailTemplate(
-        subject="חשבון עסקה לחודש {month} — דרור ברק",
-        body=(
-            'היי {client_name}\n'
-            "\n"
-            'מצ"ב חשבון עסקה להסדרת התשלום על החודש הקרוב,\n'
-            "אודה לטיפולך :)\n"
-            "\n"
-            "שבוע מעולה,\n"
-            "דרור ברק :)"
-        ),
-    ),
 }
 
 
