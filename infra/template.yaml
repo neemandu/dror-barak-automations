@@ -93,6 +93,27 @@ Parameters:
     Type: String
   ProviderBankAccount:
     Type: String
+  DrorEmail:
+    Type: String
+    Default: ""
+    Description: Where signature notifications and the daily report go.
+  SmtpHost:
+    Type: String
+    Default: ""
+  SmtpPort:
+    Type: String
+    Default: "587"
+  SmtpUser:
+    Type: String
+    Default: ""
+  SmtpPassword:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      For Gmail/Workspace this is an App Password, not the account password.
+      Empty until Dror provides it — email delivery falls back to posting the link
+      on the ClickUp task, so the signing flow works either way.
   AnthropicApiKey:
     Type: String
     NoEcho: true
@@ -130,6 +151,11 @@ Globals:
         CLICKUP_TEAM_ID: !Ref ClickUpTeamId
         WEBHOOK_DRY_RUN: !Ref WebhookDryRun
         ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+        DROR_EMAIL: !Ref DrorEmail
+        SMTP_HOST: !Ref SmtpHost
+        SMTP_PORT: !Ref SmtpPort
+        SMTP_USER: !Ref SmtpUser
+        SMTP_PASSWORD: !Ref SmtpPassword
         SIGN_LINK_SECRET: !Ref SignLinkSecret
         SIGN_BASE_URL: !Ref SignBaseUrl
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId

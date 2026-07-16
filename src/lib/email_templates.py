@@ -41,6 +41,23 @@ TEMPLATES: dict[str, EmailTemplate] = {
         ),
         cta="לחתימה על ההסכם",
     ),
+    # Sent to Dror the moment a client signs — the most important event in the
+    # funnel, which he otherwise learns only from a task comment or the next day's
+    # digest. The signed PDF is attached.
+    "signed_notification": EmailTemplate(
+        subject="✅ {client_name} חתם/ה על ההסכם",
+        body=(
+            "היי דרור,\n"
+            "\n"
+            "{client_name} חתם/ה על ההסכם זה עתה. 🎉\n"
+            "ההסכם החתום מצורף, ונשמר גם בתיקיית הלקוח בדרייב.\n"
+            "\n"
+            "נחתם בתאריך: {signed_at}\n"
+            "טביעת אצבע של המסמך: {fingerprint}\n"
+            "\n"
+            "האונבורדינג יוצא לדרך אוטומטית."
+        ),
+    ),
     # Sent on the 1st, once the חשבון עסקה exists. "מצ״ב" is a promise: the PDF is
     # attached, so this template must never be sent without it.
     "monthly_proforma": EmailTemplate(

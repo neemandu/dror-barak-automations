@@ -362,6 +362,34 @@ def _finalise(
         f"טביעת אצבע: {record['contract_sha256'][:16]}…\n"
         f"IP: {record['ip'] or 'לא נרשמה'}",
     )
+    _notify_dror(client, pdf_bytes, record)
     log.info("signed", extra={"client_id": client_id, "link": link,
                              "sha256": record["contract_sha256"]})
     return {"link": link, "audit": record, "attached": bool(attached)}
+
+
+def _notify_dror(client: dict[str, Any], pdf_bytes: bytes, record: dict[str, Any]) -> None:
+    """Email Dror that a client just signed. Never fail the signing over it.
+
+    A signed contract is the moment Dror most wants to know about, and a task
+    comment he has to go looking for is not the same as it landing in his inbox.
+    But the contract is already stored and the status already set — a notification
+    that fails must not undo any of that.
+    """
+    to = config.get("DROR_EMAIL")
+    if not to:
+        log.info("no_dror_email", extra={"note": "DROR_EMAIL not set; skipping notify"})
+        return
+    try:
+        from .lib import emails
+
+        emails.send_template(
+            "signed_notification", to,
+            client_name=client.get("name") or client.get("id"),
+            signed_at=record["signed_at"],
+            fingerprint=record["contract_sha256"][:16] + "…",
+            attachments=[emails.Attachment(
+                filename="signed-contract.pdf", content=pdf_bytes)],
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("dror_notify_failed", extra={"error": str(exc)})

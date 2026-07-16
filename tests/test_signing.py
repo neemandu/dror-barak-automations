@@ -293,3 +293,46 @@ def test_the_page_opens_from_a_short_code(monkeypatch):
     assert "הסכם התקשרות" in page
     # The form must carry the same code back, not a regenerated one.
     assert f'action="?t={code}"' in page
+
+
+# ---------------------------------------------------- Dror is told on signature
+
+
+def test_dror_is_emailed_when_a_client_signs(monkeypatch):
+    from src import sign_page
+    from src.lib import emails
+
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+    sent = {}
+    monkeypatch.setattr(emails, "send_template",
+                        lambda name, to, **kw: sent.update(name=name, to=to, **kw))
+    sign_page._notify_dror(
+        {"id": "c1", "name": "מכללת אלפא"}, b"%PDF-mock",
+        signing.audit_record("c1", "terms"),
+    )
+    assert sent["name"] == "signed_notification"
+    assert sent["to"] == "dror@example.com"
+    assert sent["attachments"], "the signed PDF must be attached"
+
+
+def test_a_failed_notification_does_not_undo_the_signature(monkeypatch):
+    from src import sign_page
+    from src.lib import emails
+
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+
+    def boom(*a, **k):
+        raise emails.EmailError("SMTP down")
+
+    monkeypatch.setattr(emails, "send_template", boom)
+    # Must not raise: the contract is already stored and the status already set.
+    sign_page._notify_dror({"id": "c1", "name": "x"}, b"pdf",
+                           signing.audit_record("c1", "terms"))
+
+
+def test_no_dror_email_configured_is_not_an_error(monkeypatch):
+    from src import sign_page
+
+    monkeypatch.delenv("DROR_EMAIL", raising=False)
+    sign_page._notify_dror({"id": "c1", "name": "x"}, b"pdf",
+                           signing.audit_record("c1", "terms"))
