@@ -14,6 +14,11 @@ import pytest
 @pytest.fixture(autouse=True)
 def isolated_run_log(tmp_path, monkeypatch):
     monkeypatch.setenv("RUN_LOG_PATH", str(tmp_path / "run_log.jsonl"))
+    # RUN_LOG_TABLE wins over RUN_LOG_PATH, so a developer's .env pointing at the
+    # real table would send every test's log line to DynamoDB — slow, billable,
+    # and it pollutes the dashboard Dror is looking at.
+    monkeypatch.delenv("RUN_LOG_TABLE", raising=False)
+    monkeypatch.delenv("IDEMPOTENCY_TABLE", raising=False)
     # Keep tests hermetic: no recipient side-channels unless a test sets them.
     for key in ("DROR_WHATSAPP", "DRIVE_DEFAULT_PARENT_ID", "DRIVE_TEMPLATE_IDS"):
         monkeypatch.delenv(key, raising=False)

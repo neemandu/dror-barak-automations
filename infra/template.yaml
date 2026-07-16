@@ -114,6 +114,7 @@ Globals:
     Environment:
       Variables:
         IDEMPOTENCY_TABLE: !Ref IdempotencyTable
+        RUN_LOG_TABLE: !Ref RunLogTable
         CLICKUP_WEBHOOK_SECRET: !Ref ClickUpWebhookSecret
         AUTOMATION_TOKEN: !Ref AutomationToken
         CLICKUP_API_TOKEN: !Ref ClickUpApiToken
@@ -137,10 +138,10 @@ Globals:
         PROVIDER_BANK: !Ref ProviderBank
         PROVIDER_BANK_BRANCH: !Ref ProviderBankBranch
         PROVIDER_BANK_ACCOUNT: !Ref ProviderBankAccount
-        # NOTE: /tmp is per-instance and vanishes. The run-log is the only source
-        # for the dashboard and the daily email, so both will be empty until this
-        # moves to DynamoDB. Tracked in TASKS.md.
-        RUN_LOG_PATH: /tmp/run_log.jsonl
+        # RUN_LOG_PATH is deliberately unset: with RUN_LOG_TABLE present the
+        # DynamoDB backend is used. A file on Lambda's per-instance disk would be
+        # thrown away seconds after it was written, and the run-log is the only
+        # source for the dashboard and the daily email.
 
 Resources:
   WebhookApi:
@@ -163,6 +164,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RunLogTable
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref GoogleSecretArn
       Events:
@@ -195,6 +198,32 @@ Resources:
             ApiId: !Ref WebhookApi
             Path: /sign
             Method: POST
+
+  RunLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "dror-runlog-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: day
+          AttributeType: S
+        - AttributeName: ts_id
+          AttributeType: S
+      KeySchema:
+        # Partitioned by day: the dashboard asks for "the last N days", which is
+        # then N small queries rather than a scan. One partition for everything
+        # would be simpler and would make every read hot on a single key.
+        - AttributeName: day
+          KeyType: HASH
+        - AttributeName: ts_id
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        # This is the only copy of what the automations did. It is cheap at this
+        # volume, and losing it means losing the dashboard's whole history.
+        PointInTimeRecoveryEnabled: true
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
@@ -229,3 +258,6 @@ Outputs:
     Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/action"
   IdempotencyTableName:
     Value: !Ref IdempotencyTable
+  RunLogTableName:
+    Description: Feeds the dashboard and the daily email.
+    Value: !Ref RunLogTable
