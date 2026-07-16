@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src import webhook_server
-from src.lib.clients.crm import SUB_INITIAL_MEETING, SUB_SIGNED
+from src.lib.clients.crm import SUB_SIGNED
 
 
 @pytest.fixture(autouse=True)
@@ -16,13 +16,6 @@ def _dry(monkeypatch):
 def test_new_lead_route():
     result = webhook_server._dispatch("/crm/new-lead", {"client_id": "42"})
     assert result["contact"]["resourceName"] == "people/mock"
-
-
-def test_status_route_initial_meeting():
-    result = webhook_server._dispatch(
-        "/crm/status", {"client_id": "42", "sub_status": SUB_INITIAL_MEETING}
-    )
-    assert result["message"]["idMessage"]
 
 
 def test_status_route_signed_triggers_onboarding():

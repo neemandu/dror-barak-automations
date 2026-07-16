@@ -27,7 +27,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable
 
 from .lib import config
-from .lib.clients.crm import SUB_INITIAL_MEETING, SUB_SIGNED
+from .lib.clients.crm import SUB_SIGNED
 
 DRY_RUN = False
 
@@ -38,7 +38,6 @@ def _dispatch(path: str, body: dict[str, Any]) -> dict[str, Any]:
         clickup_to_claude,
         lead_to_contacts,
         onboarding,
-        send_questionnaire,
         social_prep,
     )
 
@@ -46,8 +45,6 @@ def _dispatch(path: str, body: dict[str, Any]) -> dict[str, Any]:
         return lead_to_contacts.run(body["client_id"], dry_run=DRY_RUN)
     if path == "/crm/status":
         sub = body.get("sub_status")
-        if sub == SUB_INITIAL_MEETING:
-            return send_questionnaire.run(body["client_id"], dry_run=DRY_RUN)
         if sub == SUB_SIGNED:
             return onboarding.run(body["client_id"], dry_run=DRY_RUN)
         return {"ignored": f"no automation for sub_status={sub}"}

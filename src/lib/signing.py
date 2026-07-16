@@ -285,6 +285,15 @@ def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS, short: bool = Tr
     return f"{base.rstrip('/')}/sign?t={token}"
 
 
+def questionnaire_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS) -> str:
+    """The link to the client's strategy questionnaire. Same token scheme as
+    signing — it carries the client id — pointed at the questionnaire page."""
+    base = config.get("SIGN_BASE_URL") or config.get("AWS_API_BASE_URL")
+    if not base:
+        raise SigningError("SIGN_BASE_URL is not set — nowhere to host the form.")
+    return f"{base.rstrip('/')}/questionnaire?t={make_short_code(client_id, ttl=ttl)}"
+
+
 _DATA_URL = re.compile(r"^data:image/png;base64,([A-Za-z0-9+/=]+)$")
 
 

@@ -29,7 +29,6 @@ run live.
 | Task | Module | Trigger | Manual / dry-run command |
 |---|---|---|---|
 | T1 | `lead_to_contacts` | Webhook: new ClickUp lead | `python -m src.automations.lead_to_contacts --client-id 42 --dry-run` |
-| T2 | `send_questionnaire` | Webhook: status → initial meeting | `python -m src.automations.send_questionnaire --client-id 42 --dry-run` |
 | T3 | `social_prep` | Webhook: form submit / manual | `python -m src.automations.social_prep --client-id 42 --dry-run` |
 | T4 | `send_quote` | Manual send + signing webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
 | T5 | `onboarding` | Webhook: status → signed | `python -m src.automations.onboarding --client-id 42 --dry-run` |
@@ -81,8 +80,6 @@ python -m src.webhook_server --dry-run  # dispatch automations in dry-run
 |---|---|---|
 | ClickUp: new lead | `POST /crm/new-lead` | T1 |
 | ClickUp: status change | `POST /crm/status` | T2 (initial meeting) / T5 (signed) |
-| Google Forms: submit | `POST /forms/submit` | T3 |
-| Signing: signed | `POST /fillout/signed` | T4 (capture) |
 | ClickUp: task | `POST /clickup/task` | T9 |
 
 **The receiver has no authentication of its own.** Put it behind a reverse proxy

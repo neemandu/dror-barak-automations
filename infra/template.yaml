@@ -232,6 +232,19 @@ Resources:
             ApiId: !Ref WebhookApi
             Path: /sign
             Method: POST
+        # The strategy questionnaire — our own form, same token scheme as signing.
+        QuestionnaireGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /questionnaire
+            Method: GET
+        QuestionnairePost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /questionnaire
+            Method: POST
 
   RunLogTable:
     Type: AWS::DynamoDB::Table

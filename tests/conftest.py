@@ -38,6 +38,11 @@ def isolated_run_log(tmp_path, monkeypatch):
 
     google_auth.reset_cache()
 
+    # Signing/questionnaire links: fake but present, so automations that build a
+    # link in dry-run (onboarding emails the questionnaire) don't fail on absence.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret-for-tests")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+
     # The contract refuses to render without the provider's details. Give the
     # tests obviously-fake ones rather than let them read the real .env: a suite
     # that passes only because a developer's .env happens to be filled in is a

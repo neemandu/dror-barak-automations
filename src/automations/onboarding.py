@@ -6,9 +6,8 @@ the manual intake:
 
   1. Create the client's Drive folder (under the configured parent).
   2. Copy the template files into it.
-  3. Open a WhatsApp channel/group with the client and send a welcome message.
+  3. Email the client the strategy questionnaire (our own form).
   4. Advance the secondary status to ``in_work``.
-  5. Ping Dror (WhatsApp) to confirm which templates to copy.
 
 Steps are independent and each is logged, so a failure in one doesn't lose the
 others — the run-log shows exactly what completed.
@@ -21,10 +20,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..lib import client_folder, config, whatsapp_templates
+from ..lib import client_folder, config
 from ..lib.clients.crm import SUB_IN_WORK, CrmClient
 from ..lib.clients.google import GoogleClient
-from ..lib.clients.green_api import GreenApiClient
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "onboarding"
@@ -40,7 +38,6 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     auto = Automation(NAME, dry_run=dry_run)
     crm = CrmClient(dry_run=dry_run)
     google = GoogleClient(dry_run=dry_run)
-    wa = GreenApiClient(dry_run=dry_run)
 
     client = crm.get_client(client_id)
     name = client.get("name", f"client-{client_id}")
@@ -65,33 +62,45 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     if copied:
         auto.log_action("templates_copied", client_id=client_id, detail=f"{len(copied)} files")
 
-    # 3. WhatsApp channel + welcome
-    group = wa.create_group(f"{name} — דרור ברק", [client["phone"]])
-    wa.send_message(
-        client["phone"],
-        whatsapp_templates.render("onboarding_welcome", first_name=client.get("first_name", "")),
-    )
-    auto.log_action("whatsapp_channel_opened", client_id=client_id, detail=group.get("chatId"))
+    # 3. Email the strategy questionnaire. Its answers become the Google Doc that
+    # seeds the whole strategy and feed the last-5-videos analysis, so getting the
+    # client to fill it is the real point of onboarding.
+    result["questionnaire_sent"] = _send_questionnaire(auto, crm, client, dry_run=dry_run)
 
     # 4. Advance the status. client_folder.ensure already recorded the Drive link
     # (it must, or the next run would create a second folder), so it is not
     # repeated here.
     crm.update_fields(client_id, sub_status=SUB_IN_WORK)
-    crm.append_automation_log(client_id, "Onboarding completed (Drive, WhatsApp)")
-
-    # 5. Prompt Dror to confirm templates
-    dror_phone = config.get("DROR_WHATSAPP")
-    if dror_phone:
-        wa.send_message(
-            dror_phone,
-            whatsapp_templates.render(
-                "onboarding_dror_prompt",
-                client_name=name,
-                drive_url=folder["url"],
-            ),
-        )
     auto.log_action("onboarding_done", client_id=client_id, detail=name)
     return result
+
+
+def _send_questionnaire(auto: Automation, crm: CrmClient, client: dict[str, Any],
+                        *, dry_run: bool) -> bool:
+    """Email the questionnaire link. Best-effort: a delivery failure must not undo
+    the folder and templates already created."""
+    from ..lib import emails, signing
+
+    client_id = str(client["id"])
+    to = str(client.get("email") or "").strip()
+    if not to:
+        auto.log_action("no_email", "skipped", client_id=client_id,
+                        detail="onboarded client has no אימייל for the questionnaire")
+        return False
+    try:
+        url = signing.questionnaire_url(client_id)
+        emails.send_template(
+            "questionnaire", to,
+            client_name=client.get("first_name") or client.get("name") or "",
+            cta_url=url, dry_run=dry_run,
+        )
+        crm.append_automation_log(client_id, f"📋 שאלון האסטרטגיה נשלח ל־{to}")
+        auto.log_action("questionnaire_sent", client_id=client_id, detail=to)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        auto.log_action("questionnaire_send_failed", "error", client_id=client_id,
+                        detail=str(exc))
+        return False
 
 
 def main() -> None:

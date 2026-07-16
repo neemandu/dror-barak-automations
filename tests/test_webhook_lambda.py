@@ -188,16 +188,6 @@ def crm_says(monkeypatch):
     return _set
 
 
-def test_questionnaire_fires_on_initial_meeting(monkeypatch, crm_says):
-    from src.automations import send_questionnaire
-
-    crm_says("initial_meeting")
-    seen = []
-    monkeypatch.setattr(send_questionnaire, "run", lambda cid, dry_run=False: seen.append(cid) or {})
-    lambda_handler.route(json.loads(payload()))
-    assert seen == ["t1"]
-
-
 def test_onboarding_fires_on_signed(monkeypatch, crm_says):
     from src.automations import onboarding
 

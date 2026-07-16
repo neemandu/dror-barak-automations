@@ -27,7 +27,7 @@ import json
 from typing import Any
 
 from .lib import actions, config, idempotency
-from .lib.clients.crm import SUB_INITIAL_MEETING, SUB_SIGNED
+from .lib.clients.crm import SUB_SIGNED
 from .lib.crm_fields import canonical_sub_status
 from .lib.logging_setup import get_logger
 
@@ -89,7 +89,6 @@ def route(payload: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
         clickup_to_claude,
         lead_to_contacts,
         onboarding,
-        send_questionnaire,
     )
 
     event = str(payload.get("event") or "")
@@ -108,8 +107,6 @@ def route(payload: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
 
     if event in ("taskUpdated", "taskStatusUpdated"):
         sub = _sub_status_of(task_id, dry_run)
-        if sub == SUB_INITIAL_MEETING:
-            return send_questionnaire.run(task_id, dry_run=dry_run)
         if sub == SUB_SIGNED:
             # Layer 2: distinct events can mean the same thing. Moving a client
             # חתם -> בעבודה -> חתם is two real events, and layer 1 lets both
@@ -294,6 +291,8 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
     params = event.get("queryStringParameters") or {}
 
     try:
+        if path.endswith("/questionnaire"):
+            return _questionnaire_route(event, raw, params, dry_run)
         if path.endswith("/sign"):
             # A client's browser, not ClickUp: HTML in, HTML out, and the token in
             # the URL is the only credential — the client has no account.
@@ -356,6 +355,34 @@ def _sign_route(
             "אירעה שגיאה בשמירת ההסכם. לא בוצע חיוב ולא נשמרה חתימה — נסה/י שוב, "
             "או פנה/י לדרור."
         ))
+
+
+def _questionnaire_route(
+    event: dict[str, Any], raw: str, params: dict[str, Any], dry_run: bool
+) -> dict[str, Any]:
+    """The client-facing strategy questionnaire."""
+    from urllib.parse import parse_qs
+
+    from . import questionnaire_page
+    from .lib import signing
+
+    method = str((event.get("requestContext") or {}).get("http", {}).get("method")
+                 or event.get("httpMethod") or "GET").upper()
+    token = str(params.get("t") or "")
+    try:
+        if method == "GET":
+            return _html(200, questionnaire_page.handle_get(token, dry_run=dry_run))
+        if method == "POST":
+            return _html(200, questionnaire_page.handle_post(
+                token, parse_qs(raw), dry_run=dry_run))
+        return _html(405, questionnaire_page.error_page("שיטה לא נתמכת"))
+    except signing.SigningError as exc:
+        log.warning("questionnaire_link_rejected", extra={"reason": str(exc)})
+        return _html(403, questionnaire_page.error_page(str(exc)))
+    except Exception as exc:  # noqa: BLE001
+        log.error("questionnaire_failed", extra={"error": str(exc)})
+        return _html(500, questionnaire_page.error_page(
+            "אירעה שגיאה בשמירת השאלון. נסה/י שוב, או פנה/י לדרור."))
 
 
 def _html(status: int, body: str) -> dict[str, Any]:

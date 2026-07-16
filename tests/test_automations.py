@@ -15,7 +15,6 @@ from src.automations import (
     daily_summary,
     lead_to_contacts,
     onboarding,
-    send_questionnaire,
     send_quote,
     social_prep,
     strategy_bot,
@@ -30,12 +29,6 @@ def test_lead_to_contacts(read_log):
     result = lead_to_contacts.run("42", dry_run=True)
     assert result["contact"]["resourceName"] == "people/mock"
     assert "contact_saved" in _actions(read_log)
-
-
-def test_send_questionnaire(read_log):
-    result = send_questionnaire.run("42", dry_run=True)
-    assert result["message"]["idMessage"]
-    assert "questionnaire_sent" in _actions(read_log)
 
 
 def test_social_prep(read_log):
@@ -109,7 +102,7 @@ def test_onboarding(read_log):
     actions = _actions(read_log)
     assert {
         "drive_folder_created",
-        "whatsapp_channel_opened",
+        "questionnaire_sent",
         "onboarding_done",
     } <= actions
 

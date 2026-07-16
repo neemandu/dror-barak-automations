@@ -41,6 +41,19 @@ TEMPLATES: dict[str, EmailTemplate] = {
         ),
         cta="לחתימה על ההסכם",
     ),
+    # Sent after signing: the strategy questionnaire. Its answers become the
+    # Google Doc that seeds the whole strategy, so it matters that they fill it.
+    "questionnaire": EmailTemplate(
+        subject="שאלון קצר לפני שמתחילים — דרור ברק",
+        body=(
+            "היי {client_name}\n"
+            "כדי שנבנה לך אסטרטגיה מדויקת, נשמח שתמלא/י שאלון קצר.\n"
+            "זה לוקח כמה דקות ועוזר לנו להתחיל חזק.\n"
+            "\n"
+            "דרור ברק"
+        ),
+        cta="למילוי השאלון",
+    ),
     # Chases an unsigned contract. Same link as the original — a client who lost
     # the first email can sign from this one. Gentle: it is a nudge, not a demand.
     "sign_reminder": EmailTemplate(
