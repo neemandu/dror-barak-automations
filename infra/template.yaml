@@ -93,6 +93,13 @@ Parameters:
     Type: String
   ProviderBankAccount:
     Type: String
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: >
+      Claude API key for the AI automations (social prep, strategy, campaign
+      recommendations). ~108 chars, well within the 4KB env limit, so unlike the
+      Google key it is a plain env var rather than a secret fetch.
   WebhookDryRun:
     Type: String
     Default: "1"
@@ -122,6 +129,7 @@ Globals:
         CLICKUP_TASKS_LIST_ID: !Ref ClickUpTasksListId
         CLICKUP_TEAM_ID: !Ref ClickUpTeamId
         WEBHOOK_DRY_RUN: !Ref WebhookDryRun
+        ANTHROPIC_API_KEY: !Ref AnthropicApiKey
         SIGN_LINK_SECRET: !Ref SignLinkSecret
         SIGN_BASE_URL: !Ref SignBaseUrl
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
