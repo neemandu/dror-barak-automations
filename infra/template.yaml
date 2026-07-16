@@ -259,6 +259,28 @@ Resources:
         # volume, and losing it means losing the dashboard's whole history.
         PointInTimeRecoveryEnabled: true
 
+  ReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dror-reminders-${Stage}"
+      CodeUri: ../
+      Handler: src.scheduled.reminders_handler
+      Description: Daily — chase unsigned contracts at 2 and 4 days.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RunLogTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref GoogleSecretArn
+      Events:
+        Daily:
+          Type: Schedule
+          Properties:
+            # 07:00 UTC = 09:00-10:00 Israel. A morning nudge, not a 3am one.
+            Schedule: cron(0 7 * * ? *)
+            Description: Send signature reminders
+
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
     Properties:

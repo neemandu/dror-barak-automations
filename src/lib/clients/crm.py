@@ -260,6 +260,20 @@ class CrmClient(BaseClient):
             )
         return active
 
+    def list_by_sub_status(self, sub_status: str) -> list[dict[str, Any]]:
+        """Every client whose *secondary* status is ``sub_status``.
+
+        Used by the reminder job to find "quote sent but not yet signed". Filtered
+        client-side like list_active_clients, since the secondary status is a
+        custom field ClickUp's task query cannot filter on.
+        """
+        if self.dry_run:
+            self._record("list_by_sub_status", sub_status=sub_status)
+            fx = _fixture_client("2001")
+            fx["sub_status"] = sub_status
+            return [fx]
+        return [c for c in self._all_clients() if c.get("sub_status") == sub_status]
+
     # ------------------------------------------------------------------ writes
 
     def update_fields(self, client_id: str, **fields: Any) -> dict[str, Any]:

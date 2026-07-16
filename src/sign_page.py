@@ -362,6 +362,8 @@ def _finalise(
         f"טביעת אצבע: {record['contract_sha256'][:16]}…\n"
         f"IP: {record['ip'] or 'לא נרשמה'}",
     )
+    # No more reminders — they signed.
+    signing.clear_pending(client_id)
     _notify_dror(client, pdf_bytes, record)
     log.info("signed", extra={"client_id": client_id, "link": link,
                              "sha256": record["contract_sha256"]})

@@ -41,6 +41,20 @@ TEMPLATES: dict[str, EmailTemplate] = {
         ),
         cta="לחתימה על ההסכם",
     ),
+    # Chases an unsigned contract. Same link as the original — a client who lost
+    # the first email can sign from this one. Gentle: it is a nudge, not a demand.
+    "sign_reminder": EmailTemplate(
+        subject="תזכורת — ההסכם ממתין לחתימתך",
+        body=(
+            "היי {client_name}\n"
+            "רק תזכורת קטנה — ההסכם והמפרט לצמיחה ברווחים שלך עדיין ממתינים לחתימה.\n"
+            "לתחילת העבודה יש לחתום דיגיטלית, וזה לוקח רק רגע.\n"
+            "כל שאלה — אני כאן.\n"
+            "\n"
+            "דרור ברק"
+        ),
+        cta="לחתימה על ההסכם",
+    ),
     # Sent to Dror the moment a client signs — the most important event in the
     # funnel, which he otherwise learns only from a task comment or the next day's
     # digest. The signed PDF is attached.

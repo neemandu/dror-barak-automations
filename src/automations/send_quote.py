@@ -56,6 +56,10 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     asked_on_page = contract.missing_for(fields)
 
     delivered = _deliver(crm, client, url, dry_run=dry_run)
+    # Start the reminder clock. If the client doesn't sign, sign_reminders chases
+    # them at 2 and 4 days. Signing clears this record.
+    if not dry_run:
+        signing.mark_pending(client_id)
     crm.update_fields(client_id, sub_status=SUB_QUOTE_SENT)
     crm.append_automation_log(
         client_id,

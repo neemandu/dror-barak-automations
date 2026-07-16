@@ -169,6 +169,94 @@ def read_short_code(code: str) -> str:
     return str(item["client_id"])
 
 
+# ------------------------------------------------------- pending signatures
+
+# How long a quote may sit unsigned before we stop chasing it. After the last
+# reminder there is no point holding the record.
+PENDING_TTL_SECONDS = 21 * 24 * 60 * 60
+
+
+def mark_pending(client_id: str) -> None:
+    """Record that a client has an unsigned contract, for the reminder job.
+
+    Stores when the quote went out and how many reminders have been sent. Keyed by
+    client, so re-sending a quote resets the clock rather than stacking records.
+    """
+    from . import idempotency
+
+    _put_pending(f"signpending:{client_id}", {
+        "client_id": client_id,
+        "issued_at": int(time.time()),
+        "reminders_sent": 0,
+    })
+
+
+def get_pending(client_id: str) -> Optional[dict[str, Any]]:
+    return _get_pending(f"signpending:{client_id}")
+
+
+def bump_reminders(client_id: str, count: int) -> None:
+    rec = get_pending(client_id) or {"client_id": client_id, "issued_at": int(time.time())}
+    rec["reminders_sent"] = count
+    _put_pending(f"signpending:{client_id}", rec)
+
+
+def clear_pending(client_id: str) -> None:
+    """Called when a client signs — there is nothing left to remind about."""
+    _delete_pending(f"signpending:{client_id}")
+
+
+def _put_pending(key: str, value: dict[str, Any]) -> None:
+    table = config.get("IDEMPOTENCY_TABLE")
+    if not table:
+        from . import idempotency
+
+        store = idempotency._FileStore()
+        data = store._read()
+        data[key] = {**value, "expires_at": time.time() + PENDING_TTL_SECONDS}
+        store._write(data)
+        return
+    import boto3
+
+    boto3.resource("dynamodb", region_name=config.get("AWS_REGION", "eu-central-1")) \
+        .Table(table).put_item(Item={
+            "pk": key,
+            "expires_at": int(time.time()) + PENDING_TTL_SECONDS,
+            **value,
+        })
+
+
+def _get_pending(key: str) -> Optional[dict[str, Any]]:
+    table = config.get("IDEMPOTENCY_TABLE")
+    if not table:
+        from . import idempotency
+
+        return idempotency._FileStore()._read().get(key)
+    import boto3
+
+    item = boto3.resource("dynamodb", region_name=config.get("AWS_REGION", "eu-central-1")) \
+        .Table(table).get_item(Key={"pk": key}).get("Item")
+    if not item:
+        return None
+    return {k: (int(v) if hasattr(v, "to_integral_value") else v) for k, v in item.items()}
+
+
+def _delete_pending(key: str) -> None:
+    table = config.get("IDEMPOTENCY_TABLE")
+    if not table:
+        from . import idempotency
+
+        store = idempotency._FileStore()
+        data = store._read()
+        data.pop(key, None)
+        store._write(data)
+        return
+    import boto3
+
+    boto3.resource("dynamodb", region_name=config.get("AWS_REGION", "eu-central-1")) \
+        .Table(table).delete_item(Key={"pk": key})
+
+
 def resolve(token: str) -> str:
     """The client id behind either link form.
 
