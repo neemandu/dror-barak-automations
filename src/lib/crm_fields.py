@@ -52,7 +52,7 @@ ALIASES: dict[str, list[str]] = {
     # every alias here must be lowercase or it silently never matches, and the
     # failure looks like a config problem rather than a code bug.
     "meta_ad_account": [
-        "meta ad account", "ad account", "act id",
+        "meta", "meta ad account", "ad account", "act id",
         "חשבון מודעות meta", "חשבון מודעות", "מזהה חשבון מודעות",
     ],
 }
