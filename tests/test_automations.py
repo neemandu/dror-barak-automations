@@ -109,8 +109,94 @@ def test_onboarding(read_log):
 
 def test_campaign_summary(read_log):
     result = campaign_summary.run("42", dry_run=True, month="2026-06")
-    assert "AI OUTPUT" in result["report"] or "ניתוח" in result["report"]
     assert "campaign_summary_ready" in _actions(read_log)
+    # The report carries the month header and the metrics table.
+    assert "דוח קמפיינים חודשי" in result["report"]
+    assert result["summary"]["totals"]["leads"] == 84  # from the canned insights
+
+
+def test_campaign_summary_links_the_report_for_the_dashboard(read_log):
+    # Bug regression: the link must land in a field subjects.links_for() reads, or
+    # it is invisible in the dashboard and the daily email. Tests what Dror sees.
+    from src.lib import subjects
+
+    campaign_summary.run("42", dry_run=True, month="2026-06")
+    entry = next(e for e in read_log() if e["action"] == "campaign_summary_ready")
+    assert subjects.links_for(entry), "report entry has no clickable link"
+
+
+def test_campaign_summary_uses_the_clients_own_drive_folder(read_log):
+    # Bug regression: it used to read a key get_client never returns, so live it
+    # fell back to the shared default parent. ensure() must run.
+    result = campaign_summary.run("42", dry_run=True, month="2026-06")
+    assert "drive-folder-mock" in result["url"]
+
+
+def test_campaign_summary_emails_dror_for_approval(monkeypatch):
+    # Bug regression: it used to notify via retired Green API. Must email Dror.
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+    sent = {}
+
+    from src.lib import emails
+
+    def _capture(name, to, **kw):
+        sent["name"], sent["to"], sent["cta"] = name, to, kw.get("cta_url")
+        return {"sent": False, "dry_run": True}
+
+    monkeypatch.setattr(emails, "send_template", _capture)
+    campaign_summary.run("42", dry_run=True, month="2026-06")
+    assert sent["name"] == "campaign_report_ready"
+    assert sent["to"] == "dror@example.com"
+    assert sent["cta"]  # never empty — render() would raise otherwise
+
+
+def test_campaign_summary_skips_a_client_with_no_ad_account(read_log, monkeypatch):
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(
+        CrmClient, "get_client",
+        lambda self, cid: {"id": cid, "name": "ללא חשבון", "meta_ad_account": ""},
+    )
+    with pytest.raises(campaign_summary.NoAdAccount):
+        campaign_summary.run("42", dry_run=True, month="2026-06")
+    entry = next(e for e in read_log() if e["action"] == "no_ad_account")
+    assert entry["status"] == "skipped"  # skipped, not error
+
+
+def test_campaign_summary_survives_a_broken_mail_server(read_log, monkeypatch):
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+    from src.lib import emails
+
+    def _boom(*a, **k):
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(emails, "send_template", _boom)
+    result = campaign_summary.run("42", dry_run=True, month="2026-06")
+    assert result["url"]  # report still produced
+    assert "approval_email_failed" in _actions(read_log)
+
+
+def test_run_all_isolates_one_clients_failure(read_log, monkeypatch):
+    # Dry-run list_active_clients returns exactly clients 1001 and 1002.
+    def _run(client_id, **kw):
+        if client_id == "1001":
+            raise RuntimeError("meta exploded")
+        return {"url": "ok"}
+
+    monkeypatch.setattr(campaign_summary, "run", _run)
+    result = campaign_summary.run_all(dry_run=True, month="2026-06")
+    assert result["built"] == 1 and result["failed"] == 1
+    assert "report_failed" in _actions(read_log)
+    assert "campaign_reports_done" in _actions(read_log)
+
+
+def test_run_all_month_defaults_to_the_previous_month(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(campaign_summary, "run",
+                        lambda cid, **kw: seen.setdefault("month", kw.get("month")))
+    campaign_summary.run_all(dry_run=True)
+    # run_all passes month through untouched; None means run() defaults it.
+    assert seen["month"] is None
 
 
 def test_strategy_bot(read_log):

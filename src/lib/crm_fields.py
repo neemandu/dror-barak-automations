@@ -47,6 +47,14 @@ ALIASES: dict[str, list[str]] = {
     "morning_client_id": [
         "morning client id", "morning id", "מזהה morning", "מזהה מורנינג",
     ],
+    # The Meta ad account for the monthly campaign report (T7), the act_ id.
+    # NOTE: normalize() casefolds, so a "Meta" the user typed arrives as "meta" —
+    # every alias here must be lowercase or it silently never matches, and the
+    # failure looks like a config problem rather than a code bug.
+    "meta_ad_account": [
+        "meta ad account", "ad account", "act id",
+        "חשבון מודעות meta", "חשבון מודעות", "מזהה חשבון מודעות",
+    ],
 }
 
 NUMERIC_FIELDS = {"monthly_price"}

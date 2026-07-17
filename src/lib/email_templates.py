@@ -85,6 +85,27 @@ TEMPLATES: dict[str, EmailTemplate] = {
             "האונבורדינג יוצא לדרך אוטומטית."
         ),
     ),
+    # Sent to Dror when a monthly campaign report is ready (T7). Addressed to him,
+    # not the client — he reviews it and forwards it on. No signature, like
+    # signed_notification: it is internal mail, not a client-facing message. The
+    # PDF is attached and the button opens it in Drive.
+    "campaign_report_ready": EmailTemplate(
+        subject="📊 דוח קמפיינים מוכן לאישור — {client_name} · {month_label}",
+        body=(
+            "היי דרור,\n"
+            "\n"
+            "דוח הקמפיינים של {client_name} לחודש {month_label} מוכן ומחכה לאישורך.\n"
+            "הדוח מצורף כ-PDF ונשמר גם בתיקיית הלקוח בדרייב.\n"
+            "\n"
+            "בקצרה:\n"
+            "הוצאה: {spend}\n"
+            "לידים: {leads}\n"
+            "עלות לליד: {cost_per_lead}\n"
+            "\n"
+            "עבור/י עליו — ואם הוא תקין, העבר/י אותו ללקוח."
+        ),
+        cta="פתח את הדוח בדרייב",
+    ),
 }
 
 

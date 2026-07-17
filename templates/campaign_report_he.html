@@ -1,0 +1,84 @@
+<!--
+  דוח קמפיינים חודשי — the monthly campaign report Dror forwards to a client.
+
+  Placeholders are double-brace tokens, filled by src/lib/campaign_report.py.
+  Unlike the contract, a blank here is NOT an error: זהו דוח, and a month with
+  zero spend is a real finding (the campaign was paused), not a hole. So the
+  renderer writes "—" for a missing rate rather than refusing. See campaign_report.py.
+
+  Layout note: this becomes a PDF via Google Drive's HTML→Docs converter, which
+  drops most CSS — flexbox and grid collapse. The metrics use a <table> on purpose.
+
+  campaign_rows / ai_summary / ai_recommendations are inserted as pre-built markup
+  (RAW fields), the way the contract inserts drawn signatures — everything else is
+  HTML-escaped, because campaign names come from Meta and are external data.
+-->
+<div class="report" dir="rtl" lang="he">
+
+  <div class="brand-banner">
+    <img class="brand-logo" src="{{asset_logo}}" alt="דרור ברק">
+  </div>
+
+  <h1>דוח קמפיינים חודשי</h1>
+  <p class="lead">{{client_name}} · {{account_name}} · {{report_month}}</p>
+  <p class="generated">הופק בתאריך {{generated_date}}</p>
+
+  <h2>סיכום החודש</h2>
+  <table class="totals">
+    <tbody>
+      <tr>
+        <th>הוצאה</th>
+        <td>{{total_spend}}</td>
+        <th>לידים</th>
+        <td>{{total_leads}}</td>
+      </tr>
+      <tr>
+        <th>חשיפות</th>
+        <td>{{total_impressions}}</td>
+        <th>עלות לליד</th>
+        <td>{{total_cpl}}</td>
+      </tr>
+      <tr>
+        <th>קליקים</th>
+        <td>{{total_clicks}}</td>
+        <th>CTR</th>
+        <td>{{total_ctr}}</td>
+      </tr>
+      <tr>
+        <th>CPC</th>
+        <td>{{total_cpc}}</td>
+        <th></th>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>לפי קמפיין</h2>
+  <table class="campaigns">
+    <thead>
+      <tr>
+        <th>קמפיין</th>
+        <th>הוצאה</th>
+        <th>חשיפות</th>
+        <th>קליקים</th>
+        <th>CTR</th>
+        <th>לידים</th>
+        <th>עלות לליד</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{campaign_rows}}
+    </tbody>
+  </table>
+
+  <h2>ניתוח</h2>
+  <div class="ai">{{ai_summary}}</div>
+
+  <h2>המלצות להמשך</h2>
+  <div class="ai">{{ai_recommendations}}</div>
+
+  <div class="brand-footer">
+    <img src="{{asset_footer}}" alt="לקוחות מספרים על התהליך עם דרור">
+  </div>
+
+</div>

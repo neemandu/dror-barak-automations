@@ -23,6 +23,12 @@ def isolated_run_log(tmp_path, monkeypatch):
     for key in ("DROR_WHATSAPP", "DRIVE_DEFAULT_PARENT_ID", "DRIVE_TEMPLATE_IDS"):
         monkeypatch.delenv(key, raising=False)
 
+    # Meta Ads creds: a real token in a developer's .env would make the campaign
+    # client build live and reach Graph, so the "no credentials needed" dry-run
+    # tests would pass or fail depending on whose machine ran them.
+    for key in ("META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID", "META_BASE_URL"):
+        monkeypatch.delenv(key, raising=False)
+
     # No Google credentials, and no reaching AWS. Once GOOGLE_SECRET_ARN existed
     # in a developer's .env, the suite started calling Secrets Manager for real:
     # slow, dependent on credentials, and it made the "missing credentials" tests

@@ -51,7 +51,7 @@ __all__ = [
 REQUIRED_FIELDS = ["phone", "sub_status", "monthly_price"]
 OPTIONAL_FIELDS = [
     "email", "service_type", "drive_folder", "signed_contract",
-    "recordings_path", "morning_status", "morning_client_id",
+    "recordings_path", "morning_status", "morning_client_id", "meta_ad_account",
 ]
 
 
@@ -76,6 +76,7 @@ def _fixture_client(client_id: str) -> dict[str, Any]:
         # and made the billing tests exercise the skip path rather than the work.
         "morning_status": "created",
         "morning_client_id": "morning-client-mock",
+        "meta_ad_account": "act_100000000000001",
         "url": "https://app.clickup.com/t/mock",
         "social_profiles": {
             "instagram": "https://instagram.com/example",
@@ -196,6 +197,7 @@ class CrmClient(BaseClient):
             "recordings_path": str(field_value("recordings_path") or ""),
             "morning_status": str(field_value("morning_status") or ""),
             "morning_client_id": str(field_value("morning_client_id") or ""),
+            "meta_ad_account": str(field_value("meta_ad_account") or ""),
             "url": str(task.get("url") or ""),
             "social_profiles": {},
             "questionnaire_answers": {},
@@ -426,6 +428,7 @@ _MOCK_FIELDS: list[dict[str, Any]] = [
     {"id": "f-contract", "name": "חוזה חתום", "type": "url"},
     {"id": "f-recordings", "name": "נתיב הקלטות", "type": "short_text"},
     {"id": "f-morning", "name": "סטטוס Morning", "type": "short_text"},
+    {"id": "f-meta-act", "name": "חשבון מודעות Meta", "type": "short_text"},
     {
         "id": "f-sub",
         "name": "סטטוס משני",
