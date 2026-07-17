@@ -15,9 +15,18 @@
 -->
 <div class="report" dir="rtl" lang="he">
 
-  <div class="brand-banner">
-    <img class="brand-logo" src="{{asset_logo}}" alt="דרור ברק">
-  </div>
+  <!-- Banner as a TABLE, not a div: Google Drive's HTML→Docs conversion (how the
+       PDF is made) drops CSS backgrounds, so the div gradient vanished and the
+       white logo landed on white. A table cell's bgcolor survives the conversion,
+       so the blue is there in the PDF; the CSS gradient still styles the browser
+       preview. The logo carries an explicit width so it doesn't import at full size. -->
+  <table class="brand-banner" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td bgcolor="#00a8f0" class="brand-cell">
+        <img class="brand-logo" src="{{asset_logo}}" width="240" alt="דרור ברק">
+      </td>
+    </tr>
+  </table>
 
   <h1>דוח קמפיינים חודשי</h1>
   <p class="lead">{{client_name}} · {{account_name}} · {{report_month}}</p>
@@ -77,8 +86,10 @@
   <h2>המלצות להמשך</h2>
   <div class="ai">{{ai_recommendations}}</div>
 
-  <div class="brand-footer">
-    <img src="{{asset_footer}}" alt="לקוחות מספרים על התהליך עם דרור">
+  <!-- Explicit width so the 894px-wide image fits the page after conversion
+       instead of overflowing off the edge; centered via the paragraph. -->
+  <div class="brand-footer" style="text-align:center;">
+    <img src="{{asset_footer}}" width="600" alt="לקוחות מספרים על התהליך עם דרור">
   </div>
 
 </div>

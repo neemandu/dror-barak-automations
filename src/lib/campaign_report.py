@@ -208,9 +208,12 @@ body { margin:0; background:#eef0f3; color:#14171a;
   font-family:system-ui,"Segoe UI",Arial,sans-serif; }
 .report { max-width:820px; margin:24px auto; background:#fff; padding:40px 48px;
   border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
-.brand-banner { border-radius:8px; margin:0 0 24px; padding:26px 30px;
+.brand-banner { border-collapse:collapse; margin:0 0 24px; }
+/* The cell carries a solid bgcolor attribute for the Drive→Docs PDF (gradients
+   don't survive that conversion); this gradient is only for the browser preview. */
+.brand-cell { border-radius:8px; padding:26px 30px;
   background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%); }
-.brand-logo { max-width:250px; height:auto; display:block; }
+.brand-logo { width:240px; max-width:60%; height:auto; display:block; }
 .brand-footer { margin-top:34px; text-align:center; }
 .brand-footer img { max-width:100%; height:auto; }
 h1 { font-size:24px; margin:0 0 6px; }
