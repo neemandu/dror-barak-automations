@@ -106,11 +106,22 @@ each folder in Drive; the id is the last part of the URL
 
 1. `business.facebook.com` → **Business Settings**
 2. **Users → System Users → Add**, name it e.g. `Automation`
-3. **Assign Assets** → the **ad account**, with view or manage access
+3. **Assign Assets → Ad Accounts** → tick **every client's ad account**, view
+   access is enough. This is per-client: the report reads a different account for
+   each client, so an account you skip becomes a client whose report fails.
 4. **Generate Token** → tick **`ads_read`** → copy
 
 → `META_ACCESS_TOKEN`
-→ `META_AD_ACCOUNT_ID` — the ad account id including the `act_` prefix
+→ `META_AD_ACCOUNT_ID` — used **only** by `python -m src.tools.check_meta`. The
+  account each report uses comes from the `חשבון מודעות Meta` field on the client's
+  ClickUp task, not from here.
+
+> **Client accounts must live in — or be shared into — Dror's business.** A system
+> user only sees assets its own business owns or has **partner access** to. Adding
+> Dror's personal email to a client's account (the People tab) does *not* let his
+> system user read it. The client's business must add Dror's business as a
+> **Partner** with ad-account access. Confirm the account then appears under Assign
+> Assets, and verify end to end with `python -m src.tools.check_meta --account act_…`.
 
 > System-user tokens are long-lived; a personal token expires in ~60 days. Use the
 > system user.

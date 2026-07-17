@@ -4,7 +4,7 @@ See `CLAUDE.md` for the full description of each automation. "Done" means **logi
 complete + dry-run verified**; live runs additionally need the credentials in
 `docs/CREDENTIALS.md`.
 
-`python -m pytest` → 50 passing.
+`python -m pytest` → 278 passing.
 
 ## Backlog
 
@@ -24,7 +24,13 @@ is unaffected — these are the adapters underneath them.
   link back to ClickUp. Retire `src/lib/clients/fillout.py`.
 - [ ] **Replace onboarding's "open a WhatsApp channel" step.** The official API
   cannot create groups; `onboarding.py` still calls `create_group`.
-- [ ] **Point `campaign_summary` at the Meta Ads API** for real campaign numbers.
+- [x] **Point `campaign_summary` at the Meta Ads API** for real campaign numbers.
+  Done: `src/lib/clients/meta_ads.py` + `src/lib/campaign_metrics.py` (insights →
+  per-campaign + totals), rendered to a PDF from `templates/campaign_report_he.html`
+  via `src/lib/campaign_report.py`, emailed to Dror for approval. The ad account is
+  per-client (`חשבון מודעות Meta` field), scheduled monthly on the 1st with a
+  self-invoke fan-out (`src/scheduled.py::campaign_report_handler`). Verify a live
+  account with `python -m src.tools.check_meta --account act_…`.
 - [ ] **Move the run-log to DynamoDB.** It is a local JSONL file, and Lambda's
   filesystem is ephemeral — so on AWS it vanishes between invocations. It is the
   only source for the dashboard *and* the daily email, so both will be empty until

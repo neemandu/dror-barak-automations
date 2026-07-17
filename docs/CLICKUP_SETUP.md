@@ -132,6 +132,12 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 | `נתיב הקלטות` | Text | Meeting recordings |
 | `סטטוס Morning` | Text | Whether the client exists in Morning |
 | `מזהה Morning` / `מזהה מורנינג` | Text | The Morning client id |
+| `חשבון מודעות Meta` | Text | The client's Meta ad account (`act_…`) for the monthly campaign report |
+
+> **`חשבון מודעות Meta`** holds the ad account id, `act_` prefix or bare digits
+> (the code adds the prefix). A client without it is skipped from the monthly
+> report, not defaulted — there is no shared fallback account. This is one more
+> field value per client, so it counts against the 60-use cap noted above.
 
 Any other field of Dror's is ignored — never read, never written.
 

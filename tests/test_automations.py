@@ -205,6 +205,16 @@ def test_strategy_bot(read_log):
     assert "strategy_ready" in _actions(read_log)
 
 
+def test_strategy_bot_links_the_doc_and_uses_the_client_folder(read_log):
+    # Same two bugs as campaign_summary, fixed here too: the log entry must carry a
+    # clickable link, and the doc goes to the client's own folder via ensure().
+    from src.lib import subjects
+
+    strategy_bot.run("42", dry_run=True)
+    entry = next(e for e in read_log() if e["action"] == "strategy_ready")
+    assert subjects.links_for(entry)
+
+
 def test_clickup_to_claude(read_log):
     result = clickup_to_claude.run("abc123", dry_run=True)
     assert "ClickUp task abc123" in result["brief"]

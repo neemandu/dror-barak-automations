@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..lib import config
+from ..lib import client_folder, config
 from ..lib.clients.anthropic_ai import AnthropicClient
 from ..lib.clients.crm import CrmClient
 from ..lib.clients.google import GoogleClient
@@ -60,15 +60,16 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     document = "\n".join(
         [f"# אסטרטגיה שיווקית — {client.get('name','')}", "", strategy]
     )
-    folder_id = client.get("drive_folder_id") or config.get("DRIVE_DEFAULT_PARENT_ID")
-    saved: dict[str, Any] = {}
-    if folder_id:
-        saved = google.upload_file(
-            name=f"strategy_{client_id}.md",
-            content=document.encode("utf-8"),
-            parent_id=folder_id,
-            mime_type="text/markdown",
-        )
+    # The client's own folder, created if needed — not a key get_client never
+    # returns (the old drive_folder_id), which silently sent every strategy to the
+    # shared default parent.
+    folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=dry_run)
+    saved = google.upload_file(
+        name=f"strategy_{client_id}.md",
+        content=document.encode("utf-8"),
+        parent_id=folder["id"],
+        mime_type="text/markdown",
+    )
 
     dror_phone = config.get("DROR_WHATSAPP")
     if dror_phone:
@@ -82,7 +83,7 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         "strategy_ready",
         client_id=client_id,
         detail=f"{len(social)} profiles used",
-        report_url=saved.get("webViewLink"),
+        url=saved.get("webViewLink") or folder["url"],
     )
     return {"strategy": document, "saved": saved}
 

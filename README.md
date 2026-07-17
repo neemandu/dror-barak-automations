@@ -32,7 +32,7 @@ run live.
 | T3 | `social_prep` | Webhook: form submit / manual | `python -m src.automations.social_prep --client-id 42 --dry-run` |
 | T4 | `send_quote` | Manual send + signing webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
 | T5 | `onboarding` | Webhook: status → signed | `python -m src.automations.onboarding --client-id 42 --dry-run` |
-| T7 | `campaign_summary` | Scheduled: month end / manual | `python -m src.automations.campaign_summary --client-id 42 --dry-run` |
+| T7 | `campaign_summary` | Scheduled: 1st of month / manual | `python -m src.automations.campaign_summary --client-id 42 --dry-run` (or `--all`) |
 | T8 | `strategy_bot` | Manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
 | T10 | `daily_email` | Scheduled: end of day | `python -m src.automations.daily_email --dry-run` |
@@ -65,8 +65,9 @@ HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 ```cron
 # Daily report to Dror — every day 19:00
 0 19 * * * cd /path/to/dror_barak && python -m src.automations.daily_email
-# Campaign summaries — last-day handling done in-script; run 28th 08:00
-0 8 28 * * cd /path/to/dror_barak && python -m src.automations.campaign_summary --client-id <id>
+# Campaign summaries — reports the previous (closed) month; run 1st 08:00.
+# On AWS this is the CampaignReportFunction schedule; --all covers every client.
+0 8 1 * * cd /path/to/dror_barak && python -m src.automations.campaign_summary --all
 ```
 
 **Webhook** — start the receiver and point each system's webhook at the route:
@@ -107,7 +108,7 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 50 tests: infra, dashboard/auth, and a dry-run test per automation
+python -m pytest        # 278 tests: infra, dashboard/auth, and a dry-run test per automation
 ```
 
 Dry-run is not proof on its own. If you change something with a real runtime

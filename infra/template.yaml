@@ -121,6 +121,21 @@ Parameters:
       Claude API key for the AI automations (social prep, strategy, campaign
       recommendations). ~108 chars, well within the 4KB env limit, so unlike the
       Google key it is a plain env var rather than a secret fetch.
+  MetaAccessToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      Meta system-user token with ads_read, for the monthly campaign report. A
+      long string but far under the 4KB env limit, so a plain env var like the
+      Anthropic key rather than a secret fetch. There is deliberately no
+      META_AD_ACCOUNT_ID here: the ad account is per-client, read from the
+      חשבון מודעות Meta field in ClickUp — a single global would risk one client's
+      spend landing in another client's report.
+  MetaBaseUrl:
+    Type: String
+    Default: "https://graph.facebook.com/v21.0"
+    Description: Meta Graph API base URL. Bump the version here when Meta deprecates one.
   WebhookDryRun:
     Type: String
     Default: "1"
@@ -151,6 +166,8 @@ Globals:
         CLICKUP_TEAM_ID: !Ref ClickUpTeamId
         WEBHOOK_DRY_RUN: !Ref WebhookDryRun
         ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+        META_ACCESS_TOKEN: !Ref MetaAccessToken
+        META_BASE_URL: !Ref MetaBaseUrl
         DROR_EMAIL: !Ref DrorEmail
         SMTP_HOST: !Ref SmtpHost
         SMTP_PORT: !Ref SmtpPort
@@ -293,6 +310,39 @@ Resources:
             # 07:00 UTC = 09:00-10:00 Israel. A morning nudge, not a 3am one.
             Schedule: cron(0 7 * * ? *)
             Description: Send signature reminders
+
+  CampaignReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dror-campaign-report-${Stage}"
+      CodeUri: ../
+      Handler: src.scheduled.campaign_report_handler
+      Description: Monthly — one campaign report per active client, fanned out.
+      # Overrides the 180s global. The dispatcher only lists clients and returns
+      # in seconds, but each fan-out child does a Meta call + an Opus completion +
+      # three Drive calls + SMTP, ~1-2 min; a per-client invoke gets the room.
+      Timeout: 900
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RunLogTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref GoogleSecretArn
+        # Lets the dispatcher async-invoke itself once per client.
+        - LambdaInvokePolicy:
+            FunctionName: !Sub "dror-campaign-report-${Stage}"
+      EventInvokeConfig:
+        # Async invokes retry twice by default. A retry here does not fix a bad
+        # report — it emails Dror a second and third copy of it.
+        MaximumRetryAttempts: 0
+      Events:
+        Monthly:
+          Type: Schedule
+          Properties:
+            # 07:00 UTC on the 1st — the month it reports is closed and settled.
+            Schedule: cron(0 7 1 * ? *)
+            Description: Monthly campaign reports
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
