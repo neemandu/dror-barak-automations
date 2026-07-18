@@ -32,6 +32,7 @@ from ..lib import (
     config,
     emails,
     pdf,
+    pdf_chromium,
 )
 from ..lib.clients.anthropic_ai import AnthropicClient
 from ..lib.clients.crm import CrmClient
@@ -151,9 +152,9 @@ def run(
     drive_url = folder["url"]
     pdf_bytes = b""
     if not dry_run:
-        # pdf.* is not dry-run aware — it calls Google directly — so the whole
-        # PDF/upload/send tail is guarded, exactly as sign_page does.
-        pdf_bytes = pdf.html_to_pdf(document, name=f"campaign_report_{client_id}_{month}")
+        # Chromium renders the report (full-bleed, crisp) rather than the Drive
+        # Docs path; upload is still Drive. Guarded because neither is dry-run aware.
+        pdf_bytes = pdf_chromium.render(document)
         saved = pdf.upload_pdf(pdf_bytes, f"דוח קמפיינים — {label}.pdf", folder["id"])
         drive_url = saved.get("webViewLink") or drive_url
 

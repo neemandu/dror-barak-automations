@@ -39,6 +39,12 @@ is unaffected — these are the adapters underneath them.
 - [ ] **Make the dashboard's sessions stateless** before it runs on Lambda. The
   `_sessions` dict dies with each instance, so Dror would be logged out at random.
   A signed cookie replaces it.
+- [ ] **Add a Chromium layer for the campaign report.** The report PDF renders via
+  headless Chromium (`src/lib/pdf_chromium.py`) for a full-bleed, crisp result the
+  Drive Docs path can't produce. Locally Playwright's bundled Chromium is used; on
+  Lambda attach a Chromium layer (e.g. sparticuz/chromium) and set
+  `PLAYWRIGHT_CHROMIUM_PATH` to its binary. Until then the monthly report can't
+  render on AWS, so it stays manual/local.
 - [ ] **Deploy the webhook stack** (`infra/template.yaml`) and register the webhook.
   Deploy with `WebhookDryRun=1` first — real events, no side effects — then flip it.
 - [ ] **Add auth to `webhook_server.py`**, the local stdlib receiver, or retire it

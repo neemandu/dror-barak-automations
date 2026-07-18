@@ -11,8 +11,14 @@ requests>=2.31
 # hour, so a pasted token cannot work in production.
 google-auth>=2.28
 
-# Draws the campaign report's bar charts to PNG (embedded in the PDF as images,
-# since Drive's HTML→Docs conversion keeps images but drops CSS/SVG charts).
-# python-bidi reorders mixed Hebrew/Latin chart labels for correct display.
+# Draws the campaign report's bar charts to PNG. python-bidi reorders mixed
+# Hebrew/Latin chart labels for correct display.
 Pillow>=10.2
 python-bidi>=0.4
+
+# Renders the campaign report PDF via headless Chromium — full-bleed banner, zero
+# margins, crisp output that the Drive Docs path could not produce. On Lambda the
+# Chromium binary comes from a layer, not Playwright's download: set
+# PLAYWRIGHT_CHROMIUM_PATH to the layer binary (see TASKS.md). The contract PDF
+# still uses the Drive path and needs none of this.
+playwright>=1.40

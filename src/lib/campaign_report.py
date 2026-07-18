@@ -230,44 +230,34 @@ def render(
 
 _CSS = """
 * { box-sizing: border-box; }
-/* No background colours on the page or the container. Google Docs' HTML import
-   (how this becomes a PDF) turns a background on a text container into highlight
-   *behind every word*, so a white card on a grey body printed as white boxes on
-   an off-white page. The page is plain white; only table cells and the banner —
-   real cell/table backgrounds, which convert as shading — carry colour. */
-body { margin:0; color:#14171a;
-  font-family:system-ui,"Segoe UI",Arial,sans-serif; }
-.report { max-width:820px; margin:0 auto; padding:24px 32px; }
-.brand-banner { border-collapse:collapse; margin:0 0 24px; }
-/* The cell carries a solid bgcolor attribute for the Drive→Docs PDF (gradients
-   don't survive that conversion); this gradient is only for the browser preview. */
-.brand-cell { border-radius:8px; padding:26px 30px;
+/* Rendered by headless Chromium (src/lib/pdf_chromium): real CSS, zero page
+   margins, a full-bleed banner, crisp output. */
+@page { size: A4; margin: 0; }
+html, body { margin:0; padding:0; }
+body { color:#14171a; font-family:'Segoe UI',system-ui,Arial,sans-serif;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+/* Full-bleed gradient banner — edge to edge, no page margin. */
+.brand-banner { margin:0; padding:30px 40px; text-align:center;
   background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%); }
-.brand-logo { width:240px; max-width:60%; height:auto; display:block; }
-.brand-footer { margin-top:34px; text-align:center; }
-.brand-footer img { max-width:100%; height:auto; }
+.brand-logo { width:230px; height:auto; display:block; margin:0 auto; }
+/* Everything else is padded in from the page edges for readability. */
+.content { padding:26px 40px 44px; }
 h1 { font-size:24px; margin:0 0 6px; }
-h2 { font-size:17px; margin:26px 0 10px; }
+h2 { font-size:17px; margin:28px 0 12px; }
 .lead { color:#14171a; font-size:16px; font-weight:600; margin:0 0 2px; }
 .generated { color:#5b6472; font-size:13px; margin:0 0 8px; }
-table { width:100%; border-collapse:collapse; margin:6px 0; font-size:14px; }
-table.totals th { width:16%; text-align:right; background:#f6f7f9; padding:10px 12px;
-  border:1px solid #dfe3e8; font-weight:600; }
-table.totals td { width:18%; text-align:right; padding:10px 12px;
-  border:1px solid #dfe3e8; font-weight:700; }
+table.campaigns { width:100%; border-collapse:collapse; margin:6px 0; font-size:13px; }
 table.campaigns th, table.campaigns td { border:1px solid #dfe3e8; padding:8px 10px;
   text-align:right; }
-table.campaigns thead th { background:#f6f7f9; font-size:13px; }
-table.campaigns td { font-size:13px; }
-/* KPI cards — coloured cells with white text; spacing via a surface gap so the
-   cells read as separate tiles. */
-table.kpis { border-collapse:separate; border-spacing:8px; }
-table.kpis td.kpi { width:33%; padding:16px 14px; border-radius:10px;
+table.campaigns thead th { background:#f6f7f9; }
+/* KPI cards — coloured tiles with white text. */
+table.kpis { width:100%; border-collapse:separate; border-spacing:8px; }
+table.kpis td.kpi { width:33%; padding:16px 14px; border-radius:12px;
   color:#ffffff; text-align:center; }
-.kpi-num { font-size:22px; font-weight:700; }
+.kpi-num { font-size:23px; font-weight:700; }
 .kpi-lbl { font-size:13px; opacity:.92; }
 .chart { margin:6px 0 4px; }
-.chart img { max-width:100%; height:auto; }
+.chart img { max-width:100%; height:auto; display:block; }
 .ai p { font-size:14px; line-height:1.85; margin:0 0 10px; }
 """
 
