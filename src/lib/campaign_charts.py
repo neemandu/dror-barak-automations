@@ -53,7 +53,14 @@ def _font_dir() -> Path:
 
 def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont:
     name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-    return ImageFont.truetype(str(_font_dir() / name), size)
+    # BASIC layout, not RAQM: we reorder Hebrew ourselves with get_display (see
+    # _shape), so Pillow must draw glyphs in the exact order given. Left on the
+    # default RAQM engine, Pillow would apply its own bidi and double-reverse the
+    # text — and RAQM isn't guaranteed present on Lambda, so relying on it would
+    # make the charts render differently there. BASIC is deterministic everywhere.
+    return ImageFont.truetype(
+        str(_font_dir() / name), size, layout_engine=ImageFont.Layout.BASIC
+    )
 
 
 def _shape(text: str) -> str:
