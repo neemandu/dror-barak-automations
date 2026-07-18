@@ -1,0 +1,11 @@
+# Binary assets must never get line-ending conversion — CRLF injection would
+# corrupt a font or image. Git usually auto-detects binaries, but on Windows with
+# core.autocrlf it can warn/convert, so mark them explicitly.
+*.ttf   binary
+*.otf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
