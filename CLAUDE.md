@@ -114,6 +114,15 @@ Follow [`..\_shared\CONVENTIONS.md`](..\_shared\CONVENTIONS.md). Language:
 **Python**. Retry + backoff on all outbound calls, JSON structured logging, secrets
 from `.env` only, run instructions per automation in `README.md`.
 
+**Document every automation for Dror.** [`docs\OPERATIONS.md`](docs\OPERATIONS.md)
+is the Hebrew operator's guide — what each automation does, how Dror uses it, and
+the hands-on procedures (e.g. the Meta partner + system-user setup for a new
+client). When you **add or change an automation**, update `OPERATIONS.md` in the
+same change: add its row to the automations table, and if it introduces an operator
+step (a new credential, a manual action, a gotcha), write that step up under the
+relevant section. The guide is meant to stay complete — an automation Dror can't
+find there is one he doesn't know he has.
+
 ## Public repo
 
 This repository is public so Dror can work in it with his own Claude Code. Two
