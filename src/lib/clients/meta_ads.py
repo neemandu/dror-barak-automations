@@ -123,6 +123,70 @@ class MetaAdsClient(BaseClient):
         }
         return self._paged(f"{self.base_url}/{act}/insights", params)
 
+    # ------------------------------------------------- business management (admin)
+    # Used by src/tools/sync_meta_accounts.py, not by the report. These need the
+    # token to also carry `business_management`, and they write — so they live here
+    # but are only ever driven by the admin tool, never by an automation.
+
+    def me(self) -> dict[str, str]:
+        """The token's own identity — the system user ``{"id", "name"}``."""
+        if self.dry_run:
+            self._record("me")
+            return {"id": "100000000000001", "name": "Automation"}
+        body = self._request(
+            "GET", f"{self.base_url}/me",
+            params={"fields": "id,name", "access_token": self.token},
+        ).json()
+        return {"id": str(body.get("id") or ""), "name": str(body.get("name") or "")}
+
+    def assigned_account_ids(self) -> set[str]:
+        """The numeric ids of ad accounts already assigned to the system user."""
+        if self.dry_run:
+            self._record("assigned_account_ids")
+            return {"100000000000001"}
+        rows = self._paged(
+            f"{self.base_url}/me/assigned_ad_accounts",
+            {"fields": "account_id", "access_token": self.token, "limit": "100"},
+        )
+        return {str(r.get("account_id")) for r in rows if r.get("account_id")}
+
+    def reachable_accounts(self, business_id: str) -> list[dict[str, str]]:
+        """Every ad account the business can reach — partner-shared and owned.
+
+        ``[{"account_id", "name"}]``, de-duplicated. This is the set the sync tool
+        diffs against :meth:`assigned_account_ids` to find what to assign.
+        """
+        if self.dry_run:
+            self._record("reachable_accounts", business_id=business_id)
+            return [{"account_id": "100000000000002", "name": "מכללת דוגמה"}]
+        seen: dict[str, str] = {}
+        for edge in ("client_ad_accounts", "owned_ad_accounts"):
+            rows = self._paged(
+                f"{self.base_url}/{business_id}/{edge}",
+                {"fields": "account_id,name", "access_token": self.token, "limit": "100"},
+            )
+            for r in rows:
+                aid = str(r.get("account_id") or "")
+                if aid:
+                    seen[aid] = str(r.get("name") or "")
+        return [{"account_id": k, "name": v} for k, v in seen.items()]
+
+    def assign_account(
+        self, account_id: str, system_user_id: str, *, tasks: tuple[str, ...] = ("ANALYZE",)
+    ) -> dict[str, Any]:
+        """Assign an ad account to the system user (``ANALYZE`` = read/report)."""
+        act = normalize_account_id(account_id)
+        if self.dry_run:
+            return self._record("assign_account", account_id=act, user=system_user_id, tasks=tasks)
+        return self._request(
+            "POST", f"{self.base_url}/{act}/assigned_users",
+            params={
+                "user": system_user_id,
+                "tasks": json.dumps(list(tasks)),
+                "access_token": self.token,
+            },
+        ).json()
+
     def _paged(self, url: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         """Follow ``paging.next`` (a full URL with the cursor baked in) to the end."""
         rows: list[dict[str, Any]] = []
