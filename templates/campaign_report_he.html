@@ -4,22 +4,22 @@
   Placeholders are double-brace tokens, filled by src/lib/campaign_report.py.
   Unlike the contract, a blank here is NOT an error: זהו דוח, and a month with
   zero spend is a real finding (the campaign was paused), not a hole. So the
-  renderer writes "—" for a missing rate rather than refusing. See campaign_report.py.
+  renderer writes "—" for a missing rate rather than refusing.
 
-  Layout note: this becomes a PDF via Google Drive's HTML→Docs converter, which
-  drops most CSS — flexbox and grid collapse. The metrics use a <table> on purpose.
+  This becomes a PDF through Google Drive's HTML→Docs conversion, which drops CSS
+  backgrounds and SVG/CSS charts but keeps TABLES, table-cell colours, and
+  embedded images. So: the banner and the KPI cards are coloured table cells (not
+  divs), and the charts are PNGs (src/lib/campaign_charts.py) embedded as data-URIs.
 
-  campaign_rows / ai_summary / ai_recommendations are inserted as pre-built markup
-  (RAW fields), the way the contract inserts drawn signatures — everything else is
-  HTML-escaped, because campaign names come from Meta and are external data.
+  campaign_rows / ai_summary / ai_recommendations / spend_chart / leads_chart are
+  inserted as pre-built markup (RAW fields); everything else is HTML-escaped,
+  because campaign names come from Meta and are external data.
 -->
 <div class="report" dir="rtl" lang="he">
 
-  <!-- Banner as a TABLE, not a div: Google Drive's HTML→Docs conversion (how the
-       PDF is made) drops CSS backgrounds, so the div gradient vanished and the
-       white logo landed on white. A table cell's bgcolor survives the conversion,
-       so the blue is there in the PDF; the CSS gradient still styles the browser
-       preview. The logo carries an explicit width so it doesn't import at full size. -->
+  <!-- Banner as a TABLE cell: a div's gradient background is dropped by the
+       Docs conversion, but a cell's bgcolor survives, so the blue is there in the
+       PDF. The CSS gradient still styles the browser preview. -->
   <table class="brand-banner" width="100%" cellpadding="0" cellspacing="0" role="presentation">
     <tr>
       <td bgcolor="#00a8f0" class="brand-cell">
@@ -32,37 +32,29 @@
   <p class="lead">{{client_name}} · {{account_name}} · {{report_month}}</p>
   <p class="generated">הופק בתאריך {{generated_date}}</p>
 
-  <h2>סיכום החודש</h2>
-  <table class="totals">
-    <tbody>
-      <tr>
-        <th>הוצאה</th>
-        <td>{{total_spend}}</td>
-        <th>לידים</th>
-        <td>{{total_leads}}</td>
-      </tr>
-      <tr>
-        <th>חשיפות</th>
-        <td>{{total_impressions}}</td>
-        <th>עלות לליד</th>
-        <td>{{total_cpl}}</td>
-      </tr>
-      <tr>
-        <th>קליקים</th>
-        <td>{{total_clicks}}</td>
-        <th>CTR</th>
-        <td>{{total_ctr}}</td>
-      </tr>
-      <tr>
-        <th>CPC</th>
-        <td>{{total_cpc}}</td>
-        <th></th>
-        <td></td>
-      </tr>
-    </tbody>
+  <h2>מדדים עיקריים</h2>
+  <!-- KPI cards: coloured cells survive the Docs conversion; white text on them
+       does too. Big number over a small label. -->
+  <table class="kpis" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td bgcolor="#2f7de1" class="kpi"><span class="kpi-num">{{total_spend}}</span><br><span class="kpi-lbl">הוצאה</span></td>
+      <td bgcolor="#0a9d8c" class="kpi"><span class="kpi-num">{{total_leads}}</span><br><span class="kpi-lbl">לידים</span></td>
+      <td bgcolor="#5f5ad4" class="kpi"><span class="kpi-num">{{total_cpl}}</span><br><span class="kpi-lbl">עלות לליד</span></td>
+    </tr>
+    <tr>
+      <td bgcolor="#1c8fc4" class="kpi"><span class="kpi-num">{{total_impressions}}</span><br><span class="kpi-lbl">חשיפות</span></td>
+      <td bgcolor="#12a594" class="kpi"><span class="kpi-num">{{total_clicks}}</span><br><span class="kpi-lbl">קליקים</span></td>
+      <td bgcolor="#3f6fd8" class="kpi"><span class="kpi-num">{{total_ctr}}</span><br><span class="kpi-lbl">CTR</span></td>
+    </tr>
   </table>
 
-  <h2>לפי קמפיין</h2>
+  <h2>הוצאה לפי קמפיין</h2>
+  <div class="chart"><img src="{{spend_chart}}" width="600" alt="הוצאה לפי קמפיין"></div>
+
+  <h2>לידים לפי קמפיין</h2>
+  <div class="chart"><img src="{{leads_chart}}" width="600" alt="לידים לפי קמפיין"></div>
+
+  <h2>פירוט לפי קמפיין</h2>
   <table class="campaigns">
     <thead>
       <tr>
@@ -86,8 +78,6 @@
   <h2>המלצות להמשך</h2>
   <div class="ai">{{ai_recommendations}}</div>
 
-  <!-- Explicit width so the 894px-wide image fits the page after conversion
-       instead of overflowing off the edge; centered via the paragraph. -->
   <div class="brand-footer" style="text-align:center;">
     <img src="{{asset_footer}}" width="600" alt="לקוחות מספרים על התהליך עם דרור">
   </div>

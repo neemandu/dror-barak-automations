@@ -10,3 +10,9 @@ requests>=2.31
 # Mints Google access tokens from the service-account key. Tokens live one
 # hour, so a pasted token cannot work in production.
 google-auth>=2.28
+
+# Draws the campaign report's bar charts to PNG (embedded in the PDF as images,
+# since Drive's HTML→Docs conversion keeps images but drops CSS/SVG charts).
+# python-bidi reorders mixed Hebrew/Latin chart labels for correct display.
+Pillow>=10.2
+python-bidi>=0.4

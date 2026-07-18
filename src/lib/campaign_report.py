@@ -22,15 +22,21 @@ inserted verbatim, the way the contract inserts a drawn signature.
 
 from __future__ import annotations
 
+import base64
 import html
 import re
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from . import campaign_metrics, contract
+from . import campaign_charts, campaign_metrics, contract
 
 EMPTY = "—"
+
+# Brand-family bar colours, one hue per chart (dataviz: a single series needs no
+# legend — the heading names it).
+_SPEND_COLOR = (47, 125, 225)   # #2f7de1
+_LEADS_COLOR = (10, 157, 140)   # #0a9d8c
 
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -39,6 +45,7 @@ _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # branding data-URIs. Everything else is client/Meta data and gets escaped.
 RAW_FIELDS = {
     "campaign_rows", "ai_summary", "ai_recommendations", "asset_logo", "asset_footer",
+    "spend_chart", "leads_chart",
 }
 
 
@@ -109,6 +116,23 @@ def _prose_to_html(text: str) -> str:
     return "".join(out) or EMPTY
 
 
+def _data_uri(png: bytes) -> str:
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+
+def _charts(campaigns: list[dict[str, Any]], symbol: str) -> dict[str, str]:
+    """Spend- and leads-by-campaign bar charts as embeddable data-URIs."""
+    spend = campaign_charts.bar_chart(
+        campaigns, value_key="spend", color=_SPEND_COLOR,
+        fmt=lambda v: _money(v, symbol),
+    )
+    leads = campaign_charts.bar_chart(
+        campaigns, value_key="leads", color=_LEADS_COLOR,
+        fmt=lambda v: _int(v),
+    )
+    return {"spend_chart": _data_uri(spend), "leads_chart": _data_uri(leads)}
+
+
 def _campaign_rows_html(campaigns: list[dict[str, Any]], symbol: str) -> str:
     """The per-campaign ``<tr>``s, each cell escaped as it is built."""
     if not campaigns:
@@ -143,7 +167,9 @@ def fields_from(
         account.get("currency") or ""
     )
     totals = summary.get("totals") or {}
+    campaigns = summary.get("campaigns") or []
     return {
+        **_charts(campaigns, symbol),
         "client_name": str(client.get("name") or ""),
         "account_name": str(account.get("name") or ""),
         "report_month": campaign_metrics.month_label_he(month),
@@ -204,10 +230,14 @@ def render(
 
 _CSS = """
 * { box-sizing: border-box; }
-body { margin:0; background:#eef0f3; color:#14171a;
+/* No background colours on the page or the container. Google Docs' HTML import
+   (how this becomes a PDF) turns a background on a text container into highlight
+   *behind every word*, so a white card on a grey body printed as white boxes on
+   an off-white page. The page is plain white; only table cells and the banner —
+   real cell/table backgrounds, which convert as shading — carry colour. */
+body { margin:0; color:#14171a;
   font-family:system-ui,"Segoe UI",Arial,sans-serif; }
-.report { max-width:820px; margin:24px auto; background:#fff; padding:40px 48px;
-  border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
+.report { max-width:820px; margin:0 auto; padding:24px 32px; }
 .brand-banner { border-collapse:collapse; margin:0 0 24px; }
 /* The cell carries a solid bgcolor attribute for the Drive→Docs PDF (gradients
    don't survive that conversion); this gradient is only for the browser preview. */
@@ -229,6 +259,15 @@ table.campaigns th, table.campaigns td { border:1px solid #dfe3e8; padding:8px 1
   text-align:right; }
 table.campaigns thead th { background:#f6f7f9; font-size:13px; }
 table.campaigns td { font-size:13px; }
+/* KPI cards — coloured cells with white text; spacing via a surface gap so the
+   cells read as separate tiles. */
+table.kpis { border-collapse:separate; border-spacing:8px; }
+table.kpis td.kpi { width:33%; padding:16px 14px; border-radius:10px;
+  color:#ffffff; text-align:center; }
+.kpi-num { font-size:22px; font-weight:700; }
+.kpi-lbl { font-size:13px; opacity:.92; }
+.chart { margin:6px 0 4px; }
+.chart img { max-width:100%; height:auto; }
 .ai p { font-size:14px; line-height:1.85; margin:0 0 10px; }
 """
 
