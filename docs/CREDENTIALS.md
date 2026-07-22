@@ -87,6 +87,27 @@ updates"). It should be true, not decorative.
 > ManyChat's API — not Meta's Cloud API directly. That's a one-way door worth knowing
 > before connecting it.
 
+### Smoove → ManyChat webhook (T12)
+
+A separate AWS Lambda receives a lead from **Smoove** (`{f_name, cellphone, msg}`),
+finds/creates the ManyChat contact, and triggers the Flow named by `msg`.
+
+**`msg` → Flow mapping.** `msg` names an env var: `msg="ai_agents"` resolves to
+`MANYCHAT_FLOW_AI_AGENTS`. Add a new message type by adding a new
+`MANYCHAT_FLOW_<MSG>` variable (uppercased, non-alphanumerics → `_`) — no code
+change. An unmapped `msg` is **rejected**, never sent to a default.
+→ `MANYCHAT_FLOW_AI_AGENTS` (and one per additional `msg` value)
+
+**Webhook token (optional).** The Smoove endpoint is public. Left empty it is open —
+anyone who finds the URL can create contacts and fire billed Flows. Set a random
+string and configure Smoove to send it as the `X-Smoove-Token` header (or `?token=`
+in the URL) to require it. Generate with:
+`python -c "import secrets;print(secrets.token_urlsafe(32))"`
+→ `SMOOVE_WEBHOOK_TOKEN`
+
+The webhook URL to give Smoove is the `SmooveWebhookUrl` stack output after deploy.
+Full operator steps: `docs/OPERATIONS.md` → "חיבור Smoove ל-WhatsApp (ManyChat)".
+
 ## 4. Google Workspace — Contacts, Drive, Forms
 
 We do the technical setup: create a Google Cloud project, enable the Drive /

@@ -10,6 +10,7 @@ Routes:
   POST /crm/status      -> T2/T5 by sub_status        (body: {"client_id","sub_status"})
   POST /forms/submit    -> T3 social_prep             (body: {"client_id"})
   POST /clickup/task    -> T9 clickup_to_claude       (body: {"task_id"})
+  POST /smoove          -> smoove_to_manychat         (body: {"f_name","cellphone","msg"})
 
 Run:
     python -m src.webhook_server            # live
@@ -38,11 +39,17 @@ def _dispatch(path: str, body: dict[str, Any]) -> dict[str, Any]:
         clickup_to_claude,
         lead_to_contacts,
         onboarding,
+        smoove_to_manychat,
         social_prep,
     )
 
     if path == "/crm/new-lead":
         return lead_to_contacts.run(body["client_id"], dry_run=DRY_RUN)
+    if path == "/smoove":
+        return smoove_to_manychat.run(
+            body.get("f_name", ""), body.get("cellphone", ""), body.get("msg", ""),
+            dry_run=DRY_RUN,
+        )
     if path == "/crm/status":
         sub = body.get("sub_status")
         if sub == SUB_SIGNED:

@@ -136,6 +136,39 @@ Parameters:
     Type: String
     Default: "https://graph.facebook.com/v21.0"
     Description: Meta Graph API base URL. Bump the version here when Meta deprecates one.
+  ManyChatApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      ManyChat API key (Settings → API). Powers the Smoove → ManyChat webhook:
+      find/create the WhatsApp contact and trigger a Flow. Needs a paid ManyChat
+      plan. Empty until Dror provides it — the Smoove endpoint then only works in
+      WEBHOOK_DRY_RUN=1.
+  ManyChatConsentPhrase:
+    Type: String
+    Default: ""
+    Description: >
+      Meta's required opt-in proof, recorded when a contact is created via the API.
+      Must truthfully describe how the person consented to WhatsApp messages.
+  ManyChatBaseUrl:
+    Type: String
+    Default: "https://api.manychat.com"
+  ManyChatFlowAiAgents:
+    Type: String
+    Default: ""
+    Description: >
+      ManyChat Flow id sent when Smoove posts msg="ai_agents". The msg→Flow map is
+      env-driven: a new message type is a new MANYCHAT_FLOW_<MSG> variable, no code
+      change. An unmapped msg is rejected rather than sent to a default.
+  SmooveWebhookToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      Optional shared secret for the Smoove endpoint. Empty = open (anyone who
+      finds the URL can create contacts and fire billed Flows). Set it, and have
+      Smoove send it as the X-Smoove-Token header (or ?token=), to require auth.
   WebhookDryRun:
     Type: String
     Default: "1"
@@ -263,6 +296,46 @@ Resources:
             Path: /questionnaire
             Method: POST
 
+  # A separate API + function for Smoove: a different source, payload and blast
+  # radius from the ClickUp webhook, deliberately kept standalone so one cannot
+  # affect the other.
+  SmooveApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+
+  SmooveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dror-smoove-${Stage}"
+      CodeUri: ../
+      Handler: src.smoove_handler.lambda_handler
+      Description: Smoove lead -> find/create ManyChat contact -> trigger a Flow.
+      Environment:
+        Variables:
+          MANYCHAT_API_KEY: !Ref ManyChatApiKey
+          MANYCHAT_BASE_URL: !Ref ManyChatBaseUrl
+          MANYCHAT_CONSENT_PHRASE: !Ref ManyChatConsentPhrase
+          MANYCHAT_FLOW_AI_AGENTS: !Ref ManyChatFlowAiAgents
+          SMOOVE_WEBHOOK_TOKEN: !Ref SmooveWebhookToken
+      Policies:
+        # Dedup retries across instances, and log to the run-log so Smoove leads
+        # show up in the dashboard and daily email like every other automation.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RunLogTable
+      Events:
+        SmooveWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SmooveApi
+            Path: /smoove
+            Method: POST
+
   RunLogTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -375,6 +448,11 @@ Outputs:
       Button endpoint. In each Button field's Automation, Call webhook to
       <this>?action=send_quote with header X-Automation-Token.
     Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/action"
+  SmooveWebhookUrl:
+    Description: >
+      Point Smoove's HTTP/webhook action here (POST). If SmooveWebhookToken is set,
+      add the X-Smoove-Token header (or ?token=) to the call.
+    Value: !Sub "https://${SmooveApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/smoove"
   IdempotencyTableName:
     Value: !Ref IdempotencyTable
   RunLogTableName:

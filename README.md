@@ -37,6 +37,7 @@ run live.
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
 | T10 | `daily_email` | Scheduled: end of day | `python -m src.automations.daily_email --dry-run` |
 | T11 | `dashboard` | Always on | `python -m src.dashboard --dry-run` |
+| T12 | `smoove_to_manychat` | Webhook: Smoove lead | `python -m src.automations.smoove_to_manychat --first-name דנה --phone 0501234567 --msg ai_agents --dry-run` |
 
 `daily_summary` (the WhatsApp version of T10) is superseded by `daily_email` — see
 the 24-hour-window note in [`CLAUDE.md`](CLAUDE.md).
@@ -82,6 +83,7 @@ python -m src.webhook_server --dry-run  # dispatch automations in dry-run
 | ClickUp: new lead | `POST /crm/new-lead` | T1 |
 | ClickUp: status change | `POST /crm/status` | T2 (initial meeting) / T5 (signed) |
 | ClickUp: task | `POST /clickup/task` | T9 |
+| Smoove: lead | `POST /smoove` | T12 (find/create ManyChat contact → Flow) |
 
 **The receiver has no authentication of its own.** Put it behind a reverse proxy
 with auth before exposing it publicly — anyone who can reach `/crm/status` can

@@ -95,6 +95,7 @@ logging, and a `--dry-run` mode.
 | 9 | **ClickUp → Claude Code** (bonus) | Webhook (ClickUp task) | Turns a ClickUp task into a Claude Code work brief. |
 | 10 | **Daily report** | Scheduled (end of day) | Emails Dror everything the automations did that day (`daily_email`). |
 | 11 | **Dashboard** | Always on | Read-only web page over the run-log, grouped by subject, with links out. `src\dashboard.py`. |
+| 12 | **Smoove → ManyChat** | Webhook (Smoove: lead) | Standalone AWS Lambda (`src\smoove_handler.py`). Smoove POSTs `{f_name, cellphone, msg}`; find/create the ManyChat contact by phone and trigger the **Flow** named by `msg` (`msg`→`MANYCHAT_FLOW_<MSG>`, unmapped is rejected). Flow because the message is business-initiated → Meta-approved template only. |
 
 ## How they run
 
