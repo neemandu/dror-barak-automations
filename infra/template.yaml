@@ -161,6 +161,19 @@ Parameters:
       ManyChat Flow id sent when Smoove posts msg="ai_agents". The msg→Flow map is
       env-driven: a new message type is a new MANYCHAT_FLOW_<MSG> variable, no code
       change. An unmapped msg is rejected rather than sent to a default.
+  ManyChatFlow1142673:
+    Type: String
+    Default: ""
+    Description: >
+      ManyChat Flow id (flow_ns) sent when Smoove posts msg="1142673" — the leads
+      from Smoove list 1142673. flow_ns is the content..._... segment of the flow's
+      ManyChat URL (…/cms/files/<flow_ns>/edit), e.g. content20260723124130_896802.
+  ManyChatFlow889128:
+    Type: String
+    Default: ""
+    Description: >
+      ManyChat Flow id (flow_ns) sent when Smoove posts msg="889128" — the leads
+      from Smoove list 889128, e.g. content20260723124251_658385.
   SmooveWebhookToken:
     Type: String
     NoEcho: true
@@ -320,6 +333,10 @@ Resources:
           MANYCHAT_BASE_URL: !Ref ManyChatBaseUrl
           MANYCHAT_CONSENT_PHRASE: !Ref ManyChatConsentPhrase
           MANYCHAT_FLOW_AI_AGENTS: !Ref ManyChatFlowAiAgents
+          # msg=<list id> → the list's Flow. Smoove list 1142673 and 889128 each
+          # POST their own list id as msg; unmapped ids are rejected, not defaulted.
+          MANYCHAT_FLOW_1142673: !Ref ManyChatFlow1142673
+          MANYCHAT_FLOW_889128: !Ref ManyChatFlow889128
           SMOOVE_WEBHOOK_TOKEN: !Ref SmooveWebhookToken
       Policies:
         # Dedup retries across instances, and log to the run-log so Smoove leads

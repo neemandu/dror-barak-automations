@@ -98,6 +98,15 @@ finds/creates the ManyChat contact, and triggers the Flow named by `msg`.
 change. An unmapped `msg` is **rejected**, never sent to a default.
 → `MANYCHAT_FLOW_AI_AGENTS` (and one per additional `msg` value)
 
+**Routing by Smoove list.** Each Smoove list POSTs its **list id** as `msg`, so the
+list picks the Flow with no code change. The Flow id (`flow_ns`) is the
+`content..._...` segment of the flow's ManyChat URL (`…/cms/files/<flow_ns>/edit`):
+
+| Smoove list | `msg` | Env var | flow_ns |
+|---|---|---|---|
+| 1142673 | `1142673` | `MANYCHAT_FLOW_1142673` | `content20260723124130_896802` |
+| 889128 | `889128` | `MANYCHAT_FLOW_889128` | `content20260723124251_658385` |
+
 **Webhook token (optional).** The Smoove endpoint is public. Left empty it is open —
 anyone who finds the URL can create contacts and fire billed Flows. Set a random
 string and configure Smoove to send it as the `X-Smoove-Token` header (or `?token=`
