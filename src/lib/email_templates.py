@@ -54,6 +54,21 @@ TEMPLATES: dict[str, EmailTemplate] = {
         ),
         cta="למילוי השאלון",
     ),
+    # Chases an unfilled questionnaire. Without the answers the strategy and the
+    # social prep have nothing to work from, so the client is stuck at the start
+    # of the engagement they just paid for — worth two nudges.
+    "questionnaire_reminder": EmailTemplate(
+        subject="תזכורת — השאלון לבניית האסטרטגיה שלך",
+        body=(
+            "היי {client_name}\n"
+            "רק תזכורת קטנה — השאלון הקצר שלנו עדיין ממתין למילוי.\n"
+            "התשובות שלך הן הבסיס לאסטרטגיה, ובלעדיהן אנחנו לא יכולים להתחיל.\n"
+            "זה לוקח כמה דקות בלבד.\n"
+            "\n"
+            "דרור ברק"
+        ),
+        cta="למילוי השאלון",
+    ),
     # Chases an unsigned contract. Same link as the original — a client who lost
     # the first email can sign from this one. Gentle: it is a nudge, not a demand.
     "sign_reminder": EmailTemplate(

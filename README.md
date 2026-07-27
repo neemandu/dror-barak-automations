@@ -38,6 +38,8 @@ run live.
 | T10 | `daily_email` | Scheduled: end of day | `python -m src.automations.daily_email --dry-run` |
 | T11 | `dashboard` | Always on | `python -m src.dashboard --dry-run` |
 | T12 | `smoove_to_manychat` | Webhook: Smoove lead | `python -m src.automations.smoove_to_manychat --first-name דנה --phone 0501234567 --msg ai_agents --dry-run` |
+| — | `sign_reminders` | Scheduled: daily | `python -m src.automations.sign_reminders --dry-run` |
+| — | `questionnaire_reminders` | Scheduled: daily | `python -m src.automations.questionnaire_reminders --dry-run` |
 
 `daily_summary` (the WhatsApp version of T10) is superseded by `daily_email` — see
 the 24-hour-window note in [`CLAUDE.md`](CLAUDE.md).
@@ -64,6 +66,10 @@ HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 **Scheduled** — point cron / Windows Task Scheduler at the module. Examples:
 
 ```cron
+# Chase what clients owe us — signatures, then questionnaires. On AWS both run in
+# the one ReminderFunction schedule (src/scheduled.py::reminders_handler).
+0 9 * * * cd /path/to/dror_barak && python -m src.automations.sign_reminders
+5 9 * * * cd /path/to/dror_barak && python -m src.automations.questionnaire_reminders
 # Daily report to Dror — every day 19:00
 0 19 * * * cd /path/to/dror_barak && python -m src.automations.daily_email
 # Campaign summaries — reports the previous (closed) month; run 1st 08:00.
@@ -110,7 +116,7 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 278 tests: infra, dashboard/auth, and a dry-run test per automation
+python -m pytest        # 327 tests: infra, dashboard/auth, and a dry-run test per automation
 ```
 
 Dry-run is not proof on its own. If you change something with a real runtime

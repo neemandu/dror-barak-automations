@@ -87,3 +87,53 @@ def ensure(crm: Any, client: dict[str, Any], *, dry_run: bool = False) -> dict[s
     # the next run will create again.
     crm.update_fields(client_id, drive_folder_url=folder["webViewLink"])
     return {"id": folder["id"], "url": folder["webViewLink"], "created": True}
+
+
+# The shape of every client folder, so Dror finds the same four places in each
+# one. Names are what he calls them, and are the identity of the subfolder —
+# renaming one here makes the next run create it again alongside the old.
+SUBFOLDERS = ("חוזים", "אסטרטגיה", "דוחות קמפיין", "הקלטות")
+
+#: The subfolder whose link goes in the `נתיב הקלטות` field.
+RECORDINGS_SUBFOLDER = "הקלטות"
+
+
+def ensure_subfolders(google: Any, folder_id: str, *, dry_run: bool = False) -> dict[str, dict[str, str]]:
+    """Create the standard subfolders under a client folder, once.
+
+    Idempotent by name: existing subfolders are reused, so a re-run adds nothing.
+    Returns ``{name: {"id", "url", "created"}}``.
+    """
+    if dry_run:
+        return {
+            name: {
+                "id": f"drive-sub-{index}-mock",
+                "url": f"https://drive.google.com/drive/folders/drive-sub-{index}-mock",
+                "created": True,
+            }
+            for index, name in enumerate(SUBFOLDERS)
+        }
+
+    by_name = {
+        str(f.get("name")): f
+        for f in google.list_folder(folder_id)
+        if f.get("mimeType") == FOLDER_MIME
+    }
+    out: dict[str, dict[str, str]] = {}
+    for name in SUBFOLDERS:
+        found = by_name.get(name)
+        if found:
+            out[name] = {
+                "id": str(found["id"]),
+                "url": f"https://drive.google.com/drive/folders/{found['id']}",
+                "created": False,
+            }
+            continue
+        made = google.create_folder(name, folder_id)
+        out[name] = {
+            "id": str(made["id"]),
+            "url": str(made.get("webViewLink")
+                       or f"https://drive.google.com/drive/folders/{made['id']}"),
+            "created": True,
+        }
+    return out

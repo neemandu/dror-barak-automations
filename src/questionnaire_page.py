@@ -145,6 +145,10 @@ def _finalise(crm: CrmClient, client_id: str, client: dict[str, Any],
         _kick_off_social(client_id, answers, dry_run=True)
         return
 
+    # Answered — stop the chase job before anything that could fail, so a Drive
+    # error can never turn into a reminder for a form the client just filled.
+    signing.clear_questionnaire_pending(client_id)
+
     folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=False)
     doc = pdf.html_to_google_doc(doc_html, f"שאלון אסטרטגיה — {name}", folder["id"])
     link = doc.get("webViewLink", "")

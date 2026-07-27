@@ -52,6 +52,8 @@ _ACTION_RULES: tuple[tuple[str, str], ...] = (
     ("message", "whatsapp"),
     ("questionnaire", "whatsapp"),
     ("campaign", "meta"),
+    # Onboarding's ad-account check: a Meta matter, not a Drive one.
+    ("meta_account", "meta"),
     ("task", "clickup"),
     ("lead", "clickup"),
     ("contact", "clickup"),
@@ -67,6 +69,9 @@ _AUTOMATION_RULES: dict[str, str] = {
     "send_questionnaire": "whatsapp",
     "send_quote": "quotes",
     "onboarding": "drive",
+    # Both chase jobs log a bare `reminder_sent`, which no action rule matches.
+    "sign_reminders": "quotes",
+    "questionnaire_reminders": "whatsapp",
     "campaign_summary": "meta",
     "social_prep": "ai",
     "strategy_bot": "ai",

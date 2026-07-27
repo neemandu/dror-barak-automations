@@ -72,6 +72,57 @@ class GoogleClient(BaseClient):
         )
         return resp.json()
 
+    def list_folder(self, parent_id: str) -> list[dict[str, Any]]:
+        """The folder's own (non-trashed) children — ``id``, ``name``, ``mimeType``.
+
+        What makes onboarding re-runnable: it copies templates and creates
+        subfolders into a folder that may already hold them (a retry after a
+        half-finished run, or Dror pressing the button again). Asking Drive what
+        is already there is cheaper and more honest than a store of what we think
+        we did.
+        """
+        if self.dry_run:
+            self._record("list_folder", parent_id=parent_id)
+            return []
+        out: list[dict[str, Any]] = []
+        page_token: Optional[str] = None
+        while True:
+            params = {
+                "q": f"'{parent_id}' in parents and trashed = false",
+                "fields": "nextPageToken,files(id,name,mimeType)",
+                "pageSize": "200",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            body = self._request(
+                "GET",
+                "https://www.googleapis.com/drive/v3/files",
+                headers=self._headers(),
+                params=params,
+            ).json()
+            out.extend(body.get("files", []))
+            page_token = body.get("nextPageToken")
+            if not page_token:
+                return out
+
+    def file_name(self, file_id: str) -> str:
+        """A file's own name — so a copy can be called after its template rather
+        than after its 33-character Drive id."""
+        if self.dry_run:
+            self._record("file_name", file_id=file_id)
+            return f"תבנית {file_id}"
+        return str(
+            self._request(
+                "GET",
+                f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                headers=self._headers(),
+                params={"fields": "name", "supportsAllDrives": "true"},
+            ).json().get("name")
+            or file_id
+        )
+
     def copy_file(self, file_id: str, new_name: str, parent_id: str) -> dict[str, Any]:
         if self.dry_run:
             self._record(

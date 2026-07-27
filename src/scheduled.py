@@ -15,11 +15,30 @@ from .lib import config
 
 
 def reminders_handler(event: dict[str, Any] | None = None, context: Any = None) -> dict[str, Any]:
-    """Daily: chase clients who were sent a contract but haven't signed."""
-    config.load_dotenv()
-    from .automations import sign_reminders
+    """Daily: chase what clients still owe us — a signature, then a questionnaire.
 
-    return sign_reminders.run()
+    Both chases in one invoke: they run on the same daily cadence and each is a
+    handful of API calls, so a second scheduled function would be a second thing
+    to deploy, watch and pay for. They are independent — one failing must not
+    silence the other, which is why the second is not simply appended after the
+    first's return.
+    """
+    config.load_dotenv()
+    from .automations import questionnaire_reminders, sign_reminders
+
+    out: dict[str, Any] = {}
+    for key, job in (("signatures", sign_reminders), ("questionnaires", questionnaire_reminders)):
+        try:
+            out[key] = job.run()
+        except Exception as exc:  # noqa: BLE001
+            out[key] = {"error": str(exc)}
+            # Into the run-log too: a job that died whole logs nothing of its own,
+            # and Lambda's return value is not somewhere Dror ever looks.
+            from .automations.base import Automation
+
+            Automation("reminders").log_action(
+                f"{key}_job_failed", "error", detail=str(exc))
+    return out
 
 
 def campaign_report_handler(event: dict[str, Any] | None = None, context: Any = None) -> dict[str, Any]:

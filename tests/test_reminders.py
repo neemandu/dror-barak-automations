@@ -1,8 +1,8 @@
-"""Tests for signature reminders.
+"""Tests for the two chase jobs — signatures, and strategy questionnaires.
 
 The failure that costs money here is the wrong cadence: chasing a prospect too
-hard, or reminding a client who already signed. So the tests care most about
-*when* a reminder fires and *when it stops*.
+hard, or reminding a client who already signed (or already answered). So the
+tests care most about *when* a reminder fires and *when it stops*.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from src.automations import sign_reminders
+from src.automations import questionnaire_reminders, sign_reminders
 from src.lib import signing
 
 
@@ -131,3 +131,74 @@ def test_one_failure_does_not_stop_the_rest(read_log, monkeypatch):
     result = sign_reminders.run(dry_run=True)
     assert len(calls) == 2, "the second client must still be chased"
     assert "reminder_failed" in {e["action"] for e in read_log()}
+
+
+# ------------------------------------------- the questionnaire chase (T5)
+
+
+def test_questionnaire_is_not_chased_before_three_days():
+    assert questionnaire_reminders._due(pending(2), time.time()) is None
+
+
+def test_questionnaire_first_reminder_at_three_days():
+    assert questionnaire_reminders._due(pending(3), time.time()) == 1
+
+
+def test_questionnaire_second_reminder_at_seven_days():
+    assert questionnaire_reminders._due(pending(7, reminders_sent=1), time.time()) == 2
+
+
+def test_questionnaire_chase_stops_after_two():
+    assert questionnaire_reminders._due(pending(30, reminders_sent=2), time.time()) is None
+
+
+def test_answering_the_questionnaire_stops_the_chase(monkeypatch, read_log):
+    from src.lib import emails
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "list_by_sub_status", lambda self, s: [
+        {"id": "c1", "name": "מכללת אלפא", "email": "a@b.co"}])
+    signing._put_pending("questpending:c1",
+                         {"client_id": "c1", "issued_at": int(time.time() - 4 * DAY),
+                          "reminders_sent": 0})
+    sent = []
+    monkeypatch.setattr(emails, "send_template", lambda name, to, **k: sent.append((name, to)))
+
+    assert questionnaire_reminders.run(dry_run=True)["reminded"] == 1
+    assert sent == [("questionnaire_reminder", "a@b.co")]
+
+    # The form comes back: the record goes, and so does the chase.
+    signing.clear_questionnaire_pending("c1")
+    sent.clear()
+    assert questionnaire_reminders.run(dry_run=True)["reminded"] == 0
+    assert sent == []
+
+
+def test_a_client_who_never_answers_is_escalated_once_then_left_alone(monkeypatch, read_log):
+    from src.lib.clients.crm import CrmClient
+
+    # A live run (dry-run deliberately touches no store), with the CRM read
+    # stubbed out — the give-up path sends nothing, it only writes.
+    monkeypatch.setenv("CLICKUP_API_TOKEN", "fake-token")
+    monkeypatch.setenv("CLICKUP_LIST_ID", "fake-list")
+    monkeypatch.setattr(CrmClient, "list_by_sub_status", lambda self, s: [
+        {"id": "c1", "name": "מכללת אלפא", "email": "a@b.co"}])
+    signing._put_pending("questpending:c1",
+                         {"client_id": "c1", "issued_at": int(time.time() - 12 * DAY),
+                          "reminders_sent": 2})
+
+    questionnaire_reminders.run(dry_run=False, now=time.time())
+    entry = next(e for e in read_log() if e["action"] == "questionnaire_unanswered")
+    assert entry["status"] == "error", "Dror should see this in the daily email"
+    # And the record is gone, so tomorrow's run says nothing more.
+    assert signing.get_questionnaire_pending("c1") is None
+
+
+def test_an_onboarded_client_with_no_record_is_left_alone(monkeypatch, read_log):
+    # Onboarded before the chase existed, or already answered. Either way there is
+    # nothing to time a reminder from, and guessing would email them at random.
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "list_by_sub_status", lambda self, s: [
+        {"id": "c9", "name": "בטא", "email": "x@y.co"}])
+    assert questionnaire_reminders.run(dry_run=True)["reminded"] == 0

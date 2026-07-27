@@ -4,7 +4,7 @@ See `CLAUDE.md` for the full description of each automation. "Done" means **logi
 complete + dry-run verified**; live runs additionally need the credentials in
 `docs/CREDENTIALS.md`.
 
-`python -m pytest` → 278 passing.
+`python -m pytest` → 327 passing.
 
 ## Backlog
 
@@ -23,7 +23,12 @@ is unaffected — these are the adapters underneath them.
   signature, store the PDF + audit trail (IP, timestamp, hash) in Drive, write the
   link back to ClickUp. Retire `src/lib/clients/fillout.py`.
 - [ ] **Replace onboarding's "open a WhatsApp channel" step.** The official API
-  cannot create groups; `onboarding.py` still calls `create_group`.
+  cannot create groups, so the `create_group` call is gone — but nothing took its
+  place: a newly onboarded client gets the questionnaire email and no WhatsApp at
+  all. The replacement is a Meta-approved welcome **Flow** sent through ManyChat,
+  the same shape as T12. Deferred deliberately (Dror's call) until the Flow copy
+  exists and is approved; `whatsapp_templates.onboarding_welcome` is the draft
+  wording, currently unused.
 - [x] **Point `campaign_summary` at the Meta Ads API** for real campaign numbers.
   Done: `src/lib/clients/meta_ads.py` + `src/lib/campaign_metrics.py` (insights →
   per-campaign + totals), rendered to a PDF from `templates/campaign_report_he.html`
@@ -31,6 +36,10 @@ is unaffected — these are the adapters underneath them.
   per-client (`חשבון מודעות Meta` field), scheduled monthly on the 1st with a
   self-invoke fan-out (`src/scheduled.py::campaign_report_handler`). Verify a live
   account with `python -m src.tools.check_meta --account act_…`.
+- [ ] **File the signed contract into the `חוזים` subfolder.** Onboarding now gives
+  every client folder four subfolders, but the signing page runs *before* it and
+  drops the signed PDF in the folder root. Small and cosmetic — it needs signing to
+  call `client_folder.ensure_subfolders` too, or to move the file afterwards.
 - [ ] **Move the run-log to DynamoDB.** It is a local JSONL file, and Lambda's
   filesystem is ephemeral — so on AWS it vanishes between invocations. It is the
   only source for the dashboard *and* the daily email, so both will be empty until
@@ -59,7 +68,17 @@ is unaffected — these are the adapters underneath them.
 - [x] **T2 — Send questionnaire.** `src/automations/send_questionnaire.py`.
 - [x] **T3 — Social-media prep report (AI).** `src/automations/social_prep.py`.
 - [x] **T4 — Send quote + capture signature.** `src/automations/send_quote.py`.
-- [x] **T5 — Onboarding (central).** `src/automations/onboarding.py`.
+- [x] **T5 — Onboarding (central).** `src/automations/onboarding.py`. Hardened
+  since: it now promotes the client to **`active`** as well as `in_work` (the
+  monthly report iterates `list_active_clients`, so `in_work` alone meant no
+  report, silently), gives the Drive folder its four standard subfolders and
+  records the recordings path, copies templates under their own names and skips
+  ones already in the folder (so a retry is safe and a bad id no longer takes the
+  questionnaire down with it), flags a missing Meta ad account on the task while
+  it is cheap to fix, and leaves a summary comment on the ClickUp task.
+- [x] **Questionnaire chase.** `src/automations/questionnaire_reminders.py` — 3
+  and 7 days, then one escalation to Dror and stop. Shares the daily
+  `ReminderFunction` schedule with `sign_reminders`.
 - [x] **T7 — Monthly campaign summary.** `src/automations/campaign_summary.py`.
 - [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`.
 - [x] **T9 — ClickUp → Claude Code (bonus).** `src/automations/clickup_to_claude.py`.

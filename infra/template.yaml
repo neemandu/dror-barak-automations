@@ -385,7 +385,10 @@ Resources:
       FunctionName: !Sub "dror-reminders-${Stage}"
       CodeUri: ../
       Handler: src.scheduled.reminders_handler
-      Description: Daily — chase unsigned contracts at 2 and 4 days.
+      Description: >-
+        Daily — chase unsigned contracts (2 and 4 days) and unfilled strategy
+        questionnaires (3 and 7 days). One function: both are a handful of API
+        calls on the same cadence.
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
@@ -399,7 +402,7 @@ Resources:
           Properties:
             # 07:00 UTC = 09:00-10:00 Israel. A morning nudge, not a 3am one.
             Schedule: cron(0 7 * * ? *)
-            Description: Send signature reminders
+            Description: Send signature and questionnaire reminders
 
   CampaignReportFunction:
     Type: AWS::Serverless::Function

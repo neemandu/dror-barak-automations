@@ -76,6 +76,12 @@ decision for Dror, not a refactor to slip in.
 **`send_quote` is CLI/button-only, never automatic** — sending a client a
 contract is Dror's decision, not something a status change should trigger.
 
+**Both statuses matter, and they answer different questions.** The *secondary*
+status drives the funnel; the **primary** status is what `list_active_clients`
+filters on, and that is the list the monthly campaign report iterates. Onboarding
+therefore sets both (`active` + `in_work`) — a client advanced only to `in_work`
+looks fine on the task and silently never gets a report.
+
 ## Automations
 
 Each is code in `src\automations\`, configured via `.env`, with retry, structured
@@ -88,7 +94,8 @@ logging, and a `--dry-run` mode.
 | 2 | **Send questionnaire** | Webhook (ClickUp: `initial_meeting`) | WhatsApp the Google Forms questionnaire link. |
 | 3 | **Social-media prep report** | Webhook (Forms submit) / Manual | AI reads the social profiles from the questionnaire and writes a per-network prep report for Dror. Reused by #8. |
 | 4 | **Send quote + capture signature** | Manual + our signing page | Send a quote with a signature link; on signing, store the PDF in Drive and write the link back to ClickUp. |
-| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder, copy templates, open a WhatsApp channel, advance the status. |
+| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder + its standard subfolders, copy templates, email the strategy questionnaire (and chase it), flag a missing Meta ad account, promote the client to `active`/`in_work`, and summarise on the task. |
+| 5b | **Questionnaire chase** | Scheduled (daily) | Nudges an onboarded client who hasn't filled the questionnaire, at 3 and 7 days, then tells Dror and stops. Runs in the same daily job as the signature reminders (`src\scheduled.py::reminders_handler`). |
 | ~~6~~ | ~~Monthly payment requests~~ | — | **Removed.** Dror invoices clients himself; the system does not touch Morning. |
 | 7 | **Monthly campaign summary** | Scheduled (month end) / Manual | Pull the month's Meta Ads results, fill Dror's report template, add AI recommendations, send to Dror to approve → forward to client + save to Drive. |
 | 8 | **Strategy bot** | Manual | From the questionnaire answers: audience + competitors + digital presence → full strategy → Drive → notify Dror. Reuses #3. |

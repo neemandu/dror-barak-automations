@@ -206,6 +206,39 @@ def clear_pending(client_id: str) -> None:
     _delete_pending(f"signpending:{client_id}")
 
 
+# ---------------------------------------------------- pending questionnaires
+
+# The same three calls again for the strategy questionnaire onboarding emails.
+# Kept as its own key rather than a flag on the signing record: a client can be
+# chased for a signature and, weeks later, for a questionnaire, and one clearing
+# the other would silence a chase that had not finished.
+
+
+def mark_questionnaire_pending(client_id: str) -> None:
+    """Record that a client owes us questionnaire answers, for the chase job."""
+    _put_pending(f"questpending:{client_id}", {
+        "client_id": client_id,
+        "issued_at": int(time.time()),
+        "reminders_sent": 0,
+    })
+
+
+def get_questionnaire_pending(client_id: str) -> Optional[dict[str, Any]]:
+    return _get_pending(f"questpending:{client_id}")
+
+
+def bump_questionnaire_reminders(client_id: str, count: int) -> None:
+    rec = (get_questionnaire_pending(client_id)
+           or {"client_id": client_id, "issued_at": int(time.time())})
+    rec["reminders_sent"] = count
+    _put_pending(f"questpending:{client_id}", rec)
+
+
+def clear_questionnaire_pending(client_id: str) -> None:
+    """Called when the questionnaire is submitted — nothing left to chase."""
+    _delete_pending(f"questpending:{client_id}")
+
+
 def _put_pending(key: str, value: dict[str, Any]) -> None:
     table = config.get("IDEMPOTENCY_TABLE")
     if not table:
