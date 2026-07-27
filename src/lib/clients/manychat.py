@@ -15,6 +15,16 @@ Three operations, matching ManyChat's public REST API (``api.manychat.com``):
 Creating a subscriber via the API records ``MANYCHAT_CONSENT_PHRASE`` as the opt-in
 proof Meta requires — it must truthfully describe how the person consented.
 
+**ManyChat cannot search by WhatsApp number.** ``findBySystemField`` only searches
+the ``phone`` system field, and a contact created with ``whatsapp_phone`` leaves
+``phone`` empty — so the lookup misses it, while a second ``createSubscriber`` for
+the same number is refused with *"This WhatsApp ID already exists"*. Left alone
+that is a dead end: the contact can neither be found nor recreated, and every
+repeat lead 500s. So :meth:`create_subscriber` mirrors the number into ``phone``
+right after creating (``updateSubscriber``), and :meth:`ensure_subscriber` treats
+the "already exists" refusal as "look again". Confirmed live against ManyChat,
+2026-07-27.
+
 Dry-run records the intended call and returns a canned response, so the whole
 lead → contact → message path runs with no ManyChat account and no network.
 
@@ -28,7 +38,10 @@ from typing import Any, Optional
 
 from .. import config
 from ..http import HttpError
+from ..logging_setup import get_logger
 from .base import BaseClient
+
+log = get_logger("manychat")
 
 
 def to_e164(raw: str, default_cc: str = "972") -> str:
@@ -78,8 +91,13 @@ class ManyChatClient(BaseClient):
     def find_subscriber(self, phone: str) -> Optional[str]:
         """Return the subscriber id for ``phone``, or ``None`` if not found.
 
-        ManyChat answers a miss with a 4xx rather than an empty success, so a
-        non-retryable client error here means "no such subscriber", not a failure.
+        A miss is a 200 with ``data: []``; ManyChat also answers some bad lookups
+        with a 4xx, which means "no such subscriber" rather than a failure. A hit
+        comes back as an object, but the same endpoint returns a list for other
+        search fields — accept both rather than silently miss.
+
+        Only the ``phone`` system field is searched: see the module docstring for
+        why every contact we create carries its WhatsApp number there too.
         """
         if self.dry_run:
             self._record("find_subscriber", phone=phone)
@@ -94,9 +112,11 @@ class ManyChatClient(BaseClient):
                 return None
             raise
         data = (resp.json() or {}).get("data")
-        if not data:
+        if isinstance(data, list):
+            data = data[0] if data else None
+        if not isinstance(data, dict):
             return None
-        sub_id = data.get("id") if isinstance(data, dict) else None
+        sub_id = data.get("id")
         return str(sub_id) if sub_id else None
 
     def create_subscriber(self, phone: str, first_name: str = "") -> str:
@@ -125,18 +145,64 @@ class ManyChatClient(BaseClient):
             raise RuntimeError(
                 f"ManyChat createSubscriber returned no id for {phone}: {resp.text[:300]}"
             )
+        self._mirror_phone(str(sub_id), phone)
         return str(sub_id)
+
+    def _mirror_phone(self, subscriber_id: str, phone: str) -> None:
+        """Copy the WhatsApp number into the ``phone`` field, so we can find it again.
+
+        ``createSubscriber`` ignores ``phone`` when the contact is created from a
+        WhatsApp number, so this is a second call. ``has_opt_in_sms`` stays false —
+        the number is stored and searchable without claiming an SMS opt-in nobody
+        gave.
+
+        A failure here is logged, not raised: the Flow the lead is waiting for
+        still goes out. The cost is that this one contact stays unfindable, which
+        :meth:`ensure_subscriber` reports clearly if the same lead comes back.
+        """
+        url = f"{self.base_url}/fb/subscriber/updateSubscriber"
+        body = {
+            "subscriber_id": int(subscriber_id),
+            "phone": phone,
+            "has_opt_in_sms": False,
+            "consent_phrase": self.consent_phrase,
+        }
+        try:
+            self._request("POST", url, headers=self._headers(), json=body)
+        except Exception as exc:  # noqa: BLE001 - never block the send
+            log.warning(
+                "phone_mirror_failed",
+                extra={"subscriber_id": subscriber_id, "phone": phone, "error": str(exc)},
+            )
 
     def ensure_subscriber(self, phone: str, first_name: str = "") -> tuple[str, bool]:
         """Find the subscriber for ``phone`` or create one.
 
         Returns ``(subscriber_id, created)`` — ``created`` is ``True`` only when a
         new contact was made, so the caller can log which path it took.
+
+        ManyChat refuses a create for a WhatsApp number it already holds. That is
+        the answer to "does this contact exist", not an error: look again (the
+        contact may have been created a moment ago by a concurrent delivery, or
+        before its number was mirrored into ``phone``).
         """
         existing = self.find_subscriber(phone)
         if existing:
             return existing, False
-        return self.create_subscriber(phone, first_name), True
+        try:
+            return self.create_subscriber(phone, first_name), True
+        except HttpError as exc:
+            if exc.status != 400 or "already exists" not in exc.body:
+                raise
+            found = self.find_subscriber(phone)
+            if found:
+                return found, False
+            raise RuntimeError(
+                f"ManyChat holds a WhatsApp contact for {phone} but cannot find it: "
+                "its 'phone' field is empty, and ManyChat cannot search by WhatsApp "
+                "number. Open the contact in ManyChat and set its Phone field to "
+                f"{phone}, or delete the contact and let it be recreated."
+            ) from exc
 
     def send_flow(self, subscriber_id: str, flow_ns: str) -> dict[str, Any]:
         """Trigger a Flow (a Meta-approved template) for a subscriber."""

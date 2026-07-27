@@ -13,6 +13,7 @@ import pytest
 
 from src import smoove_handler
 from src.automations import smoove_to_manychat
+from src.lib.http import HttpError
 from src.lib.clients.manychat import ManyChatClient, to_e164
 
 
@@ -85,6 +86,127 @@ def test_missing_phone_is_skipped(read_log, monkeypatch):
 def test_flow_env_key_slugifies_the_msg():
     assert smoove_to_manychat.flow_env_key("ai_agents") == "MANYCHAT_FLOW_AI_AGENTS"
     assert smoove_to_manychat.flow_env_key("New Lead!") == "MANYCHAT_FLOW_NEW_LEAD"
+
+
+# ------------------------------------------------- ManyChat's WhatsApp lookup gap
+#
+# ManyChat can only search the `phone` system field, but a contact created from a
+# WhatsApp number leaves it empty — so the contact is invisible to the lookup while
+# a second create is refused with "This WhatsApp ID already exists". Verified live
+# against ManyChat on 2026-07-27; these tests pin the way out.
+
+
+class _Resp:
+    """The bits of a requests.Response the client actually reads."""
+
+    def __init__(self, payload):
+        self._payload = payload
+        self.text = json.dumps(payload)
+
+    def json(self):
+        return self._payload
+
+
+@pytest.fixture
+def live_client(monkeypatch):
+    monkeypatch.setenv("MANYCHAT_API_KEY", "test-key")
+    monkeypatch.setenv("MANYCHAT_CONSENT_PHRASE", "נתן את מספרו בטופס")
+    return ManyChatClient()
+
+
+def _route(client, monkeypatch, handler):
+    """Route the client's HTTP at ``handler(method, url, json, params)``."""
+    calls = []
+
+    def fake(self, method, url, **kwargs):
+        calls.append((method, url, kwargs.get("json"), kwargs.get("params")))
+        return handler(method, url, kwargs.get("json"), kwargs.get("params"))
+
+    monkeypatch.setattr(ManyChatClient, "_request", fake)
+    return calls
+
+
+def test_created_contact_gets_its_number_mirrored_into_phone(live_client, monkeypatch):
+    # Without this second call the contact can never be found again.
+    def handler(method, url, body, params):
+        if url.endswith("createSubscriber"):
+            return _Resp({"data": {"id": "137818625"}})
+        return _Resp({"data": {"id": "137818625", "phone": body["phone"]}})
+
+    calls = _route(live_client, monkeypatch, handler)
+    assert live_client.create_subscriber("+972501234567", "דנה") == "137818625"
+
+    update = [c for c in calls if c[1].endswith("updateSubscriber")]
+    assert len(update) == 1, "the WhatsApp number must be mirrored into `phone`"
+    assert update[0][2]["phone"] == "+972501234567"
+    # No SMS opt-in is claimed on the lead's behalf just to make the search work.
+    assert update[0][2]["has_opt_in_sms"] is False
+
+
+def test_send_still_happens_when_mirroring_the_phone_fails(live_client, monkeypatch):
+    def handler(method, url, body, params):
+        if url.endswith("createSubscriber"):
+            return _Resp({"data": {"id": "137818625"}})
+        raise HttpError(400, url, '{"status":"error"}')
+
+    _route(live_client, monkeypatch, handler)
+    # The lead is waiting for a message; a bookkeeping call must not swallow it.
+    assert live_client.create_subscriber("+972501234567", "דנה") == "137818625"
+
+
+def test_existing_whatsapp_contact_is_found_not_recreated(live_client, monkeypatch):
+    # A hit comes back as an object; a miss as an empty list, both with HTTP 200.
+    def handler(method, url, body, params):
+        if url.endswith("findBySystemField"):
+            return _Resp({"data": {"id": "42", "phone": params["phone"]}})
+        raise AssertionError("must not create a contact that already exists")
+
+    _route(live_client, monkeypatch, handler)
+    assert live_client.ensure_subscriber("+972501234567") == ("42", False)
+
+
+def test_find_accepts_a_list_payload(live_client, monkeypatch):
+    _route(live_client, monkeypatch,
+           lambda *a: _Resp({"data": [{"id": "42"}]}))
+    assert live_client.find_subscriber("+972501234567") == "42"
+
+
+def test_missing_contact_is_a_200_with_an_empty_list(live_client, monkeypatch):
+    _route(live_client, monkeypatch, lambda *a: _Resp({"data": []}))
+    assert live_client.find_subscriber("+972501234567") is None
+
+
+def test_already_exists_makes_us_look_again(live_client, monkeypatch):
+    """The contact was created before we mirrored numbers, or by a parallel run."""
+    seen = {"finds": 0}
+
+    def handler(method, url, body, params):
+        if url.endswith("findBySystemField"):
+            seen["finds"] += 1
+            # Invisible on the first look, findable once the create tells us it exists.
+            return _Resp({"data": {"id": "77"} if seen["finds"] > 1 else []})
+        raise HttpError(
+            400, url,
+            '{"details":{"messages":{"wa_id":{"message":'
+            '["This WhatsApp ID already exists: 972501234567"]}}}}',
+        )
+
+    _route(live_client, monkeypatch, handler)
+    assert live_client.ensure_subscriber("+972501234567") == ("77", False)
+
+
+def test_unfindable_existing_contact_says_what_to_do(live_client, monkeypatch):
+    def handler(method, url, body, params):
+        if url.endswith("findBySystemField"):
+            return _Resp({"data": []})
+        raise HttpError(400, url, '{"message":"This WhatsApp ID already exists: 972…"}')
+
+    _route(live_client, monkeypatch, handler)
+    with pytest.raises(RuntimeError) as exc:
+        live_client.ensure_subscriber("+972501234567")
+    # A dead end the operator can act on, not a bare 500.
+    assert "+972501234567" in str(exc.value)
+    assert "Phone field" in str(exc.value)
 
 
 # --------------------------------------------------------------------- the body

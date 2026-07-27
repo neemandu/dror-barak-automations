@@ -107,6 +107,20 @@ list picks the Flow with no code change. The Flow id (`flow_ns`) is the
 | 1142673 | `1142673` | `MANYCHAT_FLOW_1142673` | `content20260723124130_896802` |
 | 889128 | `889128` | `MANYCHAT_FLOW_889128` | `content20260723124251_658385` |
 
+**Two ManyChat facts learned from the live account (2026-07-27).**
+
+1. **Creating a WhatsApp contact needs a permission ManyChat grants on request.**
+   Until it was enabled, every create came back `400 … "Permission denied to import
+   wa_id. Please contact support to enable this feature"`. It is now enabled;
+   creation works.
+2. **ManyChat cannot search by WhatsApp number.** `findBySystemField` only searches
+   the `phone` field, which a WhatsApp-created contact leaves empty — so the contact
+   is invisible to the lookup while a second create is refused with *"This WhatsApp
+   ID already exists"*. The client therefore mirrors the number into `phone`
+   (`updateSubscriber`) right after creating, and treats "already exists" as "look
+   again". A contact created before that fix must have its Phone field filled in by
+   hand in ManyChat, or be deleted — see `docs/OPERATIONS.md`.
+
 **Webhook token (optional).** The Smoove endpoint is public. Left empty it is open —
 anyone who finds the URL can create contacts and fire billed Flows. Set a random
 string and configure Smoove to send it as the `X-Smoove-Token` header (or `?token=`
