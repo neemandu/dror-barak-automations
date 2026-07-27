@@ -140,3 +140,19 @@ def test_the_dashboard_and_the_daily_email_read_the_same_entries(read_log):
                                         "skipped": 0, "dry_run": 0}
     assert [s.key for s, _ in subjects.group_by_subject(entries)] == ["quotes", "meta"]
     assert len(subjects.failures(entries)) == 1
+
+
+# ------------------------------------------------------- test isolation
+
+
+def test_a_test_run_never_writes_to_the_production_table():
+    """Regression: the suite used to log into Dror's live DynamoDB table.
+
+    conftest *deleted* RUN_LOG_TABLE, but `config.load_dotenv` — which every
+    handler and CLI calls — puts a deleted key straight back from the developer's
+    .env via os.environ.setdefault. Blanking it instead is what holds.
+    """
+    from src.lib import config
+
+    config.load_dotenv()
+    assert type(run_log._store()).__name__ == "_FileStore"
