@@ -10,9 +10,10 @@ default_branch: main
 local_path: C:\Projects\dror_barak
 drive_folder: Clients/dror-barak
 aws:
-  account_id: ""
-  readonly_role: ""
+  account_id: "396278862627"
+  readonly_role: arn:aws:iam::396278862627:role/jarvis-readonly
   deploy_role: ""
+  external_id: jarvis-dror-barak
 systems:
   - aws
   - google-api
