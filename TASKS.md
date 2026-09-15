@@ -2,26 +2,60 @@
 
 See `CLAUDE.md` for the full description of each automation. "Done" means **logic
 complete + dry-run verified**; live runs additionally need the credentials in
-`docs/CREDENTIALS.md`.
+`docs/CREDENTIALS.md`. Last audited against production (run-log, Lambda metrics,
+ClickUp) on 2026-09-15.
 
-`python -m pytest` → 327 passing.
+`python -m pytest` → 342 passing.
+
+## Now — production is missing configuration, not code
+
+The stack (`dror-automations-dev`) has run live (`WebhookDryRun=0`) since 27.7, but
+several parameters are empty, so whole automations cannot complete. None of these
+needs code; most need a value from Dror.
+
+- [ ] **`DrorEmail` + `SmtpHost` / `SmtpUser` / `SmtpPassword`.** Nothing on AWS can
+  send email: not the strategy questionnaire after signing, not the signature
+  notification, not the report approval, not the daily digest, not the strategy
+  notice. Needs a Workspace **App Password** from Dror (`docs/CREDENTIALS.md`).
+- [ ] **`MetaAccessToken`.** Empty on the stack, so `CampaignReportFunction` died on
+  1.8 and 1.9 before reading a single campaign. A token exists in the local `.env`;
+  verify it with `python -m src.tools.check_meta` and pass it on the next deploy.
+- [ ] **`SmooveWebhookToken`.** Empty = the Smoove endpoint is open; anyone with the
+  URL can create contacts and fire billed WhatsApp Flows. Generate one, deploy it,
+  configure Smoove to send it as `X-Smoove-Token`.
+- [ ] **`DRIVE_TEMPLATE_IDS` is not a template parameter at all**, so onboarding on
+  AWS copies no templates and logs `no_templates`. Add the parameter (and decide
+  the template inventory — see Open Questions).
+- [ ] **Custom domain.** Signing links still go out under
+  `e3670c4ju8.execute-api.eu-central-1.amazonaws.com`. Finish `sign.drorbrk.co.il`
+  (`docs/CREDENTIALS.md` §7a) and set `SignBaseUrl`.
 
 ## Backlog
 
-Work created by the ClickUp / ManyChat / signing decisions. The automations' logic
-is unaffected — these are the adapters underneath them.
-
-- [ ] **Rewrite `CrmClient` against the ClickUp API.** `src/lib/clients/crm.py` is
-  still shaped around Taskey with provisional endpoints. ClickUp is the CRM now.
-  Needs the custom-field ids, which only exist once the clients list is built.
-- [ ] **Replace `GreenApiClient` with a ManyChat client.** Different model: messages
-  become Meta-approved templates sent as ManyChat Flows, addressed to subscribers
-  rather than raw phone numbers, with `consent_phrase` on contact creation.
-- [ ] **Rework `whatsapp_templates.py`.** Free-text bodies are no longer possible;
-  it becomes a map of approved template names → variables.
-- [ ] **Build the signing page** (replacing Fillout): render the quote, capture the
-  signature, store the PDF + audit trail (IP, timestamp, hash) in Drive, write the
-  link back to ClickUp. Retire `src/lib/clients/fillout.py`.
+- [ ] **Chromium on Lambda for the campaign report.** The PDF renders via headless
+  Chromium (`src/lib/pdf_chromium.py`); the stack has no layer and no
+  `PLAYWRIGHT_CHROMIUM_PATH`, so the monthly schedule cannot produce a report even
+  once the Meta token is set. The stack is **arm64** and the usual
+  `@sparticuz/chromium` layer is x86_64-only: either an arm64 Chromium build, or
+  move `CampaignReportFunction` alone to x86_64.
+- [ ] **Deploy the dashboard** — or decide it stays local. `src/dashboard.py` is a
+  stdlib server with in-memory sessions (`_sessions`), so on Lambda Dror would be
+  logged out at random; a signed cookie replaces it. Today Dror has no dashboard.
+- [ ] **A test stack.** There is one stack, named `dev`, and it is production. A
+  second stage (`Stage=test`, `WebhookDryRun=1`, a test ClickUp list) is the only
+  way to exercise a full flow against the real services without risking a client.
+- [ ] **Clean test rows out of the production run-log.** Entries from 16.7 with
+  automation `t` / `a`, and the dry-run Taskey migration, still show on the
+  dashboard and in the digest as if they happened.
+- [ ] **Keep client documents out of the Lambda package.** `CodeUri: ../` packages
+  the working folder: the 27.7 deploy shipped `docs/contract_source.txt`, Dror's
+  proposal PDF and call-notes DOCX into all four functions (replaced on 15.9 by a
+  build from a clean checkout). Add exclusions to the template, and purge the old
+  artifacts from the `aws-sam-cli-managed-default` bucket.
+- [ ] **Decide the initial-meeting questionnaire.** The original #2 (WhatsApp a
+  questionnaire on `פגישה ראשונית`) was replaced by the post-signing strategy
+  questionnaire; nothing fires on `פגישה ראשונית` today. Dror's call whether a
+  pre-quote step is wanted back, and over which channel.
 - [ ] **Replace onboarding's "open a WhatsApp channel" step.** The official API
   cannot create groups, so the `create_group` call is gone — but nothing took its
   place: a newly onboarded client gets the questionnaire email and no WhatsApp at
@@ -29,33 +63,14 @@ is unaffected — these are the adapters underneath them.
   the same shape as T12. Deferred deliberately (Dror's call) until the Flow copy
   exists and is approved; `whatsapp_templates.onboarding_welcome` is the draft
   wording, currently unused.
-- [x] **Point `campaign_summary` at the Meta Ads API** for real campaign numbers.
-  Done: `src/lib/clients/meta_ads.py` + `src/lib/campaign_metrics.py` (insights →
-  per-campaign + totals), rendered to a PDF from `templates/campaign_report_he.html`
-  via `src/lib/campaign_report.py`, emailed to Dror for approval. The ad account is
-  per-client (`חשבון מודעות Meta` field), scheduled monthly on the 1st with a
-  self-invoke fan-out (`src/scheduled.py::campaign_report_handler`). Verify a live
-  account with `python -m src.tools.check_meta --account act_…`.
-- [ ] **File the signed contract into the `חוזים` subfolder.** Onboarding now gives
-  every client folder four subfolders, but the signing page runs *before* it and
-  drops the signed PDF in the folder root. Small and cosmetic — it needs signing to
-  call `client_folder.ensure_subfolders` too, or to move the file afterwards.
-- [ ] **Move the run-log to DynamoDB.** It is a local JSONL file, and Lambda's
-  filesystem is ephemeral — so on AWS it vanishes between invocations. It is the
-  only source for the dashboard *and* the daily email, so both will be empty until
-  this moves. The interface is small (`record` / `read_all` / `read_since`), so it
-  is a backend swap behind the existing functions.
-- [ ] **Make the dashboard's sessions stateless** before it runs on Lambda. The
-  `_sessions` dict dies with each instance, so Dror would be logged out at random.
-  A signed cookie replaces it.
-- [ ] **Add a Chromium layer for the campaign report.** The report PDF renders via
-  headless Chromium (`src/lib/pdf_chromium.py`) for a full-bleed, crisp result the
-  Drive Docs path can't produce. Locally Playwright's bundled Chromium is used; on
-  Lambda attach a Chromium layer (e.g. sparticuz/chromium) and set
-  `PLAYWRIGHT_CHROMIUM_PATH` to its binary. Until then the monthly report can't
-  render on AWS, so it stays manual/local.
-- [ ] **Deploy the webhook stack** (`infra/template.yaml`) and register the webhook.
-  Deploy with `WebhookDryRun=1` first — real events, no side effects — then flip it.
+- [ ] **Rework `whatsapp_templates.py`.** Free-text bodies are no longer possible;
+  it becomes a map of approved template names → variables.
+- [ ] **File the signed contract into the `חוזים` subfolder.** Onboarding gives every
+  client folder four subfolders, but the signing page runs *before* it and drops the
+  signed PDF in the folder root. Small and cosmetic.
+- [ ] **Retire dead code from replaced systems:** `src/lib/clients/green_api.py`,
+  `fillout.py`, `daily_summary.py` (the WhatsApp digest), and the Morning field
+  mappings in `crm.py` / `subjects.py` / `docs/CLICKUP_SETUP.md`.
 - [ ] **Add auth to `webhook_server.py`**, the local stdlib receiver, or retire it
   now that the Lambda is the real entrypoint.
 
@@ -65,65 +80,74 @@ is unaffected — these are the adapters underneath them.
   retry/backoff, HTTP helper, run-log, subjects, template store, API clients — each
   with a dry-run/mock mode.
 - [x] **T1 — Lead → Google Contacts.** `src/automations/lead_to_contacts.py`.
-- [x] **T2 — Send questionnaire.** `src/automations/send_questionnaire.py`.
-- [x] **T3 — Social-media prep report (AI).** `src/automations/social_prep.py`.
-- [x] **T4 — Send quote + capture signature.** `src/automations/send_quote.py`.
-- [x] **T5 — Onboarding (central).** `src/automations/onboarding.py`. Hardened
-  since: it now promotes the client to **`active`** as well as `in_work` (the
-  monthly report iterates `list_active_clients`, so `in_work` alone meant no
-  report, silently), gives the Drive folder its four standard subfolders and
-  records the recordings path, copies templates under their own names and skips
-  ones already in the folder (so a retry is safe and a bad id no longer takes the
-  questionnaire down with it), flags a missing Meta ad account on the task while
-  it is cheap to fix, and leaves a summary comment on the ClickUp task.
+- [x] **T2 — Send questionnaire.** `src/automations/send_questionnaire.py` — now the
+  `שלח שאלון` re-send button, sharing one implementation with onboarding. The
+  `initial_meeting` trigger was retired with the move to our own form (see Backlog).
+- [x] **T3 — Social-media prep report (AI).** `src/automations/social_prep.py`, run
+  when the questionnaire is submitted.
+- [x] **T4 — Send quote + capture signature.** `src/automations/send_quote.py` +
+  `src/sign_page.py` (our own page at `/sign`, replacing Fillout).
+- [x] **T5 — Onboarding (central).** `src/automations/onboarding.py`. Promotes the
+  client to **`active`** as well as `in_work`, gives the Drive folder its four
+  standard subfolders and records the recordings path, copies templates under their
+  own names and skips ones already in the folder, flags a missing Meta ad account on
+  the task, emails the strategy questionnaire, and leaves a summary comment.
 - [x] **Questionnaire chase.** `src/automations/questionnaire_reminders.py` — 3
   and 7 days, then one escalation to Dror and stop. Shares the daily
   `ReminderFunction` schedule with `sign_reminders`.
-- [x] **T7 — Monthly campaign summary.** `src/automations/campaign_summary.py`.
-- [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`.
+- [x] **T7 — Monthly campaign summary.** `src/automations/campaign_summary.py`:
+  Meta Ads insights → PDF via `src/lib/campaign_report.py` → email to Dror for
+  approval; scheduled on the 1st with a self-invoke fan-out
+  (`src/scheduled.py::campaign_report_handler`). Blocked on AWS — see above.
+- [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`; notifies Dror by email.
 - [x] **T9 — ClickUp → Claude Code (bonus).** `src/automations/clickup_to_claude.py`.
-- [x] **T10 — Daily report to Dror.** `src/automations/daily_email.py` (email;
-  supersedes the WhatsApp `daily_summary.py`).
-- [x] **T11 — Dashboard.** `src/dashboard.py` — read-only, password-protected.
-- [x] **Webhook receiver.** `src/webhook_server.py`.
+- [x] **T10 — Daily report to Dror.** `src/automations/daily_email.py`, scheduled on
+  AWS as `DailyEmailFunction` (15.9). Supersedes the WhatsApp `daily_summary.py`.
+- [x] **T11 — Dashboard.** `src/dashboard.py` — read-only, password-protected, local.
+- [x] **T12 — Smoove → ManyChat.** `src/smoove_handler.py`; the one automation doing
+  real work every day (120 Flows since 22.7, no errors).
+- [x] **CrmClient against ClickUp** (`src/lib/clients/crm.py`, fields matched by
+  name), **ManyChat client** (`src/lib/clients/manychat.py`), **run-log on
+  DynamoDB** (`RunLogTable`), **signing page**, **webhook stack deployed** (15.7,
+  live since 27.7) and **ClickUp webhook registered**
+  (`src/tools/register_clickup_webhook.py`).
 - [x] **Taskey → ClickUp migration.** `src/tools/migrate_taskey_to_clickup.py`.
-- [x] **Credentials guide.** `docs/CREDENTIALS.md`.
-- [x] **ClickUp webhook receiver on AWS.** `src/lambda_handler.py` +
-  `infra/template.yaml` (API Gateway → Lambda → DynamoDB), with signature
-  verification and two layers of idempotency (`src/lib/idempotency.py`).
-- [x] **ClickUp webhook registration.** `src/tools/register_clickup_webhook.py`.
+- [x] **Credentials guide.** `docs/CREDENTIALS.md`. **Operator guide (Hebrew).**
+  `docs/OPERATIONS.md`.
 
 ---
 
 ## Decided
-
-Previously open, now settled:
 
 1. **CRM** — ClickUp replaces Taskey, whose API was never confirmed.
 2. **E-signature** — our own signing page replaces Fillout, to drop the monthly fee.
 3. **WhatsApp** — ManyChat on the official Meta Business API replaces Green API.
 4. **Campaign data** — the Meta Ads API (system-user token, `ads_read`).
 5. **Google auth** — service account with domain-wide delegation.
-6. **Dror's daily digest** — email, not WhatsApp.
+6. **Dror's daily digest and notifications** — email, not WhatsApp.
 7. **Dashboard scope** — read-only, shared password. Triggers deferred until Dror
    has used it.
 8. **Repo** — public, so Dror can work in it with his own Claude Code. Client
    documents and secrets stay out (see `CLAUDE.md` → Public repo).
+9. **Hosting** — AWS Lambda + API Gateway (eu-central-1), one SAM stack. Make is
+   dropped.
+10. **Questionnaire** — our own page, after signing, not a Google Form before the
+    quote.
 
 ## Open Questions
 
-1. **Hosting.** The signing page and the dashboard both need a public HTTPS home
-   with a real domain and certificate — Fillout used to provide this for signing.
-   Blocking both features.
+1. **Is Dror working in ClickUp?** The clients list holds one task and none was
+   created in the last 30 days. Every automation starts from a status change
+   there, so until it is the CRM in practice, nothing runs. The most important
+   question on this list.
 2. **WhatsApp templates.** Who writes the Hebrew and submits them to Meta for
-   approval? Nothing can send until they exist and are approved.
+   approval? The client-facing flows (welcome after onboarding, quote, reminders)
+   cannot exist until they do; today those go by email.
 3. **The per-client WhatsApp channel.** Impossible on the official API. What
    replaces it in onboarding?
-4. **ClickUp custom fields.** The field ids for status, price, Drive path and
-   contract link — needed by the CRM client and the migration tool.
-5. **Template inventory.** Which Drive template files exist (contract, quote,
-   strategy, campaign report) and their ids. Is the set fixed or per-client?
-6. **Anthropic billing.** Whose account and card.
-7. **NotebookLM.** The "last 5 videos" prep runs via the Anthropic API today.
+4. **Template inventory.** Which Drive template files exist (contract, quote,
+   strategy, campaign report) and their ids. `DRIVE_TEMPLATE_IDS` is empty
+   everywhere.
+5. **Anthropic billing.** Whose account and card.
+6. **NotebookLM.** The "last 5 videos" prep runs via the Anthropic API today.
    NotebookLM has no public API — confirm it stays out.
-9. **Make.** Orchestrator, or dropped? The build stands alone on cron + webhooks.

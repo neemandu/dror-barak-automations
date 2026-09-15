@@ -74,7 +74,9 @@ the step people skip.
 |---|---|
 | **Google Drive API** | Client folders, templates, signed PDFs |
 | **People API** | Saving a lead's phone to Contacts |
-| **Google Forms API** | Reading questionnaire answers |
+
+(No Forms API: the questionnaire is our own page on the stack, and its answers are
+saved to Drive as a Doc.)
 
 > Miss one and it fails only when that automation first runs — with a
 > "API has not been used in project..." error that names the API and a link to

@@ -16,7 +16,7 @@ up, no action needed from him.
 |---|---|---|---|
 | 1 | ClickUp (CRM) | `CLICKUP_API_TOKEN`, `CLICKUP_LIST_ID`, `CLICKUP_WEBHOOK_SECRET` | Dror / us |
 | 3 | ManyChat (WhatsApp) | `MANYCHAT_API_KEY`, flow ids, `MANYCHAT_CONSENT_PHRASE` | Dror + us |
-| 4 | Google Workspace | `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_IMPERSONATE_SUBJECT`, Drive ids, `QUESTIONNAIRE_URL` | Us + one share from Dror |
+| 4 | Google Workspace | `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_IMPERSONATE_SUBJECT`, Drive ids | Us + one share from Dror |
 | 5 | Meta Ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID` | Dror |
 | 6 | Anthropic | `ANTHROPIC_API_KEY` | Us or Dror (billing) |
 | 7 | Signing page | `SIGN_BASE_URL`, `SIGN_LINK_SECRET` | Us (needs a domain) |
@@ -55,10 +55,10 @@ register the webhook. Used to prove inbound webhooks are really from ClickUp.
 ManyChat plan.
 → `MANYCHAT_API_KEY`
 
-**Flow ids** — one per outbound message we send (questionnaire, quote, payment,
-onboarding, daily summary). Each flow's id is under its `⋯` menu in ManyChat.
-→ `MANYCHAT_FLOW_QUESTIONNAIRE`, `MANYCHAT_FLOW_QUOTE`, `MANYCHAT_FLOW_PAYMENT`,
-  `MANYCHAT_FLOW_ONBOARDING`, `MANYCHAT_FLOW_DAILY_SUMMARY`
+**Flow ids** — one per outbound WhatsApp message. Today the only Flows in use are
+the Smoove ones below; the client-facing flows (`MANYCHAT_FLOW_QUESTIONNAIRE`,
+`_QUOTE`, `_ONBOARDING`) are reserved names for when those templates are written
+and approved — until then those messages go by email.
 
 **Consent phrase** — Meta requires proof of opt-in when a contact is created through
 the API. This string is stored as that proof, so it must describe how the client
@@ -131,11 +131,12 @@ in the URL) to require it. Generate with:
 The webhook URL to give Smoove is the `SmooveWebhookUrl` stack output after deploy.
 Full operator steps: `docs/OPERATIONS.md` → "חיבור Smoove ל-WhatsApp (ManyChat)".
 
-## 4. Google Workspace — Contacts, Drive, Forms
+## 4. Google Workspace — Contacts, Drive
 
 We do the technical setup: create a Google Cloud project, enable the Drive /
-People / Forms APIs, create a **service account**, download its JSON key, and turn
-on domain-wide delegation so it can act as Dror.
+People APIs, create a **service account**, download its JSON key, and turn on
+domain-wide delegation so it can act as Dror. (The questionnaire is our own page
+on the stack, not a Google Form — nothing to configure for it.)
 
 **From Dror we need exactly one thing:** share the **clients parent folder** in
 Drive with the service-account email we send him, as **Editor**.
@@ -144,7 +145,6 @@ Drive with the service-account email we send him, as **Editor**.
 → `GOOGLE_IMPERSONATE_SUBJECT` (Dror's Workspace email)
 → `DRIVE_CLIENTS_PARENT_ID`, `DRIVE_TEMPLATE_IDS`, `DRIVE_DEFAULT_PARENT_ID` — open
 each folder in Drive; the id is the last part of the URL
-→ `QUESTIONNAIRE_URL` — the public link to the Google Form questionnaire
 
 ## 5. Meta Ads — campaign numbers for the monthly report
 

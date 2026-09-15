@@ -98,16 +98,16 @@ exists, and otherwise from the **task status**. Either works.
   lead→active pipeline becomes a kanban. It cannot do that with a field.
 - **Triggers.** ClickUp automations and webhooks fire natively on status change.
 
-Whichever is used, `לקוח פעיל` is **required** — the monthly billing run selects
-clients by it, and refuses to run rather than quietly bill nobody.
+Whichever is used, `לקוח פעיל` is **required** — the monthly campaign report
+selects clients by it; a client left on `ליד` silently never gets a report.
 
 ### Required custom fields
 
 | Field name | Type | Used by |
 |---|---|---|
 | `טלפון` | Phone | Google Contacts, every WhatsApp message |
-| `מחיר חודשי` | Number | The monthly payment request |
-| `סטטוס משני` | **Dropdown** | Triggers the questionnaire and onboarding |
+| `מחיר חודשי` | Number | The quote / contract (`send_quote` refuses without it) |
+| `סטטוס משני` | **Dropdown** | Triggers onboarding (on `חתם`) |
 
 `סטטוס משני` options, exactly these five:
 
@@ -125,13 +125,13 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 
 | Field name | Type | Used by |
 |---|---|---|
-| `מייל` / `אימייל` | Email | Sending the quote |
+| `מייל` / `אימייל` | Email | The quote, the strategy questionnaire and every reminder — in practice required |
 | `סוג שירות` | Text | Strategy bot, campaign report |
 | `תיקיית Drive` / `נתיב לגוגל דרייב` | **URL** | Onboarding writes the client's folder here |
 | `חוזה חתום` | **URL** | The signed contract link |
 | `נתיב הקלטות` | Text | Meeting recordings |
-| `סטטוס Morning` | Text | Whether the client exists in Morning |
-| `מזהה Morning` / `מזהה מורנינג` | Text | The Morning client id |
+| `סטטוס Morning` | Text | Historical — Morning is out of scope; nothing writes it |
+| `מזהה Morning` / `מזהה מורנינג` | Text | Historical, same |
 | `חשבון מודעות Meta` | Text | The client's Meta ad account (`act_…`) for the monthly campaign report |
 
 > **`חשבון מודעות Meta`** holds the ad account id, `act_` prefix or bare digits
@@ -218,7 +218,7 @@ its text, then configure its Automation as **Call webhook**:
 | Button text | `?action=` | Does |
 |---|---|---|
 | `שלח הצעת מחיר` | `send_quote` | Sends the quote with a signature link |
-| `שלח שאלון` | `send_questionnaire` | Re-sends the questionnaire link |
+| `שלח שאלון` | `send_questionnaire` | Emails the strategy-questionnaire link again (onboarding sends it first) |
 | `בנה דוח רשתות` | `social_prep` | Builds the social-media prep report |
 | `בנה אסטרטגיה` | `strategy_bot` | Builds the full strategy into Drive |
 | `בנה דוח קמפיין` | `campaign_summary` | Builds the monthly campaign report |
@@ -234,10 +234,8 @@ error if it failed. Dror pressed a button; he shouldn't have to wonder.
 > **Pressing twice.** A retried delivery of one press is de-duplicated. A *second,
 > deliberate* press sends again — which is correct: a revised quote must go out.
 
-> **What is deliberately not a button.** Onboarding (fires on `חתם`, and is guarded
-> so it can't create two Drive folders) and the monthly payment run — a button that
-> bills every active client sits one mis-tap from invoicing the whole list, and the
-> WhatsApp messages cannot be unsent. That stays CLI-only.
+> **What is deliberately not a button.** Onboarding — it fires on `חתם`, and is
+> guarded so it can't create two Drive folders; a manual re-run risks a second.
 
 > **On Free Forever:** button presses run ClickUp Automations, capped at **100
 > actions/month**. Fine for Dror's volume. Whether the button field itself consumes
@@ -268,12 +266,18 @@ until the required pieces exist. It never writes to ClickUp.
 
 ## Step 5 — webhooks
 
+In production one ClickUp webhook (registered with
+`python -m src.tools.register_clickup_webhook`) posts every event to the Lambda's
+`/clickup` route, which sorts them out itself. The routes below are the **local**
+`webhook_server.py` equivalents:
+
 | Event | Route | Fires |
 |---|---|---|
 | Task created in `לקוחות` | `POST /crm/new-lead` | Save the phone to Google Contacts |
-| `סטטוס משני` → `פגישה ראשונית` | `POST /crm/status` | Send the questionnaire |
 | `סטטוס משני` → `חתם` | `POST /crm/status` | Onboarding |
 | Task created in `משימות` | `POST /clickup/task` | Hand the task to Claude Code |
+
+`פגישה ראשונית` and `נשלח שאלון` are tracking statuses only — nothing fires on them.
 
 Point the ClickUp→Claude Code webhook at **`משימות` only**. Aimed at `לקוחות` it
 would fire on every client status change.

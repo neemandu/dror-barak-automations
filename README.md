@@ -29,14 +29,15 @@ run live.
 | Task | Module | Trigger | Manual / dry-run command |
 |---|---|---|---|
 | T1 | `lead_to_contacts` | Webhook: new ClickUp lead | `python -m src.automations.lead_to_contacts --client-id 42 --dry-run` |
-| T3 | `social_prep` | Webhook: form submit / manual | `python -m src.automations.social_prep --client-id 42 --dry-run` |
+| T2 | `send_questionnaire` | Button `שלח שאלון` / manual (onboarding sends it first) | `python -m src.automations.send_questionnaire --client-id 42 --dry-run` |
+| T3 | `social_prep` | Questionnaire submitted / button `בנה דוח רשתות` | `python -m src.automations.social_prep --client-id 42 --dry-run` |
 | T4 | `send_quote` | Manual send + signing webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
 | T5 | `onboarding` | Webhook: status → signed | `python -m src.automations.onboarding --client-id 42 --dry-run` |
 | T7 | `campaign_summary` | Scheduled: 1st of month / manual | `python -m src.automations.campaign_summary --client-id 42 --dry-run` (or `--all`) |
-| T8 | `strategy_bot` | Manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
+| T8 | `strategy_bot` | Button `בנה אסטרטגיה` / manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
-| T10 | `daily_email` | Scheduled: end of day | `python -m src.automations.daily_email --dry-run` |
-| T11 | `dashboard` | Always on | `python -m src.dashboard --dry-run` |
+| T10 | `daily_email` | Scheduled: daily (AWS `DailyEmailFunction`, 16:30 UTC) | `python -m src.automations.daily_email --dry-run` |
+| T11 | `dashboard` | Local only (not deployed) | `python -m src.dashboard --dry-run` |
 | T12 | `smoove_to_manychat` | Webhook: Smoove lead | `python -m src.automations.smoove_to_manychat --first-name דנה --phone 0501234567 --msg ai_agents --dry-run` |
 | — | `sign_reminders` | Scheduled: daily | `python -m src.automations.sign_reminders --dry-run` |
 | — | `questionnaire_reminders` | Scheduled: daily | `python -m src.automations.questionnaire_reminders --dry-run` |
@@ -61,6 +62,11 @@ HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 
 ## The three run modes
 
+**Production runs on AWS** (`infra/template.yaml`, stack `dror-automations-dev`):
+the ClickUp webhook, buttons, signing and questionnaire pages are one Lambda, Smoove
+is another, and the schedules below are EventBridge rules (`src/scheduled.py`). See
+[`CLAUDE.md`](CLAUDE.md) → "How they run". The modes below are the local equivalents.
+
 **Manual** — run any module directly, as in the table above.
 
 **Scheduled** — point cron / Windows Task Scheduler at the module. Examples:
@@ -70,7 +76,8 @@ HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 # the one ReminderFunction schedule (src/scheduled.py::reminders_handler).
 0 9 * * * cd /path/to/dror_barak && python -m src.automations.sign_reminders
 5 9 * * * cd /path/to/dror_barak && python -m src.automations.questionnaire_reminders
-# Daily report to Dror — every day 19:00
+# Daily report to Dror — every day 19:00. On AWS this is the DailyEmailFunction
+# schedule (16:30 UTC).
 0 19 * * * cd /path/to/dror_barak && python -m src.automations.daily_email
 # Campaign summaries — reports the previous (closed) month; run 1st 08:00.
 # On AWS this is the CampaignReportFunction schedule; --all covers every client.
@@ -87,7 +94,7 @@ python -m src.webhook_server --dry-run  # dispatch automations in dry-run
 | System event | Route | Automation |
 |---|---|---|
 | ClickUp: new lead | `POST /crm/new-lead` | T1 |
-| ClickUp: status change | `POST /crm/status` | T2 (initial meeting) / T5 (signed) |
+| ClickUp: status change | `POST /crm/status` | T5 (signed) |
 | ClickUp: task | `POST /clickup/task` | T9 |
 | Smoove: lead | `POST /smoove` | T12 (find/create ManyChat contact → Flow) |
 
@@ -116,7 +123,7 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 327 tests: infra, dashboard/auth, and a dry-run test per automation
+python -m pytest        # 342 tests: infra, template, dashboard/auth, and a dry-run test per automation
 ```
 
 Dry-run is not proof on its own. If you change something with a real runtime
