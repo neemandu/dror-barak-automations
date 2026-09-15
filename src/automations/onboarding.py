@@ -26,6 +26,7 @@ from typing import Any
 from ..lib import client_folder, config
 from ..lib.clients.crm import STATUS_ACTIVE, SUB_IN_WORK, CrmClient
 from ..lib.clients.google import GoogleClient
+from . import send_questionnaire
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "onboarding"
@@ -66,8 +67,10 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
 
     # 3. Email the strategy questionnaire. Its answers become the Google Doc that
     # seeds the whole strategy and feed the last-5-videos analysis, so getting the
-    # client to fill it is the real point of onboarding.
-    result["questionnaire_sent"] = _send_questionnaire(auto, crm, client, dry_run=dry_run)
+    # client to fill it is the real point of onboarding. Best-effort: a delivery
+    # failure must not undo the folder and templates already created.
+    result["questionnaire_sent"] = send_questionnaire.send_link(
+        auto, crm, {**client, "id": client_id}, dry_run=dry_run) is None
 
     # 4. The monthly report reads the ad account from ClickUp, and connecting it is
     # a manual Meta procedure (docs/OPERATIONS.md). Say so now, while Dror is
@@ -161,44 +164,6 @@ def _copy_templates(auto: Automation, google: GoogleClient, client_id: str,
             detail += f", {len(skipped)} כבר היו בתיקייה"
         auto.log_action("templates_copied", client_id=client_id, detail=detail)
     return {"copied": copied, "skipped": skipped, "failed": failed}
-
-
-def _send_questionnaire(auto: Automation, crm: CrmClient, client: dict[str, Any],
-                        *, dry_run: bool) -> bool:
-    """Email the questionnaire link. Best-effort: a delivery failure must not undo
-    the folder and templates already created."""
-    from ..lib import emails, signing
-
-    client_id = str(client["id"])
-    to = str(client.get("email") or "").strip()
-    if not to:
-        # An error, not a skip: onboarding's whole point is the questionnaire, and
-        # nothing else will chase it. Errors are pinned in the daily email.
-        auto.log_action("no_email", "error", client_id=client_id,
-                        detail="onboarded client has no אימייל for the questionnaire")
-        crm.append_automation_log(
-            client_id,
-            "⚠️ אין כתובת מייל ללקוח — שאלון האסטרטגיה לא נשלח. "
-            "מלא/י את שדה המייל והרץ/י את האונבורדינג שוב.",
-        )
-        return False
-    try:
-        url = signing.questionnaire_url(client_id)
-        emails.send_template(
-            "questionnaire", to,
-            client_name=client.get("first_name") or client.get("name") or "",
-            cta_url=url, dry_run=dry_run,
-        )
-        # Start the clock for the chase job. Cleared when the form comes back.
-        if not dry_run:
-            signing.mark_questionnaire_pending(client_id)
-        crm.append_automation_log(client_id, f"📋 שאלון האסטרטגיה נשלח ל־{to}")
-        auto.log_action("questionnaire_sent", client_id=client_id, detail=to)
-        return True
-    except Exception as exc:  # noqa: BLE001
-        auto.log_action("questionnaire_send_failed", "error", client_id=client_id,
-                        detail=str(exc))
-        return False
 
 
 def _check_meta_account(auto: Automation, crm: CrmClient, client: dict[str, Any]) -> str:

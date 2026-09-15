@@ -15,6 +15,7 @@ from src.automations import (
     daily_summary,
     lead_to_contacts,
     onboarding,
+    send_questionnaire,
     send_quote,
     social_prep,
     strategy_bot,
@@ -35,6 +36,28 @@ def test_social_prep(read_log):
     result = social_prep.run("42", dry_run=True)
     assert result["analyses"]  # at least one profile analyzed
     assert "prep_report_ready" in _actions(read_log)
+
+
+def test_send_questionnaire_emails_the_link(read_log, monkeypatch):
+    # The `שלח שאלון` button: a client lost the link, Dror re-sends it. Same
+    # function onboarding uses, so the two can never drift apart.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    result = send_questionnaire.run("42", dry_run=True)
+    assert result["sent"] is True
+    assert "questionnaire_sent" in _actions(read_log)
+
+
+def test_send_questionnaire_fails_loudly_without_an_email(read_log, monkeypatch):
+    # A button press must not quietly "succeed" while nothing went out: the
+    # handler comments the exception back on the task, so raise it.
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "get_client",
+                        lambda self, cid: {"id": cid, "name": "מכללה", "email": ""})
+    with pytest.raises(RuntimeError, match="אין כתובת מייל"):
+        send_questionnaire.run("42", dry_run=True)
+    assert "no_email" in _actions(read_log)
 
 
 def test_send_quote_issues_a_signing_link(read_log, monkeypatch):

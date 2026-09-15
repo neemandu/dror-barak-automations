@@ -96,6 +96,17 @@ def test_unknown_action_is_rejected(ran):
     assert ran == []
 
 
+@pytest.mark.parametrize("key", sorted(actions.ACTIONS))
+def test_every_button_has_a_module_behind_it(key):
+    # The runners import lazily, and `ran` above stubs them out — so a button whose
+    # module was deleted (send_questionnaire, once) passed every test here and
+    # failed on the first real press. Each action key is also its module name.
+    import importlib
+
+    module = importlib.import_module(f"src.automations.{key}")
+    assert callable(getattr(module, "run", None) or getattr(module, "send", None))
+
+
 def test_onboarding_is_not_reachable_as_a_button():
     # It fires on `חתם` and creates a Drive folder; a manual re-run risks a second.
     assert "onboarding" not in actions.ACTIONS
