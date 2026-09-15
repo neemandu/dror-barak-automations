@@ -228,6 +228,20 @@ def test_strategy_bot(read_log):
     assert "strategy_ready" in _actions(read_log)
 
 
+def test_strategy_bot_tells_dror_by_email_not_whatsapp(read_log, monkeypatch):
+    # Green API is gone; on the official API a WhatsApp to Dror would be a billed,
+    # Meta-approved template. So the "come review this" goes by email — and when
+    # there is no address, the run says so rather than silently telling nobody.
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+    strategy_bot.run("42", dry_run=True)
+    assert "dror_notified" in _actions(read_log)
+
+    monkeypatch.setenv("DROR_EMAIL", "")
+    strategy_bot.run("42", dry_run=True)
+    skipped = next(e for e in read_log() if e["action"] == "dror_not_notified")
+    assert skipped["status"] == "skipped"
+
+
 def test_strategy_bot_links_the_doc_and_uses_the_client_folder(read_log):
     # Same two bugs as campaign_summary, fixed here too: the log entry must carry a
     # clickable link, and the doc goes to the client's own folder via ensure().

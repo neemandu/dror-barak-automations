@@ -19,13 +19,10 @@ Manual/dry-run:
 
 from __future__ import annotations
 
-import smtplib
-import ssl
 from datetime import datetime, time, timezone
-from email.message import EmailMessage
 from typing import Any, Optional
 
-from ..lib import config, run_log, subjects
+from ..lib import config, emails, run_log, subjects
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "daily_email"
@@ -125,29 +122,6 @@ def build_text(entries: list[dict[str, Any]], date: str) -> str:
     return "\n".join(lines)
 
 
-def _send_email(subject: str, html_body: str, text_body: str) -> dict[str, Any]:
-    """Send via SMTP. Returns a description of what was sent."""
-    host = config.require("SMTP_HOST")
-    port = int(config.get("SMTP_PORT", "587"))
-    user = config.require("SMTP_USER")
-    password = config.require("SMTP_PASSWORD")
-    sender = config.get("SMTP_FROM", user)
-    to = config.require("DROR_EMAIL")
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = to
-    msg.set_content(text_body)
-    msg.add_alternative(html_body, subtype="html")
-
-    with smtplib.SMTP(host, port, timeout=30) as smtp:
-        smtp.starttls(context=ssl.create_default_context())
-        smtp.login(user, password)
-        smtp.send_message(msg)
-    return {"to": to, "subject": subject}
-
-
 def run(*, dry_run: bool = False, since: Optional[datetime] = None) -> dict[str, Any]:
     auto = Automation(NAME, dry_run=dry_run)
     since = since or _start_of_today_utc()
@@ -168,11 +142,14 @@ def run(*, dry_run: bool = False, since: Optional[datetime] = None) -> dict[str,
         )
         return {"sent": False, "subject": subject_line, "html": html_body, "entries": len(entries)}
 
-    if not config.get("DROR_EMAIL"):
+    to = config.get("DROR_EMAIL")
+    if not to:
         auto.log_action("no_recipient", "skipped", detail="DROR_EMAIL not set")
         return {"sent": False, "reason": "DROR_EMAIL not set", "entries": len(entries)}
 
-    sent = _send_email(subject_line, html_body, text_body)
+    # The shared sender, so a missing App Password fails with the same hint here
+    # as everywhere else rather than a bare SMTP error.
+    sent = emails.send(to, subject_line, html_body, text_body)
     auto.log_action("email_sent", detail=f"{len(entries)} entries → {sent['to']}")
     return {"sent": True, "subject": subject_line, "entries": len(entries), **sent}
 

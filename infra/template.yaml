@@ -404,6 +404,28 @@ Resources:
             Schedule: cron(0 7 * * ? *)
             Description: Send signature and questionnaire reminders
 
+  DailyEmailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dror-daily-email-${Stage}"
+      CodeUri: ../
+      Handler: src.scheduled.daily_email_handler
+      Description: >-
+        End of day — email Dror what the automations did today. The run-log is
+        the only source, so this is a read of the table and one SMTP call.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RunLogTable
+      Events:
+        Daily:
+          Type: Schedule
+          Properties:
+            # 16:30 UTC = 19:30 Israel in summer, 18:30 in winter: after the
+            # working day, before dinner. Until DROR_EMAIL/SMTP are set it logs a
+            # "skipped" line a day and sends nothing.
+            Schedule: cron(30 16 * * ? *)
+            Description: Daily digest email to Dror
+
   CampaignReportFunction:
     Type: AWS::Serverless::Function
     Properties:

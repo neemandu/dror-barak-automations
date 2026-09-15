@@ -41,6 +41,25 @@ def reminders_handler(event: dict[str, Any] | None = None, context: Any = None) 
     return out
 
 
+def daily_email_handler(event: dict[str, Any] | None = None, context: Any = None) -> dict[str, Any]:
+    """End of day: email Dror everything the automations did today.
+
+    This is the "never in the dark" promise, so a failure to send is itself put
+    in the run-log — where it is at least visible on the dashboard and in the
+    next digest that does go out.
+    """
+    config.load_dotenv()
+    from .automations import daily_email
+
+    try:
+        return daily_email.run()
+    except Exception as exc:  # noqa: BLE001
+        from .automations.base import Automation
+
+        Automation("daily_email").log_action("email_failed", "error", detail=str(exc))
+        return {"sent": False, "error": str(exc)}
+
+
 def campaign_report_handler(event: dict[str, Any] | None = None, context: Any = None) -> dict[str, Any]:
     """Monthly: one campaign report per active client.
 

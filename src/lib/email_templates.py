@@ -100,6 +100,19 @@ TEMPLATES: dict[str, EmailTemplate] = {
             "האונבורדינג יוצא לדרך אוטומטית."
         ),
     ),
+    # Sent to Dror when the strategy bot (T8) has saved a draft to Drive. Internal
+    # mail, so no signature. Email rather than WhatsApp: on the official Meta API
+    # Dror's own notifications would each need an approved template and be billed.
+    "strategy_ready": EmailTemplate(
+        subject="🤖 טיוטת אסטרטגיה מוכנה לבדיקה — {client_name}",
+        body=(
+            "היי דרור,\n"
+            "\n"
+            "טיוטת האסטרטגיה של {client_name} נבנתה ונשמרה בתיקיית הלקוח בדרייב.\n"
+            "עבור/י עליה לפני שהיא מגיעה ללקוח."
+        ),
+        cta="פתח את האסטרטגיה בדרייב",
+    ),
     # Sent to Dror when a monthly campaign report is ready (T7). Addressed to him,
     # not the client — he reviews it and forwards it on. No signature, like
     # signed_notification: it is internal mail, not a client-facing message. The

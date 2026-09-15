@@ -1,11 +1,11 @@
 """T8 — Strategy bot.
 
-Trigger: manual (invoked by Dror, e.g. via a Claude Code skill) once a client's
-questionnaire is in.
+Trigger: manual — the ``בנה אסטרטגיה`` button on the ClickUp task, or the CLI —
+once a client's questionnaire is in.
 Action: from the questionnaire answers, analyze target audience + competitors +
 digital presence (reusing the social-profile analysis from T3), produce a full
 strategy, inject it into Dror's strategy template, save it to the client's Drive
-folder, and notify Dror to review before it reaches the client.
+folder, and email Dror to review before it reaches the client.
 
 Per the proposal, only the *strategy authoring* part is built here; the social
 profile analysis is reused from :mod:`src.automations.social_prep`.
@@ -18,11 +18,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..lib import client_folder, config
+from ..lib import client_folder, config, emails
 from ..lib.clients.anthropic_ai import AnthropicClient
 from ..lib.clients.crm import CrmClient
 from ..lib.clients.google import GoogleClient
-from ..lib.clients.green_api import GreenApiClient
 from .base import Automation, build_arg_parser, run_cli
 from .social_prep import analyze_profiles
 
@@ -71,13 +70,8 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         mime_type="text/markdown",
     )
 
-    dror_phone = config.get("DROR_WHATSAPP")
-    if dror_phone:
-        GreenApiClient(dry_run=dry_run).send_message(
-            dror_phone,
-            f"אסטרטגיה מוכנה לבדיקה — {client.get('name','')}.\n"
-            f"{saved.get('webViewLink','(נשמר בדרייב)')}",
-        )
+    _notify_dror(auto, client_id, client.get("name", ""),
+                 saved.get("webViewLink") or folder["url"], dry_run=dry_run)
     crm.append_automation_log(client_id, "Strategy drafted (awaiting Dror's review)")
     auto.log_action(
         "strategy_ready",
@@ -86,6 +80,25 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         url=saved.get("webViewLink") or folder["url"],
     )
     return {"strategy": document, "saved": saved}
+
+
+def _notify_dror(auto: Automation, client_id: str, client_name: str, url: str,
+                 *, dry_run: bool) -> None:
+    """Tell Dror the draft is waiting. By email — the WhatsApp digest died with
+    Green API, and on the official API every message to him would be a billed,
+    Meta-approved template. Best-effort: the strategy is already in Drive and on
+    the task, so a mail failure is logged, not fatal."""
+    to = config.get("DROR_EMAIL")
+    if not to:
+        auto.log_action("dror_not_notified", "skipped", client_id=client_id,
+                        detail="DROR_EMAIL not set — the draft is in Drive and on the task")
+        return
+    try:
+        emails.send_template("strategy_ready", to, client_name=client_name,
+                             cta_url=url, dry_run=dry_run)
+        auto.log_action("dror_notified", client_id=client_id, detail=to)
+    except Exception as exc:  # noqa: BLE001
+        auto.log_action("notify_failed", "error", client_id=client_id, detail=str(exc))
 
 
 def main() -> None:
