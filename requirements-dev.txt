@@ -2,6 +2,8 @@
 -r requirements.txt
 
 pytest>=8.0
+# tests/test_template.py reads infra/template.yaml. SAM CLI brings it anyway.
+PyYAML>=6.0
 
 # The Lambda runtime provides boto3; this is only for running the DynamoDB-backed
 # idempotency store locally.
