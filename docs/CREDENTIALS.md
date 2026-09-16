@@ -230,6 +230,12 @@ account and no monthly fee. It needs:
 
 - Put values **only** in `.env`. Never in code, never in a commit, never in the
   public repo.
+- **Get a value onto the stack** with
+  `python -m src.tools.push_stack_params SmtpHost SmtpUser SmtpPassword DrorEmail`
+  (template parameter names). It reads the values from `.env`, never prints them,
+  changes only the Lambdas' environment, and verifies afterwards. This is how a
+  value in `.env` becomes production configuration — a full `sam deploy` is only
+  for code changes.
 - Don't send tokens over WhatsApp or email. Use a shared password file in Drive
   restricted to Dror + us — **not** "anyone with the link".
 - If a token is ever pasted somewhere public, revoke and regenerate it. Every system

@@ -11,24 +11,27 @@ ClickUp) on 2026-09-15.
 
 The stack (`dror-automations-dev`) has run live (`WebhookDryRun=0`) since 27.7, but
 several parameters are empty, so whole automations cannot complete. None of these
-needs code; most need a value from Dror.
+needs code; most need a value from Dror. Once a value is in `.env`, it reaches the
+stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
 - [ ] **`DrorEmail` + `SmtpHost` / `SmtpUser` / `SmtpPassword`.** Nothing on AWS can
   send email: not the strategy questionnaire after signing, not the signature
   notification, not the report approval, not the daily digest, not the strategy
   notice. Needs a Workspace **App Password** from Dror (`docs/CREDENTIALS.md`).
-- [ ] **`MetaAccessToken`.** Empty on the stack, so `CampaignReportFunction` died on
-  1.8 and 1.9 before reading a single campaign. A token exists in the local `.env`;
-  verify it with `python -m src.tools.check_meta` and pass it on the next deploy.
+- [x] **`MetaAccessToken`.** Was empty on the stack (the report died on 1.8 and 1.9
+  before reading a campaign); verified against the active client's account and
+  pushed on 16.9.
 - [ ] **`SmooveWebhookToken`.** Empty = the Smoove endpoint is open; anyone with the
   URL can create contacts and fire billed WhatsApp Flows. Generate one, deploy it,
   configure Smoove to send it as `X-Smoove-Token`.
-- [ ] **`DRIVE_TEMPLATE_IDS` is not a template parameter at all**, so onboarding on
-  AWS copies no templates and logs `no_templates`. Add the parameter (and decide
-  the template inventory — see Open Questions).
+- [ ] **`DriveTemplateIds`** — the parameter exists since 16.9 but is empty, so
+  onboarding copies no templates and logs `no_templates`. Needs the template
+  inventory from Dror (Open Questions), then `push_stack_params DriveTemplateIds`.
 - [ ] **Custom domain.** Signing links still go out under
-  `e3670c4ju8.execute-api.eu-central-1.amazonaws.com`. Finish `sign.drorbrk.co.il`
-  (`docs/CREDENTIALS.md` §7a) and set `SignBaseUrl`.
+  `e3670c4ju8.execute-api.eu-central-1.amazonaws.com`. The first certificate
+  request timed out (no DNS record was ever added at Wix). Request again with
+  `check_domain --request`, add the two Wix records (`docs/CREDENTIALS.md` §7a),
+  `setup_domain --apply`, then push `SignBaseUrl`.
 
 ## Backlog
 

@@ -51,6 +51,13 @@ Parameters:
   DriveClientsParentId:
     Type: String
     Description: Drive folder that holds client folders; signed PDFs land here.
+  DriveTemplateIds:
+    Type: String
+    Default: ""
+    Description: >
+      Comma-separated Drive file ids that onboarding copies into every new
+      client folder (DRIVE_TEMPLATE_IDS in .env). Empty means no templates, and
+      onboarding logs `no_templates` for each client until it is set.
   GoogleSecretArn:
     Type: String
     Description: >
@@ -222,6 +229,7 @@ Globals:
         SIGN_LINK_SECRET: !Ref SignLinkSecret
         SIGN_BASE_URL: !Ref SignBaseUrl
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
+        DRIVE_TEMPLATE_IDS: !Ref DriveTemplateIds
         GOOGLE_SECRET_ARN: !Ref GoogleSecretArn
         GOOGLE_IMPERSONATE_SUBJECT: !Ref GoogleImpersonateSubject
         # The contract refuses to render without these, so a deploy that omits

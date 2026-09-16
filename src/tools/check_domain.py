@@ -15,7 +15,8 @@ Three things have to line up, in order, and each fails differently:
 This reports each and prints the exact record still needed. Read-only.
 
 Usage:
-    python -m src.tools.check_domain
+    python -m src.tools.check_domain            # read-only
+    python -m src.tools.check_domain --request  # also request a fresh certificate
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from __future__ import annotations
 import argparse
 import socket
 import sys
+import time
 from typing import Any, Optional
 
 from ..lib import config
@@ -55,13 +57,35 @@ def _cert(domain: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def check(domain: str) -> bool:
+def _request_cert(domain: str) -> dict[str, Any]:
+    """Ask ACM for a DNS-validated certificate and wait for its validation record.
+
+    A request is free and idle: ACM gives 72 hours to add the ownership record,
+    then marks it VALIDATION_TIMED_OUT and a fresh request is the only way on —
+    which is why this exists as a flag rather than a one-off console click.
+    """
+    acm = _client("acm")
+    arn = acm.request_certificate(DomainName=domain, ValidationMethod="DNS")["CertificateArn"]
+    for _ in range(12):  # the record appears a few seconds after the request
+        cert = acm.describe_certificate(CertificateArn=arn)["Certificate"]
+        if (cert.get("DomainValidationOptions") or [{}])[0].get("ResourceRecord"):
+            return cert
+        time.sleep(5)
+    return cert
+
+
+def check(domain: str, *, request: bool = False) -> bool:
     print(f"\ndomain: {domain}")
 
     print("\n1. certificate")
     cert = _cert(domain)
+    usable = cert and cert["Status"] in ("ISSUED", "PENDING_VALIDATION")
+    if not usable and request:
+        print(f"{WAIT}{'no certificate yet' if not cert else 'certificate is ' + cert['Status']}"
+              f" — requesting a new one")
+        cert = _request_cert(domain)
     if not cert:
-        print(f"{BAD}no certificate requested for {domain}")
+        print(f"{BAD}no certificate requested for {domain}. Run with --request.")
         return False
     status = cert["Status"]
     if status == "ISSUED":
@@ -77,7 +101,7 @@ def check(domain: str) -> bool:
         print("       Validation usually lands within minutes of the record going live.")
         return False
     else:
-        print(f"{BAD}certificate is {status}")
+        print(f"{BAD}certificate is {status}. Run with --request for a fresh one.")
         return False
 
     print("\n2. API Gateway custom domain")
@@ -123,9 +147,11 @@ def check(domain: str) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Check the signing custom domain")
     parser.add_argument("--domain", default=DEFAULT_DOMAIN)
+    parser.add_argument("--request", action="store_true",
+                        help="Request a new certificate when there is none, or it expired.")
     args = parser.parse_args()
     config.load_dotenv()
-    sys.exit(0 if check(args.domain) else 1)
+    sys.exit(0 if check(args.domain, request=args.request) else 1)
 
 
 if __name__ == "__main__":
