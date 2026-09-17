@@ -19,7 +19,6 @@ keeping it there avoids making the signing flow depend on Chromium.
 
 from __future__ import annotations
 
-import io
 import os
 import shutil
 import tarfile
@@ -72,16 +71,25 @@ def _inflate(pack: Path, tmp: Path = TMP) -> str:
         except ImportError as exc:  # pragma: no cover - requirements.txt has it
             raise ChromiumError("the brotli package is missing; add it to requirements.txt") from exc
 
-        def inflate(name: str) -> bytes:
-            return brotli.decompress((pack / name).read_bytes())
+        def inflate(name: str, out: Path) -> None:
+            # Streamed, never whole-in-memory: the binary is ~250 MB decompressed,
+            # and this account caps a function at 512 MB — holding it in RAM got
+            # the runtime OOM-killed.
+            decoder = brotli.Decompressor()
+            with open(pack / name, "rb") as src, open(out, "wb") as dst:
+                while chunk := src.read(1 << 20):
+                    dst.write(decoder.process(chunk))
 
         for name, dest in (("al2023.tar.br", tmp / "al2023"), ("fonts.tar.br", tmp / "fonts"),
                            ("swiftshader.tar.br", tmp)):
             dest.mkdir(parents=True, exist_ok=True)
-            with tarfile.open(fileobj=io.BytesIO(inflate(name))) as tar:
+            archive = tmp / name[:-3]
+            inflate(name, archive)
+            with tarfile.open(archive) as tar:
                 tar.extractall(dest, filter="data")
+            archive.unlink()
         partial = tmp / "chromium.partial"
-        partial.write_bytes(inflate("chromium.br"))
+        inflate("chromium.br", partial)
         partial.chmod(0o700)
         partial.rename(exe)  # atomic: a second invocation never sees a half-written binary
 

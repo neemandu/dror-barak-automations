@@ -479,13 +479,13 @@ Resources:
       # in seconds, but each fan-out child does a Meta call + an Opus completion +
       # three Drive calls + SMTP, ~1-2 min; a per-client invoke gets the room.
       Timeout: 900
-      # Chromium: sparticuz recommends 1600 MB+; the inflate alone holds a 250 MB
-      # binary in memory for a moment.
-      MemorySize: 2048
-      # /tmp holds the inflated browser (~250 MB), its libraries, a profile per
-      # render and, when the package lost its execute bit, a copy of Node.
-      EphemeralStorage:
-        Size: 1024
+      # Chromium wants room (sparticuz recommends 1600 MB+), but this account is
+      # a new one and Lambda caps every function at 512 MB until the account's
+      # quotas are raised (see TASKS.md). The inflate streams to /tmp so it fits;
+      # rendering a report at 512 MB is proven in the Lambda image. Raise this
+      # once the cap is lifted. /tmp stays at the default 512 MB: the inflated
+      # browser and libraries take ~220 MB.
+      MemorySize: 512
       Layers: !If [HasChromiumLayer, [!Ref ChromiumLayerArn], !Ref AWS::NoValue]
       Environment:
         Variables:
