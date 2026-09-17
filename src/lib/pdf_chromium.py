@@ -106,10 +106,16 @@ def _ensure_node_executable(tmp: Path = TMP) -> None:
     except Exception:  # noqa: BLE001 - no playwright, nothing to fix
         return
     node, _cli = compute_driver_executable()
-    if os.access(node, os.X_OK):
+
+    def runnable(path: str) -> bool:
+        # Mode bits, not os.access(): as root, access(X_OK) says yes to a file
+        # with no execute bit at all, and then exec fails anyway.
+        return os.path.exists(path) and bool(os.stat(path).st_mode & 0o111)
+
+    if runnable(node):
         return
     copy = tmp / "pw-node"
-    if not os.access(copy, os.X_OK):
+    if not runnable(str(copy)):
         partial = tmp / "pw-node.partial"
         shutil.copyfile(node, partial)
         partial.chmod(0o755)
