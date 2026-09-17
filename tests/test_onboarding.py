@@ -172,3 +172,22 @@ def test_onboarding_leaves_a_summary_on_the_clickup_task(captured):
     summary = next(c for c in captured["comments"] if c.startswith("✅"))
     assert "drive.google.com" in summary, "Dror opens the folder from the task"
     assert "לקוח פעיל" in summary
+
+
+# ---------------------------------------------------------- whatsapp welcome
+
+
+def test_no_welcome_flow_is_a_visible_skip_not_silence(captured, read_log):
+    onboarding.run("42", dry_run=True)
+    entry = next(e for e in read_log() if e["action"] == "no_welcome_flow")
+    assert entry["status"] == "skipped"
+    assert "MANYCHAT_FLOW_ONBOARDING" in entry["detail"]
+
+
+def test_a_configured_welcome_flow_is_sent_after_the_questionnaire(captured, monkeypatch, read_log):
+    monkeypatch.setenv("MANYCHAT_FLOW_ONBOARDING", "content20260101000000_1")
+    result = onboarding.run("42", dry_run=True)
+    assert result["welcome_flow"] is True
+    actions = [e["action"] for e in read_log()]
+    assert "welcome_flow_sent" in actions
+    assert actions.index("questionnaire_sent") < actions.index("welcome_flow_sent")

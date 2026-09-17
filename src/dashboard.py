@@ -176,11 +176,13 @@ def _page(title: str, body: str) -> bytes:
 <body>{body}</body></html>""".encode("utf-8")
 
 
-def _login_page(error: str = "") -> bytes:
+def _login_page(error: str = "", base: str = "") -> bytes:
+    """``base`` is the path prefix the page lives under — "" locally, "/dev" behind
+    API Gateway — so every link and form action lands on the same deployment."""
     note = f'<p class="bad">{_esc(error)}</p>' if error else ""
     return _page(
         "כניסה — לוח בקרה",
-        f"""<form class="login" method="post" action="/login">
+        f"""<form class="login" method="post" action="{base}/login">
         <h1>לוח בקרה</h1>
         <div class="sub">האוטומציות של דרור ברק</div>
         {note}
@@ -211,7 +213,7 @@ def _row(entry: dict[str, Any]) -> str:
     return "<tr>" + "".join(bits) + "</tr>"
 
 
-def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str]) -> bytes:
+def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str = "") -> bytes:
     counts = subjects.counts(entries)
     cards = "".join(
         f'<div class="card"><b>{counts[key]}</b><span>{label}</span></div>'
@@ -241,13 +243,13 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str]) -> bytes:
         for d, label in ((1, "היום"), (7, "7 ימים"), (30, "30 יום"), (365, "הכל"))
     )
 
-    filters = f"""<form class="filters" method="get" action="/dashboard">
+    filters = f"""<form class="filters" method="get" action="{base}/dashboard">
       <select name="subject">{subject_opts}</select>
       <select name="client">{client_opts}</select>
       <select name="days">{days_opts}</select>
       <input type="search" name="q" placeholder="חיפוש חופשי" value="{_esc(q.get('q',''))}">
       <button type="submit">סנן</button>
-      <a href="/logout" style="margin-inline-start:auto"><button type="button">יציאה</button></a>
+      <a href="{base}/logout" style="margin-inline-start:auto"><button type="button">יציאה</button></a>
     </form>"""
 
     body_sections = ""

@@ -15,7 +15,7 @@ Parameters:
   Stage:
     Type: String
     Default: dev
-    AllowedValues: [dev, prod]
+    AllowedValues: [dev, test, prod]
   ClickUpWebhookSecret:
     Type: String
     NoEcho: true
@@ -196,7 +196,32 @@ Parameters:
     Description: >
       1 = accept real ClickUp events and prove the wiring, but let the automations
       touch nothing (no Drive folders, no Morning clients, no WhatsApp). Deploy
-      with 1 first, watch the logs, then redeploy with 0 to go live.
+      with 1 first, watch the logs, then redeploy with 0 to go live. Covers the
+      schedules too, so a test stack chases nobody.
+  DashboardPassword:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      The dashboard's shared password (DASHBOARD_PASSWORD in .env). It shows
+      client names, phones and prices, so the function refuses to serve while
+      this is empty rather than defaulting to open.
+  ChromiumLayerArn:
+    Type: String
+    Default: ""
+    Description: >
+      Layer version ARN from `python -m src.tools.publish_chromium_layer` —
+      headless Chromium for the campaign report's PDF. Empty = no layer, and the
+      monthly report fails at the render step with a clear ChromiumError.
+  ManyChatFlowOnboarding:
+    Type: String
+    Default: ""
+    Description: >
+      ManyChat Flow (flow_ns) sent as the WhatsApp welcome right after signing.
+      Empty until Dror has a Meta-approved template; onboarding then logs a skip.
+
+Conditions:
+  HasChromiumLayer: !Not [!Equals [!Ref ChromiumLayerArn, ""]]
 
 Globals:
   Function:
@@ -230,6 +255,12 @@ Globals:
         SIGN_BASE_URL: !Ref SignBaseUrl
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
         DRIVE_TEMPLATE_IDS: !Ref DriveTemplateIds
+        # ManyChat for every function: Smoove uses it for leads, onboarding for
+        # the welcome Flow. The per-list Smoove Flows stay on SmooveFunction.
+        MANYCHAT_API_KEY: !Ref ManyChatApiKey
+        MANYCHAT_BASE_URL: !Ref ManyChatBaseUrl
+        MANYCHAT_CONSENT_PHRASE: !Ref ManyChatConsentPhrase
+        MANYCHAT_FLOW_ONBOARDING: !Ref ManyChatFlowOnboarding
         GOOGLE_SECRET_ARN: !Ref GoogleSecretArn
         GOOGLE_IMPERSONATE_SUBJECT: !Ref GoogleImpersonateSubject
         # The contract refuses to render without these, so a deploy that omits
@@ -421,6 +452,9 @@ Resources:
       Description: >-
         End of day — email Dror what the automations did today. The run-log is
         the only source, so this is a read of the table and one SMTP call.
+      Environment:
+        Variables:
+          DASHBOARD_URL: !Sub "https://${DashboardApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/dashboard"
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RunLogTable
@@ -445,6 +479,13 @@ Resources:
       # in seconds, but each fan-out child does a Meta call + an Opus completion +
       # three Drive calls + SMTP, ~1-2 min; a per-client invoke gets the room.
       Timeout: 900
+      # Chromium: sparticuz recommends 1600 MB+; the inflate alone holds a 250 MB
+      # binary in memory for a moment.
+      MemorySize: 2048
+      Layers: !If [HasChromiumLayer, [!Ref ChromiumLayerArn], !Ref AWS::NoValue]
+      Environment:
+        Variables:
+          PLAYWRIGHT_CHROMIUM_PACK: /opt/chromium
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
@@ -466,6 +507,62 @@ Resources:
             # 07:00 UTC on the 1st — the month it reports is closed and settled.
             Schedule: cron(0 7 1 * ? *)
             Description: Monthly campaign reports
+
+  # The dashboard: its own API so its throttling and (someday) its own auth do
+  # not share a surface with the client-facing signing page.
+  DashboardApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+
+  DashboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dror-dashboard-${Stage}"
+      CodeUri: ../
+      Handler: src.dashboard_lambda.lambda_handler
+      Description: Read-only dashboard over the run-log, password-protected, session in a signed cookie.
+      Timeout: 30
+      Environment:
+        Variables:
+          DASHBOARD_PASSWORD: !Ref DashboardPassword
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RunLogTable
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /
+            Method: GET
+        Page:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /dashboard
+            Method: GET
+        LoginForm:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /login
+            Method: GET
+        LoginPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /login
+            Method: POST
+        Logout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /logout
+            Method: GET
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
@@ -503,6 +600,9 @@ Outputs:
       Point Smoove's HTTP/webhook action here (POST). If SmooveWebhookToken is set,
       add the X-Smoove-Token header (or ?token=) to the call.
     Value: !Sub "https://${SmooveApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/smoove"
+  DashboardUrl:
+    Description: Dror's dashboard (password = DashboardPassword).
+    Value: !Sub "https://${DashboardApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/dashboard"
   IdempotencyTableName:
     Value: !Ref IdempotencyTable
   RunLogTableName:

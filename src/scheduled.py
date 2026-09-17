@@ -14,6 +14,12 @@ from typing import Any
 from .lib import config
 
 
+def _dry_run() -> bool:
+    """WEBHOOK_DRY_RUN covers the schedules too: a test stack must never chase a
+    real client or email Dror, and the flag is the one switch the operator knows."""
+    return config.get_bool("WEBHOOK_DRY_RUN")
+
+
 def reminders_handler(event: dict[str, Any] | None = None, context: Any = None) -> dict[str, Any]:
     """Daily: chase what clients still owe us — a signature, then a questionnaire.
 
@@ -26,10 +32,11 @@ def reminders_handler(event: dict[str, Any] | None = None, context: Any = None) 
     config.load_dotenv()
     from .automations import questionnaire_reminders, sign_reminders
 
+    dry_run = _dry_run()
     out: dict[str, Any] = {}
     for key, job in (("signatures", sign_reminders), ("questionnaires", questionnaire_reminders)):
         try:
-            out[key] = job.run()
+            out[key] = job.run(dry_run=dry_run)
         except Exception as exc:  # noqa: BLE001
             out[key] = {"error": str(exc)}
             # Into the run-log too: a job that died whole logs nothing of its own,
@@ -52,7 +59,7 @@ def daily_email_handler(event: dict[str, Any] | None = None, context: Any = None
     from .automations import daily_email
 
     try:
-        return daily_email.run()
+        return daily_email.run(dry_run=_dry_run())
     except Exception as exc:  # noqa: BLE001
         from .automations.base import Automation
 
@@ -77,13 +84,21 @@ def campaign_report_handler(event: dict[str, Any] | None = None, context: Any = 
     from .automations import campaign_summary
 
     event = event or {}
+    if event.get("check") == "chromium":
+        # Proves the layer without building a report: invoke with {"check": "chromium"}.
+        from .lib import pdf_chromium
+
+        return pdf_chromium.self_check()
+
+    dry_run = _dry_run()
     client_id = event.get("client_id")
     if client_id:
-        return campaign_summary.run(str(client_id), month=event.get("month"))
+        return campaign_summary.run(str(client_id), month=event.get("month"), dry_run=dry_run)
 
     function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
-    if not function_name:
-        return campaign_summary.run_all(month=event.get("month"))
+    if not function_name or dry_run:
+        # No fan-out in dry-run: mock clients, one invoke, nothing to parallelise.
+        return campaign_summary.run_all(month=event.get("month"), dry_run=dry_run)
 
     return _fan_out(function_name, month=event.get("month"))
 

@@ -72,6 +72,10 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     result["questionnaire_sent"] = send_questionnaire.send_link(
         auto, crm, {**client, "id": client_id}, dry_run=dry_run) is None
 
+    # 3b. A WhatsApp welcome — when Dror has a Meta-approved Flow for it. Until
+    # then this logs a skip, so the missing step stays visible rather than forgotten.
+    result["welcome_flow"] = _send_welcome_flow(auto, {**client, "id": client_id}, dry_run=dry_run)
+
     # 4. The monthly report reads the ad account from ClickUp, and connecting it is
     # a manual Meta procedure (docs/OPERATIONS.md). Say so now, while Dror is
     # thinking about this client — not in five weeks as a 403 in a failed report.
@@ -164,6 +168,38 @@ def _copy_templates(auto: Automation, google: GoogleClient, client_id: str,
             detail += f", {len(skipped)} כבר היו בתיקייה"
         auto.log_action("templates_copied", client_id=client_id, detail=detail)
     return {"copied": copied, "skipped": skipped, "failed": failed}
+
+
+def _send_welcome_flow(auto: Automation, client: dict[str, Any], *, dry_run: bool) -> bool:
+    """Trigger the ManyChat welcome Flow, if one is configured.
+
+    The official API allows only Meta-approved templates for business-initiated
+    messages, so the wording lives in ManyChat, not here: ``MANYCHAT_FLOW_ONBOARDING``
+    names the Flow. Best-effort — a WhatsApp hiccup must not undo the onboarding.
+    """
+    from ..lib.clients.manychat import ManyChatClient, to_e164
+
+    client_id = str(client["id"])
+    flow = config.get("MANYCHAT_FLOW_ONBOARDING")
+    if not flow:
+        auto.log_action("no_welcome_flow", "skipped", client_id=client_id,
+                        detail="MANYCHAT_FLOW_ONBOARDING not set — no approved welcome template yet")
+        return False
+    phone = to_e164(str(client.get("phone") or ""), config.get("SMOOVE_DEFAULT_COUNTRY_CODE", "972"))
+    if not phone:
+        auto.log_action("no_phone_for_welcome", "skipped", client_id=client_id,
+                        detail="client has no usable טלפון for the welcome message")
+        return False
+    try:
+        mc = ManyChatClient(dry_run=dry_run)
+        subscriber_id, _created = mc.ensure_subscriber(
+            phone, client.get("first_name") or client.get("name") or "")
+        mc.send_flow(subscriber_id, flow)
+        auto.log_action("welcome_flow_sent", client_id=client_id, detail=phone)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        auto.log_action("welcome_flow_failed", "error", client_id=client_id, detail=str(exc))
+        return False
 
 
 def _check_meta_account(auto: Automation, crm: CrmClient, client: dict[str, Any]) -> str:

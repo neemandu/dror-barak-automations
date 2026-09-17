@@ -21,4 +21,9 @@ python-bidi>=0.4
 # Chromium binary comes from a layer, not Playwright's download: set
 # PLAYWRIGHT_CHROMIUM_PATH to the layer binary (see TASKS.md). The contract PDF
 # still uses the Drive path and needs none of this.
-playwright>=1.40
+# Pinned to the Chromium the layer ships (Playwright 1.63 <-> Chromium 153; see
+# src/tools/publish_chromium_layer.py). Bump both together.
+playwright>=1.63,<2
+
+# Inflates the Chromium layer's Brotli archives on Lambda (src/lib/pdf_chromium.py).
+brotli>=1.1

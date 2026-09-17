@@ -44,3 +44,22 @@ def test_reminders_run_both_chases_even_if_the_first_dies(read_log, monkeypatch)
     assert "error" in result["signatures"]
     assert "reminded" in result["questionnaires"], "one chase failing must not silence the other"
     assert _entries(read_log, "signatures_job_failed")[0]["status"] == "error"
+
+
+def test_schedules_honour_the_dry_run_switch(read_log, monkeypatch):
+    # A test stack sets WEBHOOK_DRY_RUN=1 and must never chase a real client.
+    monkeypatch.setenv("WEBHOOK_DRY_RUN", "1")
+    from src.automations import sign_reminders
+
+    seen = {}
+    monkeypatch.setattr(sign_reminders, "run", lambda **kw: seen.update(kw) or {"reminded": 0})
+    scheduled.reminders_handler({}, None)
+    assert seen.get("dry_run") is True
+
+
+def test_the_chromium_check_answers_without_building_a_report(monkeypatch):
+    from src.lib import pdf_chromium
+
+    monkeypatch.setattr(pdf_chromium, "render", lambda html, **kw: b"%PDF-1.4 fake")
+    out = scheduled.campaign_report_handler({"check": "chromium"}, None)
+    assert out["ok"] is True and out["pdf_bytes"] > 0
