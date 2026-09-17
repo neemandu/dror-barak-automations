@@ -13,6 +13,8 @@ questions.
 
 ```bash
 python -m pip install -r requirements.txt   # only needed for LIVE runs
+# requirements-dev.txt adds pytest, the deploy tooling, and Playwright for rendering the
+# campaign report on a laptop (on Lambda the Chromium layer prints it, no Playwright)
 cp .env.example .env                         # fill in real credentials for live runs
 python -m pytest                             # run everything in dry-run (no creds needed)
 ```

@@ -48,13 +48,6 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   carried `docs/contract_source.txt` were deleted on 17.9; the rest predate that
   file but were also built from a working folder. A bulk delete is blocked for the
   assistant; one `aws s3api delete-objects` by the operator does it.
-- [ ] **A sturdier package for the report function.** Code (187 MB, 118 MB of it
-  Playwright's bundled Node) plus the Chromium layer (70 MB) unzips to 256 MB of
-  Lambda's 250 MiB (262 MB) — a 6 MB margin, and only after `deploy_stack` prunes
-  tests/docs/Playwright's UI. A Playwright bump can break the deploy (the tool now
-  refuses before uploading). The durable fix: on Lambda, print with Chromium's own
-  `--print-to-pdf` and build that function without Playwright (a Makefile build),
-  which also removes the Node execute-bit problem and the version coupling.
 - [x] **Client documents cannot reach Lambda any more**: `deploy_stack` deletes
   `docs/`, `tests/`, `infra/` and markdown from every function before packaging
   (17.9). Building from a clean checkout is still the habit; it is no longer the
@@ -123,6 +116,12 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   `pdf_chromium` inflates it into /tmp. Proven in the Lambda image: cold ~5–9 s,
   warm ~1 s. `deploy_stack` restores the execute bit `sam build --use-container`
   strips from Playwright's Node driver; `pdf_chromium` self-heals if it is missing.
+- [x] **A sturdy package for the report function (17.9).** Code + Chromium layer had
+  6 MB to spare under Lambda's 250 MB, because Playwright's bundled Node is 118 MB.
+  On Lambda `pdf_chromium` now drives the layer's Chromium itself over the DevTools
+  pipe (`Page.printToPDF`; this build ignores `--print-to-pdf`), Playwright moved to
+  `requirements-dev.txt`, and the package fell from 187 MB to 51 MB — no Node
+  execute-bit problem, no Playwright↔Chromium version pair, faster cold starts.
 - [x] **Dashboard on Lambda (17.9).** `src/dashboard_lambda.py`, own API, session in a
   signed cookie, `DashboardPassword` parameter; the daily email links to it.
 - [x] **Test stack (17.9).** `dror-automations-test`: `Stage=test`, `WEBHOOK_DRY_RUN=1`
@@ -162,10 +161,12 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
 ## Open Questions
 
-1. **Is Dror working in ClickUp?** The clients list holds one task and none was
-   created in the last 30 days. Every automation starts from a status change
-   there, so until it is the CRM in practice, nothing runs. The most important
-   question on this list.
+1. **Going live on Dror's own ClickUp.** The workspace wired to the stack today is a
+   **test workspace** (one test client) — which is why it is safe to run real
+   end-to-end tests there, and why its task count says nothing about adoption.
+   Go-live means building the list in Dror's workspace (`docs/CLICKUP_SETUP.md`),
+   pushing `ClickUpListId` / `ClickUpTeamId` / the token, and re-registering the
+   webhook.
 2. **WhatsApp templates.** Who writes the Hebrew and submits them to Meta for
    approval? The client-facing flows (welcome after onboarding, quote, reminders)
    cannot exist until they do; today those go by email.

@@ -306,8 +306,8 @@ python -m src.tools.deploy_stack --stack dror-automations-test --env-file .env.t
 
 ## עדכון Chromium (הדפדפן של הדוח החודשי)
 
-הדוח מרונדר ב-Chromium שמגיע מ-**layer** (חבילה נפרדת מהקוד). כשמעדכנים את Playwright
-מעדכנים גם אותו, כדי שהגרסאות יתאימו:
+הדוח מרונדר ב-Chromium שמגיע מ-**layer** (חבילה נפרדת מהקוד), והמערכת מפעילה אותו
+ישירות — בלי Playwright בשרת, כך שאין תלות בין גרסאות. מעדכנים רק כשרוצים Chromium חדש:
 
 ```bash
 python -m src.tools.publish_chromium_layer            # מוריד, מוסיף פונט עברי, מפרסם

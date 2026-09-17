@@ -41,12 +41,12 @@ Configuration on the stack, not code (details and owners in `TASKS.md` → "Now"
 - **No email can leave AWS** — `DrorEmail` and the SMTP parameters are empty. That
   silences the questionnaire after signing, signature notices, report approvals,
   the daily digest. Needs an App Password from Dror.
-- **The monthly report** — `MetaAccessToken` is empty (it failed on 1.8 and 1.9),
-  and Lambda has no Chromium layer to render the PDF.
+- **The monthly report** — builds on AWS since 17.9 (Meta token set, Chromium layer
+  driven over DevTools); emailing it to Dror waits on SMTP.
 - **The Smoove endpoint is open** — `SmooveWebhookToken` is empty.
-- **The dashboard is not deployed** — it runs locally only.
-- **Adoption** — ClickUp holds one client task. Every automation starts from a
-  status change there; until Dror manages clients in it, nothing runs.
+- **Go-live on Dror's ClickUp** — the workspace wired to the stack is a test
+  workspace. It is where end-to-end tests run; Dror's own list comes next
+  (`docs/CLICKUP_SETUP.md`).
 
 ## Out of scope (as agreed)
 
