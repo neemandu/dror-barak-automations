@@ -12,10 +12,13 @@ Two engines, one function:
   ``/opt/chromium`` (four Brotli archives: the ``headless_shell`` binary, the
   AL2023 libraries it needs, SwiftShader, a ``fonts.conf``) plus DejaVu Sans under
   ``/opt/fonts`` for Hebrew. The pack is inflated into ``/tmp`` once per
-  container, and the PDF is printed by **Chromium itself** (``--print-to-pdf``).
-  No Playwright on Lambda: its bundled Node is 118 MB, which put code + layer
-  within 6 MB of Lambda's 250 MB limit, lost its execute bit in ``sam build``,
-  and tied every deploy to a Playwright↔Chromium version pair.
+  container, and this module drives it directly over the **DevTools protocol**
+  (``--remote-debugging-pipe`` → ``Page.printToPDF``) — the same thing Playwright
+  does, in a hundred lines of standard library. (This ``headless_shell`` build
+  ignores the ``--print-to-pdf`` switch; it hangs.) No Playwright on Lambda: its
+  bundled Node is 118 MB, which put code + layer within 6 MB of Lambda's 250 MB
+  limit, lost its execute bit in ``sam build``, and tied every deploy to a
+  Playwright↔Chromium version pair.
 * **Locally** there is no pack, so Playwright's bundled Chromium renders
   (``pip install -r requirements-dev.txt`` and ``playwright install chromium``).
 
@@ -27,9 +30,12 @@ keeping it there avoids making the signing flow depend on Chromium.
 
 from __future__ import annotations
 
+import base64
+import json
 import os
+import select
 import shutil
-import subprocess
+import signal
 import tarfile
 import tempfile
 import time
@@ -122,25 +128,125 @@ def _with_page_css(html: str, page_format: str) -> str:
     return html.replace("</head>", rule + "</head>", 1) if "</head>" in html else rule + html
 
 
-def _render_cli(exe: str, html: str, page_format: str) -> bytes:
-    """Print with Chromium's ``--print-to-pdf``: backgrounds on, CSS page size,
-    no header/footer — the same output Playwright's ``page.pdf`` asks for."""
-    work = Path(tempfile.mkdtemp(prefix="pdf-", dir=str(TMP) if TMP.exists() else None))
-    try:
-        source, out = work / "report.html", work / "report.pdf"
-        source.write_text(_with_page_css(html, page_format), encoding="utf-8")
-        cmd = [exe, *LAMBDA_ARGS, "--headless", f"--user-data-dir={work / 'profile'}",
-               "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw",
-               f"--print-to-pdf={out}", source.as_uri()]
+class _Cdp:
+    """A minimal DevTools-protocol client over ``--remote-debugging-pipe``.
+
+    Chromium reads commands on fd 3 and writes replies and events on fd 4, as
+    NUL-terminated JSON. ``posix_spawn`` wires those two descriptors up without
+    the fd-closing that ``subprocess`` does behind a ``preexec_fn``.
+    """
+
+    def __init__(self, exe: str, args: list[str], log_path: Path):
+        import fcntl
+
+        def high(fd: int) -> int:  # keep our ends clear of 3 and 4
+            new = fcntl.fcntl(fd, fcntl.F_DUPFD_CLOEXEC, 10)
+            os.close(fd)
+            return new
+
+        chrome_in, ours_out = os.pipe()
+        ours_in, chrome_out = os.pipe()
+        chrome_in, ours_out, ours_in, chrome_out = map(high, (chrome_in, ours_out, ours_in, chrome_out))
+        actions = [
+            (os.POSIX_SPAWN_DUP2, chrome_in, 3),
+            (os.POSIX_SPAWN_DUP2, chrome_out, 4),
+            (os.POSIX_SPAWN_OPEN, 1, os.devnull, os.O_WRONLY, 0),
+            (os.POSIX_SPAWN_OPEN, 2, str(log_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+        ]
+        self.pid = os.posix_spawn(exe, [exe, *args, "--remote-debugging-pipe"], dict(os.environ),
+                                  file_actions=actions)
+        os.close(chrome_in)
+        os.close(chrome_out)
+        self._w, self._r = ours_out, ours_in
+        self._buf, self._id = b"", 0
+        self._events: list[dict[str, Any]] = []
+
+    def _next(self, deadline: float) -> dict[str, Any]:
+        while b"\0" not in self._buf:
+            left = deadline - time.time()
+            if left <= 0:
+                raise ChromiumError("Chromium stopped answering")
+            ready, _, _ = select.select([self._r], [], [], left)
+            if ready:
+                chunk = os.read(self._r, 1 << 20)
+                if not chunk:
+                    raise ChromiumError("Chromium exited before finishing")
+                self._buf += chunk
+        raw, _, self._buf = self._buf.partition(b"\0")
+        return dict(json.loads(raw))
+
+    def call(self, method: str, params: Optional[dict[str, Any]] = None, *,
+             session: Optional[str] = None, timeout: float = 60) -> dict[str, Any]:
+        self._id += 1
+        message: dict[str, Any] = {"id": self._id, "method": method, "params": params or {}}
+        if session:
+            message["sessionId"] = session
+        os.write(self._w, json.dumps(message).encode("utf-8") + b"\0")
+        deadline = time.time() + timeout
+        while True:
+            reply = self._next(deadline)
+            if reply.get("id") == self._id:
+                if "error" in reply:
+                    raise ChromiumError(f"{method}: {reply['error'].get('message')}")
+                return dict(reply.get("result") or {})
+            self._events.append(reply)  # an event; someone may be waiting for it
+
+    def wait_event(self, name: str, *, timeout: float = 60) -> None:
+        deadline = time.time() + timeout
+        while True:
+            for event in self._events:
+                if event.get("method") == name:
+                    self._events.remove(event)
+                    return
+            self._events.append(self._next(deadline))
+
+    def close(self) -> None:
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        except subprocess.TimeoutExpired as exc:
-            raise ChromiumError("Chromium did not finish printing within 120 s") from exc
-        if not out.exists() or out.stat().st_size == 0:
-            tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
-            raise ChromiumError(f"Chromium exited {proc.returncode} without a PDF: {' | '.join(tail)}")
-        return out.read_bytes()
+            self.call("Browser.close", timeout=5)
+        except Exception:  # noqa: BLE001 - it is going away either way
+            pass
+        for fd in (self._w, self._r):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        for _ in range(50):  # up to 5 s to leave on its own, then insist
+            if os.waitpid(self.pid, os.WNOHANG)[0]:
+                return
+            time.sleep(0.1)
+        try:
+            os.kill(self.pid, signal.SIGKILL)
+            os.waitpid(self.pid, 0)
+        except OSError:
+            pass
+
+
+def _render_cdp(exe: str, html: str, page_format: str) -> bytes:
+    """Print through the DevTools protocol: backgrounds on, CSS page size, zero
+    margins — the same request Playwright's ``page.pdf`` makes."""
+    work = Path(tempfile.mkdtemp(prefix="pdf-", dir=str(TMP) if TMP.exists() else None))
+    cdp: Optional[_Cdp] = None
+    try:
+        source, log = work / "report.html", work / "chromium.log"
+        source.write_text(_with_page_css(html, page_format), encoding="utf-8")
+        cdp = _Cdp(exe, [*LAMBDA_ARGS, "--headless", f"--user-data-dir={work / 'profile'}", "about:blank"], log)
+        try:
+            target = cdp.call("Target.createTarget", {"url": "about:blank"})["targetId"]
+            session = cdp.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
+            cdp.call("Page.enable", session=session)
+            cdp.call("Page.navigate", {"url": source.as_uri()}, session=session)
+            cdp.wait_event("Page.loadEventFired")
+            result = cdp.call("Page.printToPDF", {
+                "printBackground": True, "preferCSSPageSize": True,
+                "marginTop": 0, "marginBottom": 0, "marginLeft": 0, "marginRight": 0,
+            }, session=session, timeout=120)
+        except ChromiumError as exc:
+            tail = " | ".join(log.read_text(errors="replace").strip().splitlines()[-3:]) if log.exists() else ""
+            raise ChromiumError(f"{exc}" + (f" — {tail}" if tail else "")) from exc
+        return base64.b64decode(result["data"])
     finally:
+        if cdp:
+            cdp.close()
         shutil.rmtree(work, ignore_errors=True)  # /tmp is 512 MB and survives warm starts
 
 
@@ -177,15 +283,15 @@ def _render_playwright(html: str, page_format: str) -> bytes:
 
 
 def engine() -> str:
-    """Which renderer this environment will use: ``cli`` (the layer) or ``playwright``."""
-    return "cli" if _pack_dir() else "playwright"
+    """Which renderer this environment will use: ``cdp`` (the layer) or ``playwright``."""
+    return "cdp" if _pack_dir() else "playwright"
 
 
 def render(html: str, *, page_format: str = "A4") -> bytes:
     """Return PDF bytes for ``html``, full-bleed (zero margins, backgrounds on)."""
     pack = _pack_dir()
     if pack:
-        return _render_cli(_inflate(pack), html, page_format)
+        return _render_cdp(_inflate(pack), html, page_format)
     return _render_playwright(html, page_format)
 
 
