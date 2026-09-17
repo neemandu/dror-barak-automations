@@ -37,7 +37,7 @@ run live.
 | T8 | `strategy_bot` | Button `בנה אסטרטגיה` / manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
 | T10 | `daily_email` | Scheduled: daily (AWS `DailyEmailFunction`, 16:30 UTC) | `python -m src.automations.daily_email --dry-run` |
-| T11 | `dashboard` | Local only (not deployed) | `python -m src.dashboard --dry-run` |
+| T11 | `dashboard` | Always on (AWS `DashboardFunction`; the `DashboardUrl` stack output) | `python -m src.dashboard --dry-run` |
 | T12 | `smoove_to_manychat` | Webhook: Smoove lead | `python -m src.automations.smoove_to_manychat --first-name דנה --phone 0501234567 --msg ai_agents --dry-run` |
 | — | `sign_reminders` | Scheduled: daily | `python -m src.automations.sign_reminders --dry-run` |
 | — | `questionnaire_reminders` | Scheduled: daily | `python -m src.automations.questionnaire_reminders --dry-run` |
@@ -49,7 +49,9 @@ the 24-hour-window note in [`CLAUDE.md`](CLAUDE.md).
 
 A read-only page over the run-log, grouped into subjects (invoices, leads, campaign
 reports), with links out to Drive / ClickUp. Failures are pinned to the
-top. Nothing can be triggered from it.
+top. Nothing can be triggered from it. On AWS it is `DashboardFunction` behind its
+own API (`DashboardUrl` output), password = the `DashboardPassword` parameter, with
+the session in a signed cookie so instances share nothing. Locally:
 
 ```bash
 python -m src.dashboard --dry-run     # sample data, no .env needed → http://localhost:8080
@@ -64,8 +66,17 @@ HTTPS; only set `DASHBOARD_INSECURE_COOKIE=1` for local http development.
 
 **Production runs on AWS** (`infra/template.yaml`, stack `dror-automations-dev`):
 the ClickUp webhook, buttons, signing and questionnaire pages are one Lambda, Smoove
-is another, and the schedules below are EventBridge rules (`src/scheduled.py`). See
-[`CLAUDE.md`](CLAUDE.md) → "How they run". The modes below are the local equivalents.
+is another, the dashboard a third, and the schedules below are EventBridge rules
+(`src/scheduled.py`). See [`CLAUDE.md`](CLAUDE.md) → "How they run". The modes
+below are the local equivalents.
+
+```bash
+# Deploy (after `sam build --use-container -t infra/template.yaml` from a clean checkout):
+python -m src.tools.deploy_stack --stack dror-automations-dev  --env-file .env        # production
+python -m src.tools.deploy_stack --stack dror-automations-test --env-file .env.test   # test stack, all mocks
+python -m src.tools.push_stack_params SmtpHost SmtpUser SmtpPassword DrorEmail        # one value, from .env
+python -m src.tools.publish_chromium_layer                                            # new Chromium for the report
+```
 
 **Manual** — run any module directly, as in the table above.
 
@@ -123,7 +134,7 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 342 tests: infra, template, dashboard/auth, and a dry-run test per automation
+python -m pytest        # 369 tests: infra, template, dashboard/auth, deploy tooling, and a dry-run test per automation
 ```
 
 Dry-run is not proof on its own. If you change something with a real runtime

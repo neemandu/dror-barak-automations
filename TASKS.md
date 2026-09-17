@@ -5,7 +5,7 @@ complete + dry-run verified**; live runs additionally need the credentials in
 `docs/CREDENTIALS.md`. Last audited against production (run-log, Lambda metrics,
 ClickUp) on 2026-09-15.
 
-`python -m pytest` → 342 passing.
+`python -m pytest` → 369 passing.
 
 ## Now — production is missing configuration, not code
 
@@ -35,37 +35,26 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
 ## Backlog
 
-- [ ] **Chromium on Lambda for the campaign report.** The PDF renders via headless
-  Chromium (`src/lib/pdf_chromium.py`); the stack has no layer and no
-  `PLAYWRIGHT_CHROMIUM_PATH`, so the monthly schedule cannot produce a report even
-  once the Meta token is set. The stack is **arm64** and the usual
-  `@sparticuz/chromium` layer is x86_64-only: either an arm64 Chromium build, or
-  move `CampaignReportFunction` alone to x86_64.
-- [ ] **Deploy the dashboard** — or decide it stays local. `src/dashboard.py` is a
-  stdlib server with in-memory sessions (`_sessions`), so on Lambda Dror would be
-  logged out at random; a signed cookie replaces it. Today Dror has no dashboard.
-- [ ] **A test stack.** There is one stack, named `dev`, and it is production. A
-  second stage (`Stage=test`, `WebhookDryRun=1`, a test ClickUp list) is the only
-  way to exercise a full flow against the real services without risking a client.
-- [ ] **Clean test rows out of the production run-log.** Entries from 16.7 with
-  automation `t` / `a`, and the dry-run Taskey migration, still show on the
-  dashboard and in the digest as if they happened.
-- [ ] **Keep client documents out of the Lambda package.** `CodeUri: ../` packages
-  the working folder: the 27.7 deploy shipped `docs/contract_source.txt`, Dror's
-  proposal PDF and call-notes DOCX into all four functions (replaced on 15.9 by a
-  build from a clean checkout). Add exclusions to the template, and purge the old
-  artifacts from the `aws-sam-cli-managed-default` bucket.
+- [ ] **Purge the remaining July artifacts** from the `aws-sam-cli-managed-default`
+  bucket (the 0.9 MB / 6.5 MB builds of 15–16.7). The two 27.7/23.7 packages that
+  carried `docs/contract_source.txt` were deleted on 17.9; the rest predate that
+  file but were also built from a working folder. A bulk delete is blocked for the
+  assistant; one `aws s3api delete-objects` by the operator does it.
+- [ ] **Keep client documents out of the Lambda package by construction.**
+  `CodeUri: ../` packages the working folder; today the guard is "build from a
+  clean checkout" (`deploy_stack` docs). A `Metadata`-level exclude or a build
+  Makefile would make it impossible rather than procedural.
+- [ ] **Real-service test list.** The test stack runs everything on mocks. A test
+  ClickUp list (same fields) would let it exercise the real ClickUp round-trip
+  without touching client tasks.
 - [ ] **Decide the initial-meeting questionnaire.** The original #2 (WhatsApp a
   questionnaire on `פגישה ראשונית`) was replaced by the post-signing strategy
   questionnaire; nothing fires on `פגישה ראשונית` today. Dror's call whether a
   pre-quote step is wanted back, and over which channel.
-- [ ] **Replace onboarding's "open a WhatsApp channel" step.** The official API
-  cannot create groups, so the `create_group` call is gone — but nothing took its
-  place: a newly onboarded client gets the questionnaire email and no WhatsApp at
-  all. The replacement is a Meta-approved welcome **Flow** sent through ManyChat,
-  the same shape as T12. Deferred deliberately (Dror's call) until the Flow copy
-  exists and is approved; `whatsapp_templates.onboarding_welcome` is the draft
-  wording, currently unused.
+- [ ] **The WhatsApp welcome Flow itself.** The code path exists (see Done); what is
+  missing is the Meta-approved template in ManyChat and its `flow_ns`. Dror writes
+  the copy (`whatsapp_templates.onboarding_welcome` is a draft), ManyChat submits
+  it, then `push_stack_params ManyChatFlowOnboarding`.
 - [ ] **Rework `whatsapp_templates.py`.** Free-text bodies are no longer possible;
   it becomes a map of approved template names → variables.
 - [ ] **File the signed contract into the `חוזים` subfolder.** Onboarding gives every
@@ -114,6 +103,25 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   DynamoDB** (`RunLogTable`), **signing page**, **webhook stack deployed** (15.7,
   live since 27.7) and **ClickUp webhook registered**
   (`src/tools/register_clickup_webhook.py`).
+- [x] **Chromium on Lambda (17.9).** sparticuz/chromium ships arm64 packs since v135;
+  `src/tools/publish_chromium_layer.py` builds the layer (+DejaVu for Hebrew),
+  `pdf_chromium` inflates it into /tmp. Proven in the Lambda image: cold ~5–9 s,
+  warm ~1 s. `deploy_stack` restores the execute bit `sam build --use-container`
+  strips from Playwright's Node driver; `pdf_chromium` self-heals if it is missing.
+- [x] **Dashboard on Lambda (17.9).** `src/dashboard_lambda.py`, own API, session in a
+  signed cookie, `DashboardPassword` parameter; the daily email links to it.
+- [x] **Test stack (17.9).** `dror-automations-test`: `Stage=test`, `WEBHOOK_DRY_RUN=1`
+  (now honoured by the schedules too), fake tokens from `.env.test`; deployed with
+  `src/tools/deploy_stack.py`, which also does production from `.env` with no secret
+  on a command line and no silent reset to template defaults.
+- [x] **Run-log cleanup (17.9).** 23 test rows (dry-runs, `t`/`a`, the removed Morning
+  test) deleted from `dror-runlog-dev`; backup kept locally.
+- [x] **WhatsApp welcome after signing — code side (17.9).** Onboarding sends
+  `MANYCHAT_FLOW_ONBOARDING` when set and logs a visible skip otherwise. Waits on
+  Dror's approved template (Open Questions 2).
+- [x] **Provider details on the stack were truncated** (`דרור`, `הקציר`): the first
+  deploy's `--parameter-overrides` split on spaces. Fixed by the 17.9 deploy from
+  `.env`; every contract before it rendered a truncated provider block.
 - [x] **Taskey → ClickUp migration.** `src/tools/migrate_taskey_to_clickup.py`.
 - [x] **Credentials guide.** `docs/CREDENTIALS.md`. **Operator guide (Hebrew).**
   `docs/OPERATIONS.md`.

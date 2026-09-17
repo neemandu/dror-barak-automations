@@ -223,6 +223,10 @@ account and no monthly fee. It needs:
 
 → `DROR_WHATSAPP` — international format, digits only, no `+`, e.g. `972501234567`
 → `DROR_EMAIL` — for report approvals and strategy notifications
+→ `DASHBOARD_PASSWORD` — the dashboard's shared password (pushed as `DashboardPassword`);
+  the function refuses to serve while it is empty
+→ `CHROMIUM_LAYER_ARN` — from `python -m src.tools.publish_chromium_layer`; pushed as
+  `ChromiumLayerArn`, it gives the campaign report its browser
 
 ---
 
@@ -230,7 +234,10 @@ account and no monthly fee. It needs:
 
 - Put values **only** in `.env`. Never in code, never in a commit, never in the
   public repo.
-- **Get a value onto the stack** with
+- **Deploy a whole stack** with `python -m src.tools.deploy_stack --stack <name>
+  --env-file <.env>` — parameters come from the env file, everything else keeps
+  its stack value. `.env.test` (gitignored, fake tokens, `WEBHOOK_DRY_RUN=1`) is the
+  test stack's file. **Get a single value onto the stack** with
   `python -m src.tools.push_stack_params SmtpHost SmtpUser SmtpPassword DrorEmail`
   (template parameter names). It reads the values from `.env`, never prints them,
   changes only the Lambdas' environment, and verifies afterwards. This is how a

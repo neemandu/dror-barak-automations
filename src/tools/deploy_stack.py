@@ -111,13 +111,25 @@ def fix_executable_bits(build_dir: Path) -> list[Path]:
     return fixed
 
 
-def package(build_dir: Path, region: str) -> Path:
+def package(build_dir: Path, region: str, env: dict[str, str]) -> Path:
     """`sam package`: upload the built code (deduplicated by hash) and return the
-    template whose CodeUris point at S3."""
+    template whose CodeUris point at S3.
+
+    The credentials come from the env file, like everything else here: the SAM
+    subprocess would otherwise fall back to ~/.aws, which on a shared machine may
+    be a different client's account entirely.
+    """
+    import os
+
     out = Path(tempfile.mkdtemp()) / "packaged.yaml"
     cmd = [sys.executable, "-m", "samcli", "package", "--template-file", str(build_dir / "template.yaml"),
            "--resolve-s3", "--region", region, "--output-template-file", str(out)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    sub_env = {**os.environ, "SAM_CLI_TELEMETRY": "0", "AWS_DEFAULT_REGION": region}
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        if env.get(key) or config.get(key):
+            sub_env[key] = env.get(key) or str(config.get(key))
+    sub_env.pop("AWS_PROFILE", None)
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=sub_env)
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout[-2000:] + proc.stderr[-2000:])
         raise SystemExit("sam package failed")
@@ -142,7 +154,7 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
     fixed = fix_executable_bits(build_dir)
     if fixed:
         print(f"restored execute bit on {len(fixed)} file(s): {', '.join(str(f.relative_to(build_dir)) for f in fixed)}")
-    packaged = package(build_dir, region)
+    packaged = package(build_dir, region, env)
     params = template_parameters(packaged)
     parameters, lines = plan_parameters(params, env, existing=existing)
     print(f"{change_type} {stack} from {env_file} ({len(parameters)} parameters):")

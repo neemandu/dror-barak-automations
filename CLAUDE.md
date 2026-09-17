@@ -94,14 +94,14 @@ logging, and a `--dry-run` mode.
 | 2 | **Send questionnaire** | Button (`שלח שאלון`) / CLI | Email the client the strategy-questionnaire link (our own form) and restart the chase. Onboarding (#5) sends it automatically after signing; the button re-sends a lost link. Nothing fires on `initial_meeting` any more — see History. |
 | 3 | **Social-media prep report** | Questionnaire submitted (`/questionnaire`) / Button (`בנה דוח רשתות`) | AI reads the social profiles from the questionnaire and writes a per-network prep report for Dror. Reused by #8. |
 | 4 | **Send quote + capture signature** | Manual + our signing page | Send a quote with a signature link; on signing, store the PDF in Drive and write the link back to ClickUp. |
-| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder + its standard subfolders, copy templates, email the strategy questionnaire (and chase it), flag a missing Meta ad account, promote the client to `active`/`in_work`, and summarise on the task. |
+| 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder + its standard subfolders, copy templates, email the strategy questionnaire (and chase it), send the WhatsApp welcome Flow when `MANYCHAT_FLOW_ONBOARDING` names an approved one (a logged skip until then), flag a missing Meta ad account, promote the client to `active`/`in_work`, and summarise on the task. |
 | 5b | **Questionnaire chase** | Scheduled (daily) | Nudges an onboarded client who hasn't filled the questionnaire, at 3 and 7 days, then tells Dror and stops. Runs in the same daily job as the signature reminders (`src\scheduled.py::reminders_handler`). |
 | ~~6~~ | ~~Monthly payment requests~~ | — | **Removed.** Dror invoices clients himself; the system does not touch Morning. |
-| 7 | **Monthly campaign summary** | Scheduled (1st of month, `CampaignReportFunction`) / Button (`בנה דוח קמפיין`) | Pull the month's Meta Ads results, fill Dror's report template, add AI recommendations, send to Dror to approve → forward to client + save to Drive. Not yet working on AWS — see `TASKS.md` (Meta token, Chromium layer). |
+| 7 | **Monthly campaign summary** | Scheduled (1st of month, `CampaignReportFunction`) / Button (`בנה דוח קמפיין`) | Pull the month's Meta Ads results, fill Dror's report template, add AI recommendations, send to Dror to approve → forward to client + save to Drive. The PDF renders in headless Chromium from a Lambda **layer** (`src\tools\publish_chromium_layer.py`, inflated by `src\lib\pdf_chromium.py`); prove it with a `{"check": "chromium"}` invoke. Emailing it still needs SMTP on the stack. |
 | 8 | **Strategy bot** | Button (`בנה אסטרטגיה`) / CLI | From the questionnaire answers: audience + competitors + digital presence → full strategy → Drive → email Dror. Reuses #3. |
 | 9 | **ClickUp → Claude Code** (bonus) | Webhook (ClickUp task) | Turns a ClickUp task into a Claude Code work brief. |
 | 10 | **Daily report** | Scheduled (daily 16:30 UTC, `DailyEmailFunction`) | Emails Dror everything the automations did that day (`daily_email`). Needs `DrorEmail` + SMTP on the stack; until then it logs one skipped line a day. |
-| 11 | **Dashboard** | Local only — not deployed | Read-only web page over the run-log, grouped by subject, with links out. `src\dashboard.py`. Its sessions live in memory, so it is not on Lambda yet (`TASKS.md`). |
+| 11 | **Dashboard** | Always on (`DashboardFunction`, its own API) | Read-only web page over the run-log, grouped by subject, with links out. `src\dashboard.py` renders; `src\dashboard_lambda.py` serves it behind API Gateway with the session in a signed cookie. Password = the `DashboardPassword` parameter. Also runs locally: `python -m src.dashboard`. |
 | 12 | **Smoove → ManyChat** | Webhook (Smoove: lead) | Standalone AWS Lambda (`src\smoove_handler.py`). Smoove POSTs `{f_name, cellphone, msg}`; find/create the ManyChat contact by phone and trigger the **Flow** named by `msg` (`msg`→`MANYCHAT_FLOW_<MSG>`, unmapped is rejected). Flow because the message is business-initiated → Meta-approved template only. |
 
 ## How they run
@@ -110,9 +110,17 @@ logging, and a `--dry-run` mode.
   `dror-automations-dev` in eu-central-1): API Gateway → `src\lambda_handler.py`
   for the ClickUp webhook (`/clickup`), the buttons (`/action`), the signing page
   (`/sign`) and the questionnaire (`/questionnaire`); a separate Lambda for Smoove
-  (`/smoove`); and EventBridge schedules in `src\scheduled.py` — daily reminders,
-  the daily email, the monthly campaign report. Build from a clean checkout:
-  `CodeUri: ../` packages the whole working folder.
+  (`/smoove`); the dashboard on its own API (`src\dashboard_lambda.py`); and
+  EventBridge schedules in `src\scheduled.py` — daily reminders, the daily email,
+  the monthly campaign report. `WEBHOOK_DRY_RUN=1` turns every one of them into a
+  mock run, schedules included.
+- **Deploying.** Build from a clean checkout (`CodeUri: ../` packages the whole
+  working folder), then `python -m src.tools.deploy_stack --stack <name>
+  --env-file <.env>`: every parameter comes from the env file, the rest keep
+  their stack values, no secret touches a command line. A single value:
+  `python -m src.tools.push_stack_params <ParameterName>`. A second stack,
+  `dror-automations-test` (`Stage=test`, `WEBHOOK_DRY_RUN=1`, fake tokens in
+  `.env.test`), exercises the real wiring against mocks.
 - **Webhook (local)** — `src\webhook_server.py` is the stdlib equivalent for
   development. It has no auth.
 - **Scheduled (local)** — cron / Task Scheduler can run
