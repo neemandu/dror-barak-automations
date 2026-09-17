@@ -5,7 +5,7 @@ complete + dry-run verified**; live runs additionally need the credentials in
 `docs/CREDENTIALS.md`. Last audited against production (run-log, Lambda metrics,
 ClickUp) on 2026-09-15.
 
-`python -m pytest` → 369 passing.
+`python -m pytest` → 370 passing.
 
 ## Now — production is missing configuration, not code
 
@@ -48,10 +48,17 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   carried `docs/contract_source.txt` were deleted on 17.9; the rest predate that
   file but were also built from a working folder. A bulk delete is blocked for the
   assistant; one `aws s3api delete-objects` by the operator does it.
-- [ ] **Keep client documents out of the Lambda package by construction.**
-  `CodeUri: ../` packages the working folder; today the guard is "build from a
-  clean checkout" (`deploy_stack` docs). A `Metadata`-level exclude or a build
-  Makefile would make it impossible rather than procedural.
+- [ ] **A sturdier package for the report function.** Code (187 MB, 118 MB of it
+  Playwright's bundled Node) plus the Chromium layer (70 MB) unzips to 256 MB of
+  Lambda's 250 MiB (262 MB) — a 6 MB margin, and only after `deploy_stack` prunes
+  tests/docs/Playwright's UI. A Playwright bump can break the deploy (the tool now
+  refuses before uploading). The durable fix: on Lambda, print with Chromium's own
+  `--print-to-pdf` and build that function without Playwright (a Makefile build),
+  which also removes the Node execute-bit problem and the version coupling.
+- [x] **Client documents cannot reach Lambda any more**: `deploy_stack` deletes
+  `docs/`, `tests/`, `infra/` and markdown from every function before packaging
+  (17.9). Building from a clean checkout is still the habit; it is no longer the
+  only guard. (Plain `sam deploy` bypasses this — use `deploy_stack`.)
 - [ ] **Real-service test list.** The test stack runs everything on mocks. A test
   ClickUp list (same fields) would let it exercise the real ClickUp round-trip
   without touching client tasks.
