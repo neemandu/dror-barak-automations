@@ -2,6 +2,10 @@
 -r requirements.txt
 
 pytest>=8.0
+
+# Renders the campaign report locally (no Chromium layer on a laptop). After
+# installing: `playwright install chromium`. Not shipped to Lambda.
+playwright>=1.63,<2
 # tests/test_template.py reads infra/template.yaml. SAM CLI brings it anyway.
 PyYAML>=6.0
 

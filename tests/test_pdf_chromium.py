@@ -56,33 +56,42 @@ def test_a_warm_container_does_not_inflate_twice(pack, tmp_path):
     assert (tmp / "chromium").read_bytes() == b"already here"
 
 
-def test_without_a_pack_playwrights_own_browser_is_used(monkeypatch, tmp_path):
-    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PACK", str(tmp_path / "nowhere"))
-    monkeypatch.delenv("PLAYWRIGHT_CHROMIUM_PATH", raising=False)
-    launch = pdf_chromium._launch_options()
-    assert "executable_path" not in launch
-    assert "--single-process" not in launch["args"], "Lambda-only flags must not leak into local renders"
+def test_without_a_pack_playwright_renders(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHROMIUM_PACK_DIR", str(tmp_path / "nowhere"))
+    assert pdf_chromium.engine() == "playwright"
+    called = {}
+    monkeypatch.setattr(pdf_chromium, "_render_playwright", lambda html, fmt: called.setdefault("pw", b"%PDF-pw"))
+    assert pdf_chromium.render("<html></html>") == b"%PDF-pw"
 
 
-def test_an_explicit_binary_beats_the_pack(monkeypatch, pack):
-    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PACK", str(pack))
-    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PATH", "/usr/bin/chromium")
-    assert pdf_chromium._launch_options()["executable_path"] == "/usr/bin/chromium"
-
-
-def test_a_non_executable_node_driver_is_copied_somewhere_it_can_run(tmp_path, monkeypatch):
-    node = tmp_path / "pkg" / "node"; node.parent.mkdir(); node.write_bytes(b"node"); node.chmod(0o644)
-    monkeypatch.setattr("playwright._impl._driver.compute_driver_executable", lambda: (str(node), "cli.js"))
-    monkeypatch.delenv("PLAYWRIGHT_NODEJS_PATH", raising=False)
+def test_with_the_layer_chromium_prints_by_itself(pack, tmp_path, monkeypatch):
+    # A stand-in binary that does what headless_shell does with --print-to-pdf:
+    # proves the command line, the @page injection and the cleanup without a browser.
+    fake = tmp_path / "fake-chromium"
+    fake.write_text("#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in --print-to-pdf=*) out=\"${a#--print-to-pdf=}\";; "
+                    "file://*) src=\"${a#file://}\";; esac; done\n"
+                    "printf '%%PDF-1.4 ' > \"$out\"; cat \"$src\" >> \"$out\"\n")
+    fake.chmod(0o755)
     tmp = tmp_path / "tmp"; tmp.mkdir()
-    pdf_chromium._ensure_node_executable(tmp)
-    assert os.environ["PLAYWRIGHT_NODEJS_PATH"] == str(tmp / "pw-node")
-    assert os.access(tmp / "pw-node", os.X_OK)
+    monkeypatch.setenv("CHROMIUM_PACK_DIR", str(pack))
+    monkeypatch.setattr(pdf_chromium, "TMP", tmp)
+    monkeypatch.setattr(pdf_chromium, "_inflate", lambda p, t=None: str(fake))
+    assert pdf_chromium.engine() == "cli"
+    pdf = pdf_chromium.render("<html><head></head><body>שלום</body></html>")
+    assert pdf.startswith(b"%PDF")
+    assert b"@page{size:A4;margin:0}" in pdf, "a document without @page gets a full-bleed page box"
+    assert "שלום".encode() in pdf
+    assert list(tmp.glob("pdf-*")) == [], "the work dir must not pile up in /tmp on a warm container"
 
 
-def test_an_executable_node_driver_is_left_alone(tmp_path, monkeypatch):
-    node = tmp_path / "node"; node.write_bytes(b"node"); node.chmod(0o755)
-    monkeypatch.setattr("playwright._impl._driver.compute_driver_executable", lambda: (str(node), "cli.js"))
-    monkeypatch.delenv("PLAYWRIGHT_NODEJS_PATH", raising=False)
-    pdf_chromium._ensure_node_executable(tmp_path)
-    assert "PLAYWRIGHT_NODEJS_PATH" not in os.environ
+def test_a_document_with_its_own_page_box_is_left_alone():
+    html = "<html><head><style>@page{size:A3}</style></head></html>"
+    assert pdf_chromium._with_page_css(html, "A4") == html
+
+
+def test_chromium_failing_to_print_is_a_clear_error(pack, tmp_path, monkeypatch):
+    broken = tmp_path / "broken"; broken.write_text("#!/bin/sh\necho 'libnss3.so: cannot open' >&2\nexit 127\n"); broken.chmod(0o755)
+    tmp = tmp_path / "tmp"; tmp.mkdir()
+    monkeypatch.setattr(pdf_chromium, "TMP", tmp)
+    with pytest.raises(pdf_chromium.ChromiumError, match="libnss3"):
+        pdf_chromium._render_cli(str(broken), "<html></html>", "A4")

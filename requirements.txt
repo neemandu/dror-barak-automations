@@ -16,14 +16,11 @@ google-auth>=2.28
 Pillow>=10.2
 python-bidi>=0.4
 
-# Renders the campaign report PDF via headless Chromium — full-bleed banner, zero
-# margins, crisp output that the Drive Docs path could not produce. On Lambda the
-# Chromium binary comes from a layer, not Playwright's download: set
-# PLAYWRIGHT_CHROMIUM_PATH to the layer binary (see TASKS.md). The contract PDF
-# still uses the Drive path and needs none of this.
-# Pinned to the Chromium the layer ships (Playwright 1.63 <-> Chromium 153; see
-# src/tools/publish_chromium_layer.py). Bump both together.
-playwright>=1.63,<2
+# The campaign report PDF is printed by headless Chromium. On Lambda that is the
+# Chromium *layer* printing by itself (src/lib/pdf_chromium.py), so nothing is
+# needed here. Playwright — for rendering on a laptop — lives in
+# requirements-dev.txt: its bundled Node is 118 MB, which is what nearly pushed
+# the function past Lambda's 250 MB limit.
 
 # Inflates the Chromium layer's Brotli archives on Lambda (src/lib/pdf_chromium.py).
 brotli>=1.1

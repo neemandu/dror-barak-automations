@@ -92,34 +92,12 @@ def _session(env: dict[str, str]) -> Any:
     )
 
 
-# Files that must be executable on Lambda. `sam build --use-container` copies the
-# build out of its container through a tar stream that drops execute bits, so a
-# package built that way carries Playwright's Node driver as a 122 MB file
-# nobody may run, and the campaign report dies with "Permission denied".
-EXECUTABLES = ("playwright/driver/node",)
-
-
-def fix_executable_bits(build_dir: Path) -> list[Path]:
-    """Restore the execute bit on known binaries in every function's build dir."""
-    fixed = []
-    for function_dir in (d for d in build_dir.iterdir() if d.is_dir()):
-        for rel in EXECUTABLES:
-            path = function_dir / rel
-            if path.exists() and not (path.stat().st_mode & 0o100):
-                path.chmod(path.stat().st_mode | 0o755)
-                fixed.append(path)
-    return fixed
-
-
-# Things `CodeUri: ../` drags into every function that Lambda never runs. Two
-# reasons to drop them before packaging. Size: the report function's code plus
-# its Chromium layer must unzip under 250 MB, and the first attempt missed by
-# 400 KB. Safety: nothing under docs/ can ride along into Lambda, whatever the
-# working folder held when the build ran.
+# Things `CodeUri: ../` drags into every function that Lambda never runs. Dropped
+# before packaging so that nothing under docs/ can ride along into Lambda,
+# whatever the working folder held when the build ran (a July build shipped
+# Dror's contract text and proposal this way).
 PRUNE = (
     "tests", "docs", "examples", "infra", "client.yml", "requirements-dev.txt",
-    "playwright/driver/package/lib/vite",   # trace viewer / recorder UI
-    "playwright/driver/package/types",      # TypeScript typings
 )
 LAMBDA_UNZIPPED_LIMIT = 262_144_000
 # The Chromium layer unzips to ~70 MB (publish_chromium_layer). Any function may
@@ -199,9 +177,6 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
                 f"{function_dir.name} unzips to {size / 1e6:.1f} MB; with the Chromium layer "
                 f"(~{LAYER_BUDGET / 1e6:.0f} MB) that exceeds Lambda's {LAMBDA_UNZIPPED_LIMIT / 1e6:.0f} MB. "
                 f"Trim dependencies or extend PRUNE before deploying.")
-    fixed = fix_executable_bits(build_dir)
-    if fixed:
-        print(f"restored execute bit on {len(fixed)} file(s): {', '.join(str(f.relative_to(build_dir)) for f in fixed)}")
     packaged = package(build_dir, region, env)
     params = template_parameters(packaged)
     parameters, lines = plan_parameters(params, env, existing=existing)

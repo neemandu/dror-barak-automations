@@ -481,15 +481,15 @@ Resources:
       Timeout: 900
       # Chromium wants room (sparticuz recommends 1600 MB+), but this account is
       # a new one and Lambda caps every function at 512 MB until the account's
-      # quotas are raised (see TASKS.md). The inflate streams to /tmp so it fits;
-      # rendering a report at 512 MB is proven in the Lambda image. Raise this
-      # once the cap is lifted. /tmp stays at the default 512 MB: the inflated
-      # browser and libraries take ~220 MB.
+      # quotas are raised (see TASKS.md). The inflate streams to /tmp so it fits,
+      # and Chromium prints the PDF itself (no Playwright/Node beside it). Raise
+      # this once the cap is lifted. /tmp stays at the default 512 MB: the
+      # inflated browser and libraries take ~220 MB.
       MemorySize: 512
       Layers: !If [HasChromiumLayer, [!Ref ChromiumLayerArn], !Ref AWS::NoValue]
       Environment:
         Variables:
-          PLAYWRIGHT_CHROMIUM_PACK: /opt/chromium
+          CHROMIUM_PACK_DIR: /opt/chromium
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable

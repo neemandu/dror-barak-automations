@@ -42,21 +42,12 @@ def test_env_file_grammar_matches_config_load_dotenv(tmp_path):
     assert tool.read_env_file(f) == {"A": "1", "B": "two words", "C": ""}
 
 
-def test_the_node_driver_gets_its_execute_bit_back(tmp_path):
-    node = tmp_path / "CampaignReportFunction" / "playwright" / "driver" / "node"
-    node.parent.mkdir(parents=True); node.write_bytes(b"ELF"); node.chmod(0o644)
-    fixed = tool.fix_executable_bits(tmp_path)
-    assert fixed == [node] and node.stat().st_mode & 0o111
-    assert tool.fix_executable_bits(tmp_path) == [], "idempotent"
-
-
 def test_prune_drops_docs_and_tests_but_never_the_code(tmp_path):
     fn = tmp_path / "WebhookFunction"
     for rel in ("src/app.py", "templates/t.html", "docs/contract_source.txt", "tests/test_x.py",
-                "playwright/driver/package/lib/vite/ui.js", "playwright/driver/package/lib/coreBundle.js",
-                "README.md", ".env.example"):
+                "infra/template.yaml", "PIL/Image.py", "README.md", ".env.example"):
         f = fn / rel; f.parent.mkdir(parents=True, exist_ok=True); f.write_text("x" * 100)
     assert tool.prune_build(tmp_path) > 0
     left = sorted(str(f.relative_to(fn)) for f in fn.rglob("*") if f.is_file())
-    assert left == [".env.example", "playwright/driver/package/lib/coreBundle.js", "src/app.py", "templates/t.html"]
+    assert left == [".env.example", "PIL/Image.py", "src/app.py", "templates/t.html"]
     assert tool.prune_build(tmp_path) == 0, "idempotent"
