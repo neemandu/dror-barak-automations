@@ -35,6 +35,14 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
 ## Backlog
 
+- [ ] **Lift the new-account Lambda limits.** The AWS account is restricted to
+  **5 concurrent executions and 512 MB per function** (`lambda get-account-settings`).
+  The report function runs at the cap (streamed inflate, proven), but the monthly
+  fan-out invokes one child per client and throttles past four; and Chromium would
+  be happier at 1–2 GB. The Service Quotas API refuses values under AWS's default
+  (1000), so this is a console step: Service Quotas → AWS Lambda → *Concurrent
+  executions* → request 1000 (AWS reviews new accounts). Then raise `MemorySize` on
+  `CampaignReportFunction`.
 - [ ] **Purge the remaining July artifacts** from the `aws-sam-cli-managed-default`
   bucket (the 0.9 MB / 6.5 MB builds of 15–16.7). The two 27.7/23.7 packages that
   carried `docs/contract_source.txt` were deleted on 17.9; the rest predate that
