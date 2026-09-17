@@ -111,6 +111,43 @@ def fix_executable_bits(build_dir: Path) -> list[Path]:
     return fixed
 
 
+# Things `CodeUri: ../` drags into every function that Lambda never runs. Two
+# reasons to drop them before packaging. Size: the report function's code plus
+# its Chromium layer must unzip under 250 MB, and the first attempt missed by
+# 400 KB. Safety: nothing under docs/ can ride along into Lambda, whatever the
+# working folder held when the build ran.
+PRUNE = (
+    "tests", "docs", "examples", "infra", "client.yml", "requirements-dev.txt",
+    "playwright/driver/package/lib/vite",   # trace viewer / recorder UI
+    "playwright/driver/package/types",      # TypeScript typings
+)
+LAMBDA_UNZIPPED_LIMIT = 262_144_000
+# The Chromium layer unzips to ~70 MB (publish_chromium_layer). Any function may
+# get it attached, so every function's code must leave room for it.
+LAYER_BUDGET = 72_000_000
+
+
+def prune_build(build_dir: Path) -> int:
+    """Remove non-runtime files from every function's build dir; returns bytes freed."""
+    import shutil
+
+    freed = 0
+    for function_dir in (d for d in build_dir.iterdir() if d.is_dir()):
+        targets = [function_dir / rel for rel in PRUNE] + list(function_dir.glob("*.md"))
+        for path in targets:
+            if path.is_dir():
+                freed += sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+                shutil.rmtree(path)
+            elif path.exists():
+                freed += path.stat().st_size
+                path.unlink()
+    return freed
+
+
+def unzipped_size(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
 def package(build_dir: Path, region: str, env: dict[str, str]) -> Path:
     """`sam package`: upload the built code (deduplicated by hash) and return the
     template whose CodeUris point at S3.
@@ -151,6 +188,17 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
             raise
         existing, change_type = None, "CREATE"
 
+    freed = prune_build(build_dir)
+    if freed:
+        print(f"pruned {freed / 1e6:.1f} MB of non-runtime files from the build")
+    for function_dir in (d for d in build_dir.iterdir() if d.is_dir()):
+        size = unzipped_size(function_dir)
+        if size + LAYER_BUDGET > LAMBDA_UNZIPPED_LIMIT:
+            # Found out the slow way once: a 60 MB upload, then a stack rollback.
+            raise SystemExit(
+                f"{function_dir.name} unzips to {size / 1e6:.1f} MB; with the Chromium layer "
+                f"(~{LAYER_BUDGET / 1e6:.0f} MB) that exceeds Lambda's {LAMBDA_UNZIPPED_LIMIT / 1e6:.0f} MB. "
+                f"Trim dependencies or extend PRUNE before deploying.")
     fixed = fix_executable_bits(build_dir)
     if fixed:
         print(f"restored execute bit on {len(fixed)} file(s): {', '.join(str(f.relative_to(build_dir)) for f in fixed)}")
