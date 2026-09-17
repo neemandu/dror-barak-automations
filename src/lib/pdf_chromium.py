@@ -24,7 +24,6 @@ import os
 import shutil
 import tarfile
 import time
-import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -146,11 +145,8 @@ def render(html: str, *, page_format: str = "A4") -> bytes:
         ) from exc
 
     launch = _launch_options()
-    # A fresh profile per render, removed afterwards: on a warm Lambda the
-    # default profile dir in /tmp grows until the 512 MB disk is full.
-    profile = TMP / f"pw-{uuid.uuid4().hex}" if "executable_path" in launch else None
-    if profile:
-        launch["args"] = launch["args"] + [f"--user-data-dir={profile}"]
+    # No --user-data-dir of our own: Playwright refuses it in launch(), and makes
+    # (and removes) a temporary profile per browser itself — under /tmp on Lambda.
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(**launch)
@@ -169,9 +165,6 @@ def render(html: str, *, page_format: str = "A4") -> bytes:
         raise
     except Exception as exc:  # noqa: BLE001
         raise ChromiumError(f"Chromium could not render the PDF: {exc}") from exc
-    finally:
-        if profile:
-            shutil.rmtree(profile, ignore_errors=True)
 
 
 def self_check() -> dict[str, Any]:
