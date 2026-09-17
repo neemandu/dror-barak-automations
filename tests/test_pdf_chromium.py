@@ -68,3 +68,21 @@ def test_an_explicit_binary_beats_the_pack(monkeypatch, pack):
     monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PACK", str(pack))
     monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PATH", "/usr/bin/chromium")
     assert pdf_chromium._launch_options()["executable_path"] == "/usr/bin/chromium"
+
+
+def test_a_non_executable_node_driver_is_copied_somewhere_it_can_run(tmp_path, monkeypatch):
+    node = tmp_path / "pkg" / "node"; node.parent.mkdir(); node.write_bytes(b"node"); node.chmod(0o644)
+    monkeypatch.setattr("playwright._impl._driver.compute_driver_executable", lambda: (str(node), "cli.js"))
+    monkeypatch.delenv("PLAYWRIGHT_NODEJS_PATH", raising=False)
+    tmp = tmp_path / "tmp"; tmp.mkdir()
+    pdf_chromium._ensure_node_executable(tmp)
+    assert os.environ["PLAYWRIGHT_NODEJS_PATH"] == str(tmp / "pw-node")
+    assert os.access(tmp / "pw-node", os.X_OK)
+
+
+def test_an_executable_node_driver_is_left_alone(tmp_path, monkeypatch):
+    node = tmp_path / "node"; node.write_bytes(b"node"); node.chmod(0o755)
+    monkeypatch.setattr("playwright._impl._driver.compute_driver_executable", lambda: (str(node), "cli.js"))
+    monkeypatch.delenv("PLAYWRIGHT_NODEJS_PATH", raising=False)
+    pdf_chromium._ensure_node_executable(tmp_path)
+    assert "PLAYWRIGHT_NODEJS_PATH" not in os.environ

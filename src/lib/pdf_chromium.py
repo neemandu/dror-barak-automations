@@ -90,7 +90,31 @@ def _inflate(pack: Path, tmp: Path = TMP) -> str:
     os.environ["LD_LIBRARY_PATH"] = f"{lib}:{os.environ.get('LD_LIBRARY_PATH', '')}".rstrip(":")
     os.environ.setdefault("FONTCONFIG_PATH", str(tmp / "fonts"))
     os.environ.setdefault("HOME", str(tmp))
+    _ensure_node_executable(tmp)
     return str(exe)
+
+
+def _ensure_node_executable(tmp: Path = TMP) -> None:
+    """Playwright drives the browser through its bundled Node binary, and
+    ``sam build --use-container`` copies packages out of the build container
+    without their execute bits — so on Lambda ``playwright/driver/node`` is a
+    122 MB file nobody may run. ``deploy_stack`` restores the bit before
+    packaging; this is the belt to that suspender: copy it somewhere writable and
+    tell Playwright, so an unfixed package still renders."""
+    try:
+        from playwright._impl._driver import compute_driver_executable
+    except Exception:  # noqa: BLE001 - no playwright, nothing to fix
+        return
+    node, _cli = compute_driver_executable()
+    if os.access(node, os.X_OK):
+        return
+    copy = tmp / "pw-node"
+    if not os.access(copy, os.X_OK):
+        partial = tmp / "pw-node.partial"
+        shutil.copyfile(node, partial)
+        partial.chmod(0o755)
+        partial.rename(copy)
+    os.environ["PLAYWRIGHT_NODEJS_PATH"] = str(copy)
 
 
 def _launch_options() -> dict[str, Any]:

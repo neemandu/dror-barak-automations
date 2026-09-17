@@ -40,3 +40,11 @@ def test_env_file_grammar_matches_config_load_dotenv(tmp_path):
     f = tmp_path / ".env.test"
     f.write_text('# comment\nA=1\nB="two words"\nC=\n\nnot a pair\n', encoding="utf-8")
     assert tool.read_env_file(f) == {"A": "1", "B": "two words", "C": ""}
+
+
+def test_the_node_driver_gets_its_execute_bit_back(tmp_path):
+    node = tmp_path / "CampaignReportFunction" / "playwright" / "driver" / "node"
+    node.parent.mkdir(parents=True); node.write_bytes(b"ELF"); node.chmod(0o644)
+    fixed = tool.fix_executable_bits(tmp_path)
+    assert fixed == [node] and node.stat().st_mode & 0o111
+    assert tool.fix_executable_bits(tmp_path) == [], "idempotent"

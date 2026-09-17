@@ -92,6 +92,25 @@ def _session(env: dict[str, str]) -> Any:
     )
 
 
+# Files that must be executable on Lambda. `sam build --use-container` copies the
+# build out of its container through a tar stream that drops execute bits, so a
+# package built that way carries Playwright's Node driver as a 122 MB file
+# nobody may run, and the campaign report dies with "Permission denied".
+EXECUTABLES = ("playwright/driver/node",)
+
+
+def fix_executable_bits(build_dir: Path) -> list[Path]:
+    """Restore the execute bit on known binaries in every function's build dir."""
+    fixed = []
+    for function_dir in (d for d in build_dir.iterdir() if d.is_dir()):
+        for rel in EXECUTABLES:
+            path = function_dir / rel
+            if path.exists() and not (path.stat().st_mode & 0o100):
+                path.chmod(path.stat().st_mode | 0o755)
+                fixed.append(path)
+    return fixed
+
+
 def package(build_dir: Path, region: str) -> Path:
     """`sam package`: upload the built code (deduplicated by hash) and return the
     template whose CodeUris point at S3."""
@@ -120,6 +139,9 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
             raise
         existing, change_type = None, "CREATE"
 
+    fixed = fix_executable_bits(build_dir)
+    if fixed:
+        print(f"restored execute bit on {len(fixed)} file(s): {', '.join(str(f.relative_to(build_dir)) for f in fixed)}")
     packaged = package(build_dir, region)
     params = template_parameters(packaged)
     parameters, lines = plan_parameters(params, env, existing=existing)

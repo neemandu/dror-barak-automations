@@ -482,6 +482,10 @@ Resources:
       # Chromium: sparticuz recommends 1600 MB+; the inflate alone holds a 250 MB
       # binary in memory for a moment.
       MemorySize: 2048
+      # /tmp holds the inflated browser (~250 MB), its libraries, a profile per
+      # render and, when the package lost its execute bit, a copy of Node.
+      EphemeralStorage:
+        Size: 1024
       Layers: !If [HasChromiumLayer, [!Ref ChromiumLayerArn], !Ref AWS::NoValue]
       Environment:
         Variables:
