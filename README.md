@@ -141,7 +141,7 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 405 tests: infra, template, dashboard/auth, deploy tooling, and a dry-run test per automation
+python -m pytest        # 410 tests: infra, template, dashboard/auth, deploy tooling, and a dry-run test per automation
 ```
 
 Dry-run is not proof on its own. If you change something with a real runtime

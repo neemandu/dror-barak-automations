@@ -4,7 +4,7 @@ The strategy and the social prep report come back from Claude as Markdown and
 become Google Docs through Drive's HTML import. Drive does not read Markdown, and
 a ``.md`` file in Dror's folder is a text file he cannot comfortably edit. This
 covers what those documents use — headings, bold/italic, bullet and numbered
-lists, links, paragraphs, rules — and escapes everything else, since the text is
+lists, tables, quotes, links, paragraphs, rules — and escapes everything else, since the text is
 model output about client-supplied pages.
 """
 
@@ -41,6 +41,8 @@ def to_html(markdown: str) -> str:
     list_kind: str = ""
     list_start = 1
     items: list[str] = []
+    rows: list[list[str]] = []
+    quote: list[str] = []
 
     def flush_para() -> None:
         if para:
@@ -56,6 +58,22 @@ def to_html(markdown: str) -> str:
             items.clear()
         list_kind = ""
 
+    def flush_table() -> None:
+        if rows:
+            head, *body = rows
+            blocks.append("<table><tr>" + "".join(f"<th>{c}</th>" for c in head) + "</tr>"
+                          + "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in body)
+                          + "</table>")
+            rows.clear()
+
+    def flush_quote() -> None:
+        if quote:
+            blocks.append("<blockquote>" + "<br>".join(_inline(line) for line in quote) + "</blockquote>")
+            quote.clear()
+
+    def flush_all() -> None:
+        flush_para(); flush_list(); flush_table(); flush_quote()
+
     for raw in markdown.replace("\r\n", "\n").split("\n"):
         line = raw.rstrip()
         stripped = line.strip()
@@ -65,16 +83,24 @@ def to_html(markdown: str) -> str:
         if not stripped:
             # A blank line ends a paragraph, not a list: Claude spaces out its
             # numbered items, and closing the list there restarted every item at 1.
-            flush_para()
+            flush_para(); flush_table(); flush_quote()
+        elif stripped.startswith("|") and stripped.endswith("|"):
+            flush_para(); flush_list(); flush_quote()
+            cells = [c.strip() for c in stripped[1:-1].split("|")]
+            if not all(re.fullmatch(r":?-{3,}:?", c) for c in cells):  # the |---| rule under the header
+                rows.append([_inline(c) for c in cells])
+        elif stripped.startswith(">"):
+            flush_para(); flush_list(); flush_table()
+            quote.append(stripped[1:].strip())
         elif heading:
-            flush_para(); flush_list()
+            flush_all()
             level = min(len(heading.group(1)), 4)
             blocks.append(f"<h{level}>{_inline(heading.group(2))}</h{level}>")
         elif re.fullmatch(r"(-{3,}|\*{3,}|_{3,})", stripped):
-            flush_para(); flush_list()
+            flush_all()
             blocks.append("<hr>")
         elif bullet or numbered:
-            flush_para()
+            flush_para(); flush_table(); flush_quote()
             kind = "ul" if bullet else "ol"
             if list_kind and list_kind != kind:
                 flush_list()
@@ -85,9 +111,9 @@ def to_html(markdown: str) -> str:
         elif items and raw[:1] in (" ", "\t"):
             items[-1] += "<br>" + _inline(stripped)  # an indented line continues its item
         else:
-            flush_list()
+            flush_list(); flush_table(); flush_quote()
             para.append(stripped)
-    flush_para(); flush_list()
+    flush_all()
     return "".join(blocks)
 
 

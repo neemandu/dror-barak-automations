@@ -20,3 +20,14 @@ def test_spaced_numbered_items_stay_one_list():
 
 def test_a_list_that_starts_mid_way_keeps_its_number():
     assert '<ol start="4"><li>ד</li></ol>' in to_html("4. ד")
+
+
+def test_tables_and_quotes_render_instead_of_showing_markup():
+    out = to_html("| מדד | למה |\n|---|---|\n| עלות לליד | **בסיס** |\n\n> משפט המיצוב\n\nסוף")
+    assert "<table><tr><th>מדד</th><th>למה</th></tr><tr><td>עלות לליד</td><td><strong>בסיס</strong></td></tr></table>" in out
+    assert "<blockquote>משפט המיצוב</blockquote><p>סוף</p>" in out
+    assert "|" not in out and "&gt;" not in out
+
+
+def test_table_cells_are_escaped():
+    assert "&lt;script&gt;" in to_html("| a |\n|---|\n| <script> |")
