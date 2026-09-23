@@ -10,3 +10,13 @@ def test_headings_lists_emphasis_and_links():
 
 def test_model_output_cannot_inject_markup():
     assert "<script>" not in to_html("<script>alert(1)</script>")
+
+
+def test_spaced_numbered_items_stay_one_list():
+    out = to_html("1. ראשון\n\n2. שני\n   שאלה לפגישה: מתי?\n\n3. שלישי\n\nסוף")
+    assert out.count("<ol>") == 1
+    assert "<li>שני<br>שאלה לפגישה: מתי?</li><li>שלישי</li></ol><p>סוף</p>" in out
+
+
+def test_a_list_that_starts_mid_way_keeps_its_number():
+    assert '<ol start="4"><li>ד</li></ol>' in to_html("4. ד")

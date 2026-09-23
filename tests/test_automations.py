@@ -68,6 +68,15 @@ def test_social_prep_reads_the_pages_instead_of_guessing(answered, prompts):
     assert all("מקור המידע" in p for p, _kw in prompts), "it must say what it could not see"
 
 
+def test_social_prep_drops_the_models_narration(monkeypatch):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    monkeypatch.setattr(AnthropicClient, "complete", lambda self, prompt, **kw:
+                        "יש לי מספיק מידע מהאתר.\n\n**מקור המידע:** פתחתי את האתר.\n### מיצוב\nx")
+    out = social_prep.analyze_profiles({"website": "https://a.example"}, AnthropicClient(dry_run=True))
+    assert out["website"].startswith("**מקור המידע:**")
+
+
 def test_social_prep_without_links_says_so_instead_of_failing(read_log):
     result = social_prep.run("42", dry_run=True)
     assert result["analyses"] == {}

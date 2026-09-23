@@ -39,6 +39,7 @@ def to_html(markdown: str) -> str:
     blocks: list[str] = []
     para: list[str] = []
     list_kind: str = ""
+    list_start = 1
     items: list[str] = []
 
     def flush_para() -> None:
@@ -49,7 +50,9 @@ def to_html(markdown: str) -> str:
     def flush_list() -> None:
         nonlocal list_kind
         if items:
-            blocks.append(f"<{list_kind}>" + "".join(f"<li>{i}</li>" for i in items) + f"</{list_kind}>")
+            start = f' start="{list_start}"' if list_kind == "ol" and list_start != 1 else ""
+            blocks.append(f"<{list_kind}{start}>" + "".join(f"<li>{i}</li>" for i in items)
+                          + f"</{list_kind}>")
             items.clear()
         list_kind = ""
 
@@ -58,9 +61,11 @@ def to_html(markdown: str) -> str:
         stripped = line.strip()
         heading = re.match(r"^(#{1,6})\s+(.*)$", stripped)
         bullet = re.match(r"^[-*•]\s+(.*)$", stripped)
-        numbered = re.match(r"^\d+[.)]\s+(.*)$", stripped)
+        numbered = re.match(r"^(\d+)[.)]\s+(.*)$", stripped)
         if not stripped:
-            flush_para(); flush_list()
+            # A blank line ends a paragraph, not a list: Claude spaces out its
+            # numbered items, and closing the list there restarted every item at 1.
+            flush_para()
         elif heading:
             flush_para(); flush_list()
             level = min(len(heading.group(1)), 4)
@@ -73,8 +78,12 @@ def to_html(markdown: str) -> str:
             kind = "ul" if bullet else "ol"
             if list_kind and list_kind != kind:
                 flush_list()
+            if not list_kind and numbered:
+                list_start = int(numbered.group(1))
             list_kind = kind
-            items.append(_inline((bullet or numbered).group(1)))
+            items.append(_inline(bullet.group(1) if bullet else numbered.group(2)))
+        elif items and raw[:1] in (" ", "\t"):
+            items[-1] += "<br>" + _inline(stripped)  # an indented line continues its item
         else:
             flush_list()
             para.append(stripped)

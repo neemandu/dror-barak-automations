@@ -37,6 +37,10 @@ _SYSTEM = (
     "זאת במפורש ולא משלים מהדמיון."
 )
 
+#: The line every analysis opens with. Anything the model writes before it is
+#: narration about its own browsing ("I have enough from the site…"), not report.
+_SOURCE_LINE = "**מקור המידע:**"
+
 _PURPOSE = {
     "meeting_prep": "הכנה לפגישה עם הלקוח",
     "strategy": "חומר גלם לבניית אסטרטגיה שיווקית",
@@ -49,13 +53,18 @@ def _prompt(role: str, url: str, focus: str) -> str:
         f"רשת: {network}\nקישור: {url}\nמטרה: {_PURPOSE.get(focus, focus)}\n\n"
         "פתח את הקישור. אם הדף חסום או דורש התחברות, חפש ברשת מידע ציבורי על החשבון "
         "או על העסק.\n\n"
-        "כתוב ב-Markdown, בדיוק במבנה הזה:\n"
-        "**מקור המידע:** משפט אחד — האם פתחת את הדף, מצאת מידע בחיפוש, או לא הצלחת לגשת.\n"
+        "כתוב ב-Markdown, בדיוק במבנה הזה, ופתח ישירות בשורת מקור המידע — בלי הקדמה:\n"
+        f"{_SOURCE_LINE} משפט אחד — האם פתחת את הדף, מצאת מידע בחיפוש, או לא הצלחת לגשת.\n"
         "### מיצוב\nפסקה אחת: למי הם מדברים, מה ההבטחה, מה הטון.\n"
         "### התוכן האחרון\nעד 5 פוסטים/סרטונים אחרונים שראית בפועל, שורה לכל אחד. "
         "אם לא ראית תוכן — כתוב שלא ניתן היה לראות, בלי לנחש.\n"
         "### 3 המלצות\nשלוש המלצות קונקרטיות, ממוספרות.\n"
     )
+
+
+def _from_source_line(text: str) -> str:
+    start = text.find(_SOURCE_LINE)
+    return text[start:] if start > 0 else text
 
 
 def analyze_profiles(
@@ -71,8 +80,8 @@ def analyze_profiles(
 
     def one(item: tuple[str, str]) -> tuple[str, str]:
         role, url = item
-        return role, ai.complete(_prompt(role, url, focus), system=_SYSTEM,
-                                 max_tokens=3000, web=True)
+        return role, _from_source_line(ai.complete(_prompt(role, url, focus), system=_SYSTEM,
+                                                   max_tokens=3000, web=True))
 
     with ThreadPoolExecutor(max_workers=min(4, len(items))) as pool:
         return dict(pool.map(one, items))
