@@ -23,7 +23,7 @@ SECRET = "whsec-test"
 def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("CLICKUP_WEBHOOK_SECRET", SECRET)
     monkeypatch.setenv("IDEMPOTENCY_PATH", str(tmp_path / "idem.json"))
-    monkeypatch.delenv("IDEMPOTENCY_TABLE", raising=False)  # use the file store
+    monkeypatch.setenv("IDEMPOTENCY_TABLE", "")  # use the file store
     monkeypatch.delenv("CLICKUP_TASKS_LIST_ID", raising=False)
     yield
 

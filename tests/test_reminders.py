@@ -20,7 +20,7 @@ def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
     monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
     monkeypatch.setenv("IDEMPOTENCY_PATH", str(tmp_path / "i.json"))
-    monkeypatch.delenv("IDEMPOTENCY_TABLE", raising=False)
+    monkeypatch.setenv("IDEMPOTENCY_TABLE", "")
     yield
 
 

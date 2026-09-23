@@ -22,7 +22,7 @@ def _secret(monkeypatch, tmp_path):
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret-for-links")
     monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
     monkeypatch.setenv("IDEMPOTENCY_PATH", str(tmp_path / "i.json"))
-    monkeypatch.delenv("IDEMPOTENCY_TABLE", raising=False)
+    monkeypatch.setenv("IDEMPOTENCY_TABLE", "")
     yield
 
 
@@ -280,7 +280,8 @@ def test_links_already_sent_to_clients_keep_working():
     assert signing.resolve(long_token) == "c1"
 
 
-def test_a_short_link_is_actually_short():
+def test_a_short_link_is_actually_short(monkeypatch):
+    monkeypatch.setattr(signing, "_codes_reach_the_server", lambda: True)
     url = signing.sign_url("c1")
     assert len(url) < len(signing.sign_url("c1", short=False)) / 1.8
 
@@ -347,3 +348,15 @@ def test_the_client_never_sees_an_english_error():
     from src import questionnaire_page
     q = questionnaire_page.error_page("this signing link is not valid")
     assert "הקישור אינו תקין" in q and "not valid" not in q
+
+
+def test_a_link_minted_without_the_code_table_still_opens_on_the_server(monkeypatch):
+    # The trap: a laptop run stored a short code in a local file; the Lambda that
+    # serves the page never saw it, and the client got "link not valid".
+    from src.lib import signing
+    monkeypatch.setenv("SIGN_LINK_SECRET", "s3cret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    monkeypatch.setenv("IDEMPOTENCY_TABLE", "")
+    token = signing.questionnaire_url("42").split("t=", 1)[1]
+    assert "." in token, "without the table, the link must be self-contained"
+    assert signing.resolve(token) == "42"

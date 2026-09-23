@@ -301,6 +301,31 @@ def resolve(token: str) -> str:
     return read_short_code(token)
 
 
+def _link_token(client_id: str, ttl: int, short: bool) -> str:
+    """A short code when the server's code table is configured, else a long
+    self-contained token.
+
+    A short code only exists where it was stored. Minted on a laptop without
+    IDEMPOTENCY_TABLE it lands in a local file, and the Lambda that serves the
+    page has never heard of it — the client opens a dead link. A long token
+    carries everything and verifies anywhere with the same secret, so it is the
+    safe choice whenever the code cannot reach the server.
+    """
+    if short and _codes_reach_the_server():
+        return make_short_code(client_id, ttl=ttl)
+    return make_token(client_id, ttl=ttl)
+
+
+def _codes_reach_the_server() -> bool:
+    """True when a short code will be readable by the Lambda that serves the link:
+    it is stored in DynamoDB, or the link points at this machine (local dev)."""
+    if config.get("IDEMPOTENCY_TABLE"):
+        return True
+    base = config.get("SIGN_BASE_URL") or config.get("AWS_API_BASE_URL") or ""
+    host = base.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    return host in ("localhost", "127.0.0.1")
+
+
 def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS, short: bool = True) -> str:
     """The URL to send a client.
 
@@ -314,7 +339,7 @@ def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS, short: bool = Tr
             "the contract. Use the deployed API base, e.g. "
             "https://xxx.execute-api.eu-central-1.amazonaws.com/dev"
         )
-    token = make_short_code(client_id, ttl=ttl) if short else make_token(client_id, ttl=ttl)
+    token = _link_token(client_id, ttl, short)
     return f"{base.rstrip('/')}/sign?t={token}"
 
 
@@ -324,7 +349,7 @@ def questionnaire_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS) -> str:
     base = config.get("SIGN_BASE_URL") or config.get("AWS_API_BASE_URL")
     if not base:
         raise SigningError("SIGN_BASE_URL is not set — nowhere to host the form.")
-    return f"{base.rstrip('/')}/questionnaire?t={make_short_code(client_id, ttl=ttl)}"
+    return f"{base.rstrip('/')}/questionnaire?t={_link_token(client_id, ttl, True)}"
 
 
 _DATA_URL = re.compile(r"^data:image/png;base64,([A-Za-z0-9+/=]+)$")

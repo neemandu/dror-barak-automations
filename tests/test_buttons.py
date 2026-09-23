@@ -22,7 +22,7 @@ TOKEN = "auto-token-test"
 def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTOMATION_TOKEN", TOKEN)
     monkeypatch.setenv("IDEMPOTENCY_PATH", str(tmp_path / "idem.json"))
-    monkeypatch.delenv("IDEMPOTENCY_TABLE", raising=False)
+    monkeypatch.setenv("IDEMPOTENCY_TABLE", "")
     yield
 
 
