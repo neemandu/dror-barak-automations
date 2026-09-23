@@ -28,6 +28,8 @@ import re
 import secrets
 from typing import Any, Iterator, Optional
 
+from . import text_style
+
 # kind -> Hebrew name shown in the editor.
 KINDS: dict[str, str] = {
     "text": "טקסט קצר",
@@ -310,7 +312,9 @@ def to_document_blocks(snap: list[dict[str, Any]], answers: dict[str, Any]) -> l
     then each answered question with its answer.
 
     Unanswered questions are omitted: an empty line under every skipped optional
-    field makes the doc look unfinished rather than concise.
+    field makes the doc look unfinished rather than concise. The document is in
+    the house style (no long dashes, :mod:`text_style`); the stored answers stay
+    exactly as the client typed them.
     """
     blocks: list[dict[str, Any]] = []
     current = None
@@ -321,5 +325,5 @@ def to_document_blocks(snap: list[dict[str, Any]], answers: dict[str, Any]) -> l
         if q.get("section") != current:
             current = q.get("section")
             blocks.append({"t": "h", "level": 1, "runs": [{"text": str(current or "")}]})
-        blocks.append({"t": "field", "label": str(q["label"]), "value": value})
+        blocks.append({"t": "field", "label": str(q["label"]), "value": text_style.humanize(value)})
     return blocks

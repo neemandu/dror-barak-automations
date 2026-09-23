@@ -123,6 +123,14 @@ def test_the_document_omits_blanks_and_escapes_client_input():
     assert "&lt;script&gt;" in xml and "<script>" not in xml
 
 
+def test_the_document_is_in_house_style_but_the_answers_stay_verbatim():
+    defn = qn.default_definition()
+    answers = {"price_point": "2,500\u20136,000"}
+    blocks = qn.to_document_blocks(qn.snapshot(defn), answers)
+    assert blocks[-1]["value"] == "2,500-6,000"
+    assert answers["price_point"] == "2,500\u20136,000"
+
+
 # ---------------------------------------------------------------- the form
 
 
