@@ -242,7 +242,7 @@ def _render_cdp(exe: str, html: str, page_format: str) -> bytes:
             }, session=session, timeout=120)
         except ChromiumError as exc:
             tail = " | ".join(log.read_text(errors="replace").strip().splitlines()[-3:]) if log.exists() else ""
-            raise ChromiumError(f"{exc}" + (f" — {tail}" if tail else "")) from exc
+            raise ChromiumError(f"{exc}" + (f" - {tail}" if tail else "")) from exc
         return base64.b64decode(result["data"])
     finally:
         if cdp:

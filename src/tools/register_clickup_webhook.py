@@ -71,7 +71,7 @@ def show(team_id: str) -> None:
         print(f"  health:   {health.get('status')} (fails: {health.get('fail_count')})")
         if str(health.get("status")) == "failing":
             print("            ^ ClickUp disables failing webhooks. Fix the endpoint,")
-            print("              then re-register — automations are not firing.")
+            print("              then re-register - automations are not firing.")
 
 
 def create(team_id: str, endpoint: str, list_id: str | None, dry_run: bool) -> None:
@@ -84,7 +84,7 @@ def create(team_id: str, endpoint: str, list_id: str | None, dry_run: bool) -> N
         print("Would POST to ClickUp (no writes):")
         print(f"  {_base()}/team/{team_id}/webhook")
         print(json.dumps(body, indent=2))
-        print("\nClickUp would return a `secret` — that goes in CLICKUP_WEBHOOK_SECRET.")
+        print("\nClickUp would return a `secret` - that goes in CLICKUP_WEBHOOK_SECRET.")
         return
 
     resp = http_request(

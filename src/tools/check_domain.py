@@ -82,7 +82,7 @@ def check(domain: str, *, request: bool = False) -> bool:
     usable = cert and cert["Status"] in ("ISSUED", "PENDING_VALIDATION")
     if not usable and request:
         print(f"{WAIT}{'no certificate yet' if not cert else 'certificate is ' + cert['Status']}"
-              f" — requesting a new one")
+              f" - requesting a new one")
         cert = _request_cert(domain)
     if not cert:
         print(f"{BAD}no certificate requested for {domain}. Run with --request.")
@@ -111,7 +111,7 @@ def check(domain: str, *, request: bool = False) -> bool:
         target = got["DomainNameConfigurations"][0]["ApiGatewayDomainName"]
         print(f"{OK}configured -> {target}")
     except Exception:  # noqa: BLE001
-        print(f"{WAIT}not created yet — run: python -m src.tools.setup_domain")
+        print(f"{WAIT}not created yet - run: python -m src.tools.setup_domain")
         return False
 
     mappings = api.get_api_mappings(DomainName=domain).get("Items", [])
@@ -129,7 +129,7 @@ def check(domain: str, *, request: bool = False) -> bool:
             print(f"{OK}{domain} resolves to API Gateway")
         else:
             print(f"{WAIT}{domain} resolves, but not to API Gateway yet.")
-            print(f"         Add this at Wix — type: CNAME")
+            print(f"         Add this at Wix - type: CNAME")
             print(f"         host:  {domain.split('.')[0]}")
             print(f"         value: {target}")
             return False
@@ -140,7 +140,7 @@ def check(domain: str, *, request: bool = False) -> bool:
         print(f"         value: {target}")
         return False
 
-    print(f"\nREADY — set SIGN_BASE_URL=https://{domain} and redeploy.")
+    print(f"\nREADY - set SIGN_BASE_URL=https://{domain} and redeploy.")
     return True
 
 

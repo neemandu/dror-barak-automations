@@ -32,7 +32,7 @@ TEMPLATES: dict[str, str] = {
     ),
     # Daily end-of-day summary that Dror himself receives.
     "daily_summary": (
-        "סיכום יומי — {date} 📊\n"
+        "סיכום יומי - {date} 📊\n"
         "{body}"
     ),
     # Internal ping to Dror to choose which templates to copy for a new client.

@@ -70,7 +70,7 @@ def plan_report(token: str) -> bool:
             print("       links or Morning status at all.")
             print("       -> Upgrade, or use Plan B in docs/CLICKUP_SETUP.md.")
         else:
-            print(f"{OK}paid plan — Custom Field uses are unlimited.")
+            print(f"{OK}paid plan - Custom Field uses are unlimited.")
     return ok
 
 
@@ -132,11 +132,11 @@ def check(list_id: str, token: str) -> bool:
             else:
                 required = canonical == crm_fields.STATUS_ACTIVE
                 print(f"{BAD if required else MISS}{canonical:9} -> no matching option"
-                      f"{'   (REQUIRED — the monthly billing run selects on it)' if required else ''}")
+                      f"{'   (REQUIRED - the monthly billing run selects on it)' if required else ''}")
                 ok = ok and not required
         print(f"{MISS}note: as a field this costs one Custom Field use per client, and")
         print("       ClickUp cannot show the pipeline as a board or trigger on it.")
-        print("       Task statuses are free and native — see docs/CLICKUP_SETUP.md.")
+        print("       Task statuses are free and native - see docs/CLICKUP_SETUP.md.")
     else:
         names = [s.get("status", "") for s in meta.get("statuses", [])]
         found = {crm_fields.canonical_status(n): n for n in names if crm_fields.canonical_status(n)}
@@ -147,7 +147,7 @@ def check(list_id: str, token: str) -> bool:
             else:
                 required = canonical == crm_fields.STATUS_ACTIVE
                 print(f"{BAD if required else MISS}{canonical:9} -> no matching status"
-                      f"{'   (REQUIRED — the monthly billing run selects on it)' if required else ''}")
+                      f"{'   (REQUIRED - the monthly billing run selects on it)' if required else ''}")
                 ok = ok and not required
         unmapped = [n for n in names if not crm_fields.canonical_status(n)]
         if unmapped:
@@ -203,8 +203,8 @@ def check(list_id: str, token: str) -> bool:
     if unknown:
         print(f"\nDror's own fields, left alone: {unknown}")
 
-    print("\n" + ("READY — the automations can use this list."
-                  if ok else "NOT READY — fix the [!!] lines above. See docs/CLICKUP_SETUP.md."))
+    print("\n" + ("READY - the automations can use this list."
+                  if ok else "NOT READY - fix the [!!] lines above. See docs/CLICKUP_SETUP.md."))
     return ok
 
 
@@ -243,10 +243,10 @@ def main() -> None:
         fields = _api(f"/list/{tasks_list}/field", token).get("fields", [])
         rel = [f for f in fields if str(f.get("type")) in ("list_relationship", "tasks")]
         print(f"{OK}'{rel[0]['name']}' links work tasks to clients." if rel
-              else f"{MISS}no Relationship field — work tasks cannot point at a client. "
+              else f"{MISS}no Relationship field - work tasks cannot point at a client. "
                    f"See docs/CLICKUP_SETUP.md step 2.")
     else:
-        print(f"\n{MISS}CLICKUP_TASKS_LIST_ID not set — per-client tasks not configured.")
+        print(f"\n{MISS}CLICKUP_TASKS_LIST_ID not set - per-client tasks not configured.")
 
     sys.exit(0 if (plan_ok and list_ok) else 1)
 

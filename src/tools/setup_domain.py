@@ -52,7 +52,7 @@ def _api_id() -> str:
         routes = api.get_routes(ApiId=item["ApiId"])["Items"]
         if any(r["RouteKey"].endswith("/sign") for r in routes):
             return str(item["ApiId"])
-    raise SystemExit("no API with a /sign route — is the stack deployed?")
+    raise SystemExit("no API with a /sign route - is the stack deployed?")
 
 
 def run(domain: str, apply: bool) -> bool:
@@ -99,7 +99,7 @@ def run(domain: str, apply: bool) -> bool:
     else:
         print("api mapping already exists")
 
-    print("\nLast DNS record — add this at Wix:")
+    print("\nLast DNS record - add this at Wix:")
     print(f"  type:  CNAME")
     print(f"  host:  {domain.split('.')[0]}")
     print(f"  value: {target}")

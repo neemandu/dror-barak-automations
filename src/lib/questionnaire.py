@@ -24,7 +24,6 @@ response still reads correctly after the questionnaire changes.
 from __future__ import annotations
 
 import copy
-import html
 import re
 import secrets
 from typing import Any, Iterator, Optional
@@ -44,7 +43,7 @@ KINDS: dict[str, str] = {
 
 # role -> Hebrew name. Only links have roles: these are what the AI reads.
 ROLES: dict[str, str] = {
-    "": "—",
+    "": "-",
     "instagram": "אינסטגרם",
     "tiktok": "טיקטוק",
     "facebook": "פייסבוק",
@@ -306,17 +305,14 @@ def as_text(snap: list[dict[str, Any]], answers: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def to_document_html(title: str, client_name: str, snap: list[dict[str, Any]],
-                     answers: dict[str, Any]) -> str:
-    """The body of the Google Doc saved to the client's folder.
+def to_document_blocks(snap: list[dict[str, Any]], answers: dict[str, Any]) -> list[dict[str, Any]]:
+    """The answers as document blocks (:mod:`branded_doc`): a heading per section,
+    then each answered question with its answer.
 
-    Unanswered questions are omitted — an empty ``—`` under every skipped
-    optional field makes the doc look unfinished rather than concise.
+    Unanswered questions are omitted: an empty line under every skipped optional
+    field makes the doc look unfinished rather than concise.
     """
-    def esc(v: Any) -> str:
-        return html.escape(str(v or ""))
-
-    parts = [f"<h1>{esc(title)}</h1>", f"<p><strong>לקוח:</strong> {esc(client_name)}</p>", "<hr>"]
+    blocks: list[dict[str, Any]] = []
     current = None
     for q in snap:
         value = display(answers.get(q["key"]))
@@ -324,7 +320,6 @@ def to_document_html(title: str, client_name: str, snap: list[dict[str, Any]],
             continue
         if q.get("section") != current:
             current = q.get("section")
-            parts.append(f"<h2>{esc(current)}</h2>")
-        body = esc(value).replace("\n", "<br>")
-        parts.append(f"<p><strong>{esc(q['label'])}</strong><br>{body}</p>")
-    return f'<div dir="rtl" lang="he">{"".join(parts)}</div>'
+            blocks.append({"t": "h", "level": 1, "runs": [{"text": str(current or "")}]})
+        blocks.append({"t": "field", "label": str(q["label"]), "value": value})
+    return blocks

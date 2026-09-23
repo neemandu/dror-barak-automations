@@ -53,7 +53,7 @@ def check(account_id: str) -> bool:
     except Exception as exc:  # noqa: BLE001
         print(f"[!!] insights call failed: {exc}")
         return False
-    print(f"[ok] insights readable — {len(rows)} campaign row(s) for {since}")
+    print(f"[ok] insights readable - {len(rows)} campaign row(s) for {since}")
     return True
 
 

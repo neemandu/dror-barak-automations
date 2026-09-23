@@ -212,7 +212,7 @@ class MetaAdsClient(BaseClient):
 _MOCK_INSIGHTS: list[dict[str, Any]] = [
     {
         "campaign_id": "111",
-        "campaign_name": "וובינר — לידים",
+        "campaign_name": "וובינר - לידים",
         "spend": "5095.17",
         "impressions": "31066",
         "clicks": "916",
@@ -225,7 +225,7 @@ _MOCK_INSIGHTS: list[dict[str, Any]] = [
     },
     {
         "campaign_id": "222",
-        "campaign_name": "ריטרגטינג — מושהה",
+        "campaign_name": "ריטרגטינג - מושהה",
         "spend": "0",
         "impressions": "0",
         "clicks": "0",

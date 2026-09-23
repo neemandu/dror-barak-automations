@@ -77,20 +77,21 @@ def html_to_pdf(html: str, *, name: str = "document") -> bytes:
                 pass
 
 
-def html_to_google_doc(html: str, name: str, parent_id: str) -> dict[str, Any]:
-    """Convert HTML into a Google Doc kept in ``parent_id``, and return it.
+def file_to_google_doc(data: bytes, content_type: str, name: str, parent_id: str) -> dict[str, Any]:
+    """Convert an uploaded file (the branded ``.docx``) into a Google Doc kept in
+    ``parent_id``, and return it.
 
     Same Drive conversion the PDF path uses, but the Doc is the deliverable rather
-    than an intermediate — so it is placed in the client's folder, not deleted.
+    than an intermediate, so it is placed in the client's folder, not deleted.
     Dror can then open and edit it, which a flat PDF would not allow. Owned by him,
     because we act as him.
     """
     h = _headers()
     tmp = request(
         "POST", UPLOAD,
-        headers={**h, "Content-Type": "text/html; charset=utf-8"},
+        headers={**h, "Content-Type": content_type},
         params={"uploadType": "media", "fields": "id"},
-        data=html.encode("utf-8"),
+        data=data,
     ).json()
     try:
         doc = request(
@@ -101,7 +102,7 @@ def html_to_google_doc(html: str, name: str, parent_id: str) -> dict[str, Any]:
         ).json()
         return doc
     finally:
-        # The uploaded HTML blob was only the conversion source.
+        # The uploaded file was only the conversion source.
         try:
             request("DELETE", f"{DRIVE}/{tmp['id']}", headers=h)
         except Exception:  # noqa: BLE001

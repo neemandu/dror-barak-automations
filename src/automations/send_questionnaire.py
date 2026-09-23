@@ -39,7 +39,7 @@ def send_link(auto: Automation, crm: CrmClient, client: dict[str, Any],
     if not to:
         # An error, not a skip: nothing else will chase a questionnaire that
         # never went out. Errors are pinned in the daily email.
-        reason = "אין כתובת מייל ללקוח — שאלון האסטרטגיה לא נשלח"
+        reason = "אין כתובת מייל ללקוח - שאלון האסטרטגיה לא נשלח"
         auto.log_action("no_email", "error", client_id=client_id,
                         detail="client has no אימייל for the questionnaire")
         crm.append_automation_log(

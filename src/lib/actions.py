@@ -58,19 +58,19 @@ ACTIONS: dict[str, Action] = {
     "social_prep": Action(
         key="social_prep",
         label="בנה דוח רשתות",
-        confirm="⏳ דוח הרשתות בהכנה — הקישור יופיע כאן כשיסתיים (כמה דקות)",
+        confirm="⏳ דוח הרשתות בהכנה - הקישור יופיע כאן כשיסתיים (כמה דקות)",
         once_only=False,
     ),
     "strategy_bot": Action(
         key="strategy_bot",
         label="בנה אסטרטגיה",
-        confirm="⏳ האסטרטגיה בבנייה — הקישור יופיע כאן כשתסתיים (כמה דקות)",
+        confirm="⏳ האסטרטגיה בבנייה - הקישור יופיע כאן כשתסתיים (כמה דקות)",
         once_only=False,
     ),
     "campaign_summary": Action(
         key="campaign_summary",
         label="בנה דוח קמפיין",
-        confirm="⏳ דוח הקמפיין בהכנה — הקישור יופיע כאן כשיסתיים",
+        confirm="⏳ דוח הקמפיין בהכנה - הקישור יופיע כאן כשיסתיים",
         once_only=False,
     ),
 }

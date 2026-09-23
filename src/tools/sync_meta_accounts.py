@@ -103,11 +103,11 @@ def run(*, dry_run: bool = False, write_clickup: bool = False, business_id: str 
     for acct in todo:
         act = f"act_{acct['account_id']}"
         if dry_run:
-            print(f"  [dry-run] would assign {act} — {acct['name']}")
+            print(f"  [dry-run] would assign {act} - {acct['name']}")
             continue
         try:
             meta.assign_account(acct["account_id"], su["id"])
-            print(f"  assigned {act} — {acct['name']}")
+            print(f"  assigned {act} - {acct['name']}")
             assigned_now += 1
         except Exception as exc:  # noqa: BLE001 - one bad account must not stop the rest
             print(f"  [error] {act}: {exc}")

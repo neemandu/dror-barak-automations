@@ -41,7 +41,7 @@ def check() -> bool:
     if subject:
         print(f"{OK}impersonating: {subject}")
     else:
-        print(f"{BAD}GOOGLE_IMPERSONATE_SUBJECT not set — see docs/GOOGLE_SETUP.md step 6")
+        print(f"{BAD}GOOGLE_IMPERSONATE_SUBJECT not set - see docs/GOOGLE_SETUP.md step 6")
         return False
 
     print("\n3. minting a token (this is where delegation is proven)")
@@ -65,7 +65,7 @@ def check() -> bool:
             if scope in granted:
                 print(f"{OK}{scope.rsplit('/', 1)[-1]}")
             else:
-                print(f"{BAD}{scope}  NOT granted — add it in step 5")
+                print(f"{BAD}{scope}  NOT granted - add it in step 5")
                 ok = False
     except Exception as exc:  # noqa: BLE001
         print(f"{BAD}could not read token info: {exc}")
@@ -94,7 +94,7 @@ def check() -> bool:
     print("\n6. the clients folder")
     parent = config.get("DRIVE_CLIENTS_PARENT_ID")
     if not parent:
-        print("  [--]  DRIVE_CLIENTS_PARENT_ID not set — onboarding has nowhere to "
+        print("  [--]  DRIVE_CLIENTS_PARENT_ID not set - onboarding has nowhere to "
               "create client folders")
     else:
         try:
@@ -108,8 +108,8 @@ def check() -> bool:
             print(f"{BAD}cannot read folder {parent}: {str(exc)[:120]}")
             ok = False
 
-    print("\n" + ("READY — Google is set up." if ok else
-                  "NOT READY — see the [!!] lines and docs/GOOGLE_SETUP.md."))
+    print("\n" + ("READY - Google is set up." if ok else
+                  "NOT READY - see the [!!] lines and docs/GOOGLE_SETUP.md."))
     return ok
 
 
@@ -124,7 +124,7 @@ def test_drive() -> bool:
     created = http_request(
         "POST", "https://www.googleapis.com/drive/v3/files", headers=headers,
         params={"fields": "id,webViewLink,owners", "supportsAllDrives": "true"},
-        json={"name": "בדיקה — למחיקה", "mimeType": "application/vnd.google-apps.folder",
+        json={"name": "בדיקה - למחיקה", "mimeType": "application/vnd.google-apps.folder",
               "parents": [parent]},
     ).json()
     print(f"{OK}created: {created.get('webViewLink')}")
@@ -135,7 +135,7 @@ def test_drive() -> bool:
     print("deleting it...")
     http_request("DELETE", f"https://www.googleapis.com/drive/v3/files/{created['id']}",
                  headers=headers, params={"supportsAllDrives": "true"})
-    print(f"{OK}deleted — nothing left behind")
+    print(f"{OK}deleted - nothing left behind")
     return True
 
 

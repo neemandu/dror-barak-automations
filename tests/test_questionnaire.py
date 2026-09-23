@@ -111,11 +111,16 @@ def test_multi_choice_and_scale_answers():
 
 
 def test_the_document_omits_blanks_and_escapes_client_input():
+    import zipfile, io
+    from src.lib import branded_doc
+
     defn = qn.default_definition()
     answers = {"business_name": "<script>alert(1)</script>", "goals": "צמיחה"}
-    doc = qn.to_document_html("שאלון", "c", qn.snapshot(defn), answers)
-    assert "&lt;script&gt;" in doc and "<script>" not in doc
-    assert "צמיחה" in doc and "שוק ומתחרים" not in doc
+    blocks = qn.to_document_blocks(qn.snapshot(defn), answers)
+    assert [b["runs"][0]["text"] for b in blocks if b["t"] == "h"] == ["פרטי העסק", "שיווק נוכחי ומטרות"]
+    assert [b["value"] for b in blocks if b["t"] == "field"] == ["<script>alert(1)</script>", "צמיחה"]
+    xml = zipfile.ZipFile(io.BytesIO(branded_doc.build("שאלון", "c", blocks))).read("word/document.xml").decode()
+    assert "&lt;script&gt;" in xml and "<script>" not in xml
 
 
 # ---------------------------------------------------------------- the form

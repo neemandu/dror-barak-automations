@@ -82,19 +82,27 @@ def test_template_copies_are_named_after_the_template(captured, monkeypatch):
     monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "tpl1,tpl2")
     onboarding.run("42", dry_run=True)
     assert captured["copies"] == [
-        "תבנית tpl1 — מכללת דוגמה",
-        "תבנית tpl2 — מכללת דוגמה",
+        "תבנית tpl1 - מכללת דוגמה",
+        "תבנית tpl2 - מכללת דוגמה",
     ]
 
 
 def test_a_template_already_in_the_folder_is_not_copied_twice(captured, monkeypatch, read_log):
     monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "tpl1,tpl2")
     monkeypatch.setattr(GoogleClient, "list_folder", lambda self, parent_id: [
-        {"id": "f1", "name": "תבנית tpl1 — מכללת דוגמה", "mimeType": "application/pdf"}])
+        {"id": "f1", "name": "תבנית tpl1 - מכללת דוגמה", "mimeType": "application/pdf"}])
 
     onboarding.run("42", dry_run=True)
-    assert captured["copies"] == ["תבנית tpl2 — מכללת דוגמה"], \
+    assert captured["copies"] == ["תבנית tpl2 - מכללת דוגמה"], \
         "a rerun must not duplicate what the first run already copied"
+
+
+def test_a_copy_named_the_old_way_is_not_copied_again(captured, monkeypatch):
+    monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "tpl1")
+    monkeypatch.setattr(GoogleClient, "list_folder", lambda self, parent_id: [
+        {"id": "f1", "name": "תבנית tpl1 \u2014 מכללת דוגמה", "mimeType": "application/pdf"}])
+    onboarding.run("42", dry_run=True)
+    assert captured["copies"] == []
 
 
 def test_one_unreadable_template_does_not_lose_the_questionnaire(captured, monkeypatch, read_log):
@@ -110,7 +118,7 @@ def test_one_unreadable_template_does_not_lose_the_questionnaire(captured, monke
 
     actions = {e["action"] for e in read_log()}
     assert "template_copy_failed" in actions
-    assert captured["copies"] == ["תבנית tpl2 — מכללת דוגמה"], "the good one still copies"
+    assert captured["copies"] == ["תבנית tpl2 - מכללת דוגמה"], "the good one still copies"
     assert result["questionnaire_sent"] is True
     assert _written(captured["fields"])["status"] == STATUS_ACTIVE
 

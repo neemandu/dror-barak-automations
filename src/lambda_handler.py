@@ -170,7 +170,7 @@ def handle_action(
             "test": True,
             "action": action.key,
             "message": "Webhook reachable and authenticated. This was ClickUp's "
-                       "Test button, which sends no task — press the real button "
+                       "Test button, which sends no task - press the real button "
                        "on a client task to run the automation.",
         }
 
@@ -363,7 +363,7 @@ def _sign_route(
     except Exception as exc:  # noqa: BLE001
         log.error("sign_failed", extra={"error": str(exc)})
         return _html(500, sign_page.error_page(
-            "אירעה שגיאה בשמירת ההסכם. לא בוצע חיוב ולא נשמרה חתימה — נסה/י שוב, "
+            "אירעה שגיאה בשמירת ההסכם. לא בוצע חיוב ולא נשמרה חתימה - נסה/י שוב, "
             "או פנה/י לדרור."
         ))
 

@@ -108,7 +108,7 @@ def _key_info() -> dict[str, Any]:
             hint = ""
             if len(raw) < 20:
                 # This is what a comma-split parameter looks like on arrival.
-                hint = (f" Only {len(raw)} character(s) arrived ({raw!r}) — the value "
+                hint = (f" Only {len(raw)} character(s) arrived ({raw!r}) - the value "
                         f"was truncated in transit. Use GOOGLE_SERVICE_ACCOUNT_JSON_B64 "
                         f"for deploys: CloudFormation splits parameter values on commas.")
             raise GoogleAuthError(

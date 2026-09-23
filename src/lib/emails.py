@@ -13,6 +13,7 @@ from __future__ import annotations
 import smtplib
 import ssl
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 from typing import Any, NamedTuple, Optional
 
 from . import config, email_templates
@@ -36,7 +37,7 @@ def _settings() -> dict[str, Any]:
     if missing:
         raise EmailError(
             f"Email is not configured: {', '.join(missing)} not set. "
-            f"For Gmail/Workspace use an App Password — a normal account password "
+            f"For Gmail/Workspace use an App Password - a normal account password "
             f"will not authenticate. See docs/CREDENTIALS.md."
         )
     return {
@@ -44,8 +45,15 @@ def _settings() -> dict[str, Any]:
         "port": int(config.get("SMTP_PORT", "587")),
         "user": config.require("SMTP_USER"),
         "password": config.require("SMTP_PASSWORD"),
-        "sender": config.get("SMTP_FROM") or config.require("SMTP_USER"),
+        "sender": _with_name(config.get("SMTP_FROM") or config.require("SMTP_USER")),
     }
+
+
+def _with_name(sender: str) -> str:
+    """``"דרור ברק" <address>`` rather than a bare address: the mail is his, and
+    a bare address shows in the inbox as the address itself."""
+    name, address = parseaddr(sender)
+    return sender if name else formataddr((config.get("PROVIDER_NAME") or "דרור ברק", address))
 
 
 def send(
@@ -56,9 +64,13 @@ def send(
     *,
     attachments: Optional[list[Attachment]] = None,
     reply_to: Optional[str] = None,
+    inline: Optional[dict[str, bytes]] = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Send one message. Returns a description of what was sent."""
+    """Send one message. Returns a description of what was sent.
+
+    ``inline`` maps a ``cid:`` name the HTML refers to onto PNG bytes.
+    """
     if not to:
         raise EmailError("no recipient address")
 
@@ -80,6 +92,11 @@ def send(
         msg["Reply-To"] = reply_to
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
+    if inline:
+        html_part = msg.get_payload()[1]
+        for cid, data in inline.items():
+            html_part.add_related(data, maintype="image", subtype="png", cid=f"<{cid}>",
+                                  disposition="inline")
 
     for a in attachments:
         maintype, _, subtype = a.mime_type.partition("/")
@@ -123,5 +140,6 @@ def send_template(
         rendered["text"],
         attachments=attachments,
         reply_to=config.get("DROR_EMAIL"),
+        inline=rendered["inline"],
         dry_run=dry_run,
     )

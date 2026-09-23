@@ -61,8 +61,8 @@ _SYSTEM = (
     "Rules:\n"
     "- Use only the metrics given. Never invent a number, a benchmark, or a "
     "month-over-month comparison you were not given.\n"
-    "- \"עלות לליד: —\" means no leads were recorded, not that leads were free. "
-    "Zero spend means the campaigns did not run — say so plainly; that is the "
+    "- \"עלות לליד: -\" means no leads were recorded, not that leads were free. "
+    "Zero spend means the campaigns did not run - say so plainly; that is the "
     "finding.\n"
     "- No preamble, no headings, no markdown bold. Plain prose and numbered lines."
 )
@@ -155,7 +155,7 @@ def run(
         # Chromium renders the report (full-bleed, crisp) rather than the Drive
         # Docs path; upload is still Drive. Guarded because neither is dry-run aware.
         pdf_bytes = pdf_chromium.render(document)
-        saved = pdf.upload_pdf(pdf_bytes, f"דוח קמפיינים — {label}.pdf", folder["id"])
+        saved = pdf.upload_pdf(pdf_bytes, f"דוח קמפיינים - {label}.pdf", folder["id"])
         drive_url = saved.get("webViewLink") or drive_url
 
     # Send to Dror for approval. Best-effort: the report is in Drive either way, and

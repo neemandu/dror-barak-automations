@@ -116,7 +116,7 @@ def _esc(value: Any) -> str:
 _STATUS_STYLE = {
     "ok": ("✓", "ok"),
     "error": ("✕", "err"),
-    "skipped": ("–", "skip"),
+    "skipped": ("-", "skip"),
 }
 
 CSS = """
@@ -182,7 +182,7 @@ def _login_page(error: str = "", base: str = "") -> bytes:
     API Gateway — so every link and form action lands on the same deployment."""
     note = f'<p class="bad">{_esc(error)}</p>' if error else ""
     return _page(
-        "כניסה — לוח בקרה",
+        "כניסה - לוח בקרה",
         f"""<form class="login" method="post" action="{base}/login">
         <h1>לוח בקרה</h1>
         <div class="sub">האוטומציות של דרור ברק</div>
@@ -275,10 +275,10 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
         body_sections = '<section><div class="empty">אין פעילות בטווח הזה.</div></section>'
 
     return _page(
-        "לוח בקרה — דרור ברק",
+        "לוח בקרה - דרור ברק",
         f"""<style>{questionnaire_admin.ADMIN_CSS}</style>
         <div class="wrap">{questionnaire_admin.nav(base, "dashboard")}<h1>לוח בקרה</h1>
-        <div class="sub">כל מה שהאוטומציות עשו. הדף לצפייה בלבד — לא מפעיל כלום.</div>
+        <div class="sub">כל מה שהאוטומציות עשו. הדף לצפייה בלבד - לא מפעיל כלום.</div>
         <div class="cards">{cards}</div>{filters}{body_sections}</div>""",
     )
 

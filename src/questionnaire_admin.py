@@ -290,7 +290,7 @@ function questionCard(section, si, q, qi) {
   if (q.kind === 'choice' || q.kind === 'multi') {
     var ta = h('textarea', {value: (q.options || []).join('\n'), rows: Math.max(3, (q.options || []).length + 1)});
     ta.addEventListener('input', function () { q.options = ta.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean); setDirty(true); });
-    more.appendChild(h('div', {}, [h('label', {class: 'small', text: 'אפשרויות — אחת בכל שורה'}), ta]));
+    more.appendChild(h('div', {}, [h('label', {class: 'small', text: 'אפשרויות - אחת בכל שורה'}), ta]));
   }
   if (q.kind === 'scale') {
     var sm = h('select', {}, [5, 7, 10].map(function (n) { var o = h('option', {value: n, text: '1 עד ' + n});
@@ -330,13 +330,13 @@ function render() {
   root.textContent = '';
   root.appendChild(h('div', {class: 'ed-card'}, [
     field(defn, 'title', 'שם השאלון (הכותרת שהלקוח רואה)', {cls: 'title-input'}),
-    field(defn, 'intro', 'פתיח — מופיע מתחת לכותרת', {area: true}),
-    field(defn, 'thanks', 'הודעת תודה — אחרי שליחה', {area: true}),
+    field(defn, 'intro', 'פתיח - מופיע מתחת לכותרת', {area: true}),
+    field(defn, 'thanks', 'הודעת תודה - אחרי שליחה', {area: true}),
   ]));
   defn.sections.forEach(function (s, si) {
     var sec = h('div', {class: 'ed-section'}, [
       h('div', {class: 'head'}, [
-        h('div', {}, [field(s, 'title', 'חלק ' + (si + 1) + ' — כותרת (כל חלק הוא שלב בטופס)', {cls: 'title-input'}),
+        h('div', {}, [field(s, 'title', 'חלק ' + (si + 1) + ' - כותרת (כל חלק הוא שלב בטופס)', {cls: 'title-input'}),
                       field(s, 'description', 'תיאור קצר לחלק (לא חובה)')]),
         h('div', {class: 'tools'}, [
           btn('↑', function () { if (move(defn.sections, si, -1)) change(); }),
@@ -361,7 +361,7 @@ function showErrors(list) {
   var box = document.getElementById('errors');
   box.hidden = !list.length; box.textContent = '';
   if (!list.length) return;
-  box.appendChild(h('b', {text: 'לא נשמר — צריך לתקן:'}));
+  box.appendChild(h('b', {text: 'לא נשמר - צריך לתקן:'}));
   box.appendChild(h('ul', {}, list.map(function (e) { return h('li', {text: e}); })));
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
@@ -393,13 +393,13 @@ def page_editor(base: str, qid: str) -> Response:
             f'<a class="btn" target="_blank" href="{base}/admin/questionnaires/{quote(qid)}/preview">תצוגה מקדימה</a>'
             '<button class="btn primary" id="save" disabled>שמירה</button></div></div>'
             '<div class="errors" id="errors" hidden></div>'
-            + ('<p class="muted">שינוי כאן חל מיד על כל לקוח שיפתח את השאלון — גם על מי שכבר קיבל קישור. '
+            + ('<p class="muted">שינוי כאן חל מיד על כל לקוח שיפתח את השאלון - גם על מי שכבר קיבל קישור. '
                'תשובות שכבר התקבלו נשמרות כפי שהיו.</p>' if is_default else "")
             + '<div class="ed" id="editor"></div>'
             + _data_tag("qdata", defn)
             + _data_tag("qmeta", {"kinds": questionnaire.KINDS, "roles": questionnaire.ROLES}))
     script = f"var BASE={json.dumps(base)};" + COMMON_JS + EDITOR_JS
-    return _shell(base, "questionnaires", f"עריכה — {defn.get('title')}", body, script=script)
+    return _shell(base, "questionnaires", f"עריכה - {defn.get('title')}", body, script=script)
 
 
 def page_responses(base: str, qid: str = "") -> Response:
@@ -426,7 +426,7 @@ def page_responses(base: str, qid: str = "") -> Response:
     body = f"""<div class="bar"><h1>תשובות לשאלונים</h1><span class="grow"></span>
       <select id="filter" style="padding:7px 10px;border-radius:8px">{options}</select>{export}</div>
       <div class="panel"><h2>קישור לשאלון עבור לקוח</h2>
-        <p class="muted" style="margin-top:0">יוצר קישור אישי — לבדיקה, או כדי לשלוח ללקוח בעצמך (למשל בוואטסאפ).
+        <p class="muted" style="margin-top:0">יוצר קישור אישי - לבדיקה, או כדי לשלוח ללקוח בעצמך (למשל בוואטסאפ).
         שום דבר לא נשלח מכאן.</p>
         <div class="row"><select id="client" style="min-width:220px;padding:7px 10px;border-radius:8px">
           <option value="">טוען לקוחות…</option></select>
@@ -472,7 +472,7 @@ def page_response(base: str, client_id: str, qid: str) -> Response:
         if q.get("section") != current:
             current = q.get("section")
             parts.append(f"<h3>{_esc(current)}</h3>")
-        parts.append(f'<dt>{_esc(q["label"])}</dt><dd>{_esc(value) if value else "<span class=muted>—</span>"}</dd>')
+        parts.append(f'<dt>{_esc(q["label"])}</dt><dd>{_esc(value) if value else "<span class=muted>-</span>"}</dd>')
     body_answers = (f'<dl class="answers">{"".join(parts)}</dl>' if answered
                     else '<p class="muted">הלקוח עוד לא מילא את השאלון.</p>')
     history = "".join(f'<li>{_esc(_local(h.get("at")))} · {_esc({"answered": "מולא", "updated": "עודכן"}.get(h.get("event"), h.get("event", "").replace("sent:email", "נשלח במייל").replace("sent:link", "נוצר קישור")))}</li>'
@@ -481,12 +481,12 @@ def page_response(base: str, client_id: str, qid: str) -> Response:
     body = f"""<div class="bar"><h1>{_esc(r.get('client_name'))}</h1>
       <span class="pill {'ok' if answered else 'wait'}">{'מולא' if answered else 'ממתין'}</span>
       <span class="grow"></span>{doc}<button class="btn" id="mklink">קישור חדש לשאלון</button></div>
-      <p class="muted">{_esc(r.get('questionnaire_title'))} · נשלח {_esc(_local(r.get('sent_at'))) or '—'}
-      · מולא {_esc(_local(r.get('answered_at'))) or '—'}</p>
+      <p class="muted">{_esc(r.get('questionnaire_title'))} · נשלח {_esc(_local(r.get('sent_at'))) or '-'}
+      · מולא {_esc(_local(r.get('answered_at'))) or '-'}</p>
       <div id="linkbox" hidden class="row" style="margin-bottom:14px"><input class="linkout" id="linkout" readonly>
         <button class="btn" id="copylink">העתק</button><a class="btn" id="openlink" target="_blank">פתח</a></div>
       <div class="panel">{body_answers}</div>
-      <div class="panel"><h2>היסטוריה</h2><ul class="muted" style="margin:0">{history or '<li>—</li>'}</ul></div>
+      <div class="panel"><h2>היסטוריה</h2><ul class="muted" style="margin:0">{history or '<li>-</li>'}</ul></div>
       {_data_tag('ctx', {'client_id': client_id, 'questionnaire_id': qid})}"""
     script = f"var BASE={json.dumps(base)};" + COMMON_JS + r"""
 var ctx = JSON.parse(document.getElementById('ctx').textContent);
@@ -497,7 +497,7 @@ document.getElementById('mklink').onclick = function () {
     document.getElementById('linkout').value = d.url; document.getElementById('openlink').href = d.url; }); };
 document.getElementById('copylink').onclick = function () { copyText(document.getElementById('linkout').value); };
 """
-    return _shell(base, "responses", f"תשובות — {r.get('client_name')}", body, script=script)
+    return _shell(base, "responses", f"תשובות - {r.get('client_name')}", body, script=script)
 
 
 def export_csv(qid: str) -> Response:

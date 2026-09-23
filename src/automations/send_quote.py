@@ -66,7 +66,7 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         "📄 הצעת מחיר נשלחה לחתימה\n"
         f"קישור לחתימה: {url}\n"
         + (f"נשלח ב־{delivered}" if delivered else
-           "לא נשלח אוטומטית — יש לשלוח את הקישור ללקוח ידנית"),
+           "לא נשלח אוטומטית - יש לשלוח את הקישור ללקוח ידנית"),
     )
     auto.log_action("quote_sent", client_id=client_id, url=url,
                     detail=f"delivered via {delivered}" if delivered

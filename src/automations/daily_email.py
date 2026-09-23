@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from typing import Any, Optional
 
-from ..lib import config, emails, run_log, subjects
+from ..lib import config, email_templates, emails, run_log, subjects
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "daily_email"
@@ -55,7 +55,7 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
             rows = "".join(
                 f'<tr><td style="padding:4px 0;color:#c0271c">✕</td>'
                 f'<td style="padding:4px 8px"><b>{_esc(e.get("action"))}</b>'
-                f'<div style="color:#6b7280;font-size:13px">{_esc(e.get("client_id") or "")} — {_esc(e.get("detail"))}</div></td></tr>'
+                f'<div style="color:#6b7280;font-size:13px">{_esc(e.get("client_id") or "")} - {_esc(e.get("detail"))}</div></td></tr>'
                 for e in failed[:10]
             )
             inner += (
@@ -67,7 +67,7 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
         for subject, group in subjects.group_by_subject(entries):
             rows = ""
             for e in sorted(group, key=lambda x: str(x.get("ts")), reverse=True):
-                mark = {"ok": "✓", "error": "✕", "skipped": "–"}.get(str(e.get("status")), "•")
+                mark = {"ok": "✓", "error": "✕", "skipped": "-"}.get(str(e.get("status")), "•")
                 colour = {"ok": "#0a7c42", "error": "#c0271c", "skipped": "#8a6d16"}.get(
                     str(e.get("status")), "#6b7280"
                 )
@@ -100,19 +100,19 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
         if dashboard_url
         else ""
     )
-    return f"""<div dir="rtl" style="font-family:system-ui,'Segoe UI',Arial,sans-serif;
-      max-width:720px;margin:0 auto;padding:16px;color:#1a1d21">
-      <h2 style="margin:0 0 2px">סיכום יומי — {_esc(date)}</h2>
-      <p style="color:#6b7280;margin:0 0 16px">
-        {counts['total']} פעולות · {counts['ok']} הצליחו · {counts['error']} שגיאות
-        · {counts['skipped']} דילוגים</p>
-      {inner}{link}</div>"""
+    return email_templates.layout(
+        f'<h2 style="margin:0 0 2px;font-size:20px">סיכום יומי, {_esc(date)}</h2>'
+        f'<p style="color:#6b7280;margin:0 0 16px;font-size:14px">'
+        f"{counts['total']} פעולות · {counts['ok']} הצליחו · {counts['error']} שגיאות"
+        f" · {counts['skipped']} דילוגים</p>{inner}{link}",
+        internal=True, width=680,
+        preheader=f"{counts['total']} פעולות, {counts['error']} שגיאות")
 
 
 def build_text(entries: list[dict[str, Any]], date: str) -> str:
     """Plain-text alternative, for clients that refuse HTML."""
     counts = subjects.counts(entries)
-    lines = [f"סיכום יומי — {date}", f"{counts['total']} פעולות, {counts['error']} שגיאות", ""]
+    lines = [f"סיכום יומי, {date}", f"{counts['total']} פעולות, {counts['error']} שגיאות", ""]
     for subject, group in subjects.group_by_subject(entries):
         lines.append(f"{subject.label} ({len(group)}):")
         for e in group:
@@ -132,9 +132,9 @@ def run(*, dry_run: bool = False, since: Optional[datetime] = None) -> dict[str,
     html_body = build_html(entries, date, dashboard_url)
     text_body = build_text(entries, date)
     counts = subjects.counts(entries)
-    subject_line = f"סיכום יומי — {date} · {counts['total']} פעולות"
+    subject_line = f"סיכום יומי {date}: {counts['total']} פעולות"
     if counts["error"]:
-        subject_line += f" · ⚠️ {counts['error']} שגיאות"
+        subject_line += f", {counts['error']} שגיאות"
 
     if dry_run:
         auto.log_action(
@@ -149,7 +149,8 @@ def run(*, dry_run: bool = False, since: Optional[datetime] = None) -> dict[str,
 
     # The shared sender, so a missing App Password fails with the same hint here
     # as everywhere else rather than a bare SMTP error.
-    sent = emails.send(to, subject_line, html_body, text_body)
+    sent = emails.send(to, subject_line, html_body, text_body,
+                       inline=email_templates.inline_images())
     auto.log_action("email_sent", detail=f"{len(entries)} entries → {sent['to']}")
     return {"sent": True, "subject": subject_line, "entries": len(entries), **sent}
 

@@ -31,14 +31,14 @@ NAME = "strategy_bot"
 _SYSTEM = (
     "אתה אסטרטג שיווק בכיר בחברת הייעוץ של דרור ברק, שמלווה מכללות, אקדמיות ויוצרי "
     "קורסים בהגדלת הרשמות: וובינרים, משפכי שיווק, תוכן, וקמפיינים ממומנים במטא. "
-    "אתה כותב מסמך אסטרטגיה בעברית, מעשי ומותאם ללקוח הספציפי — לא תבנית כללית.\n\n"
+    "אתה כותב מסמך אסטרטגיה בעברית, מעשי ומותאם ללקוח הספציפי - לא תבנית כללית.\n\n"
     "מבנה המסמך (כותרות Markdown ברמה 2):\n"
     "1. תקציר מנהלים\n2. קהל היעד והפרסונות\n3. שוק, מתחרים ובידול\n"
     "4. מסר ומיצוב\n5. תוכנית ערוצים ומשפך (כולל וובינר, תוכן וקמפיינים ממומנים)\n"
     "6. תוכנית פעולה ל-90 יום (לפי שבועות או חודשים)\n7. מדדי הצלחה ויעדים\n"
     "8. הנחות ושאלות פתוחות ללקוח\n\n"
     "בסס כל טענה על תשובות השאלון ועל ניתוח הנוכחות הדיגיטלית שקיבלת. כשאתה מניח הנחה "
-    "שלא נאמרה — סמן אותה בסעיף 8 ולא כעובדה. אל תמציא מספרים על הלקוח. "
+    "שלא נאמרה - סמן אותה בסעיף 8 ולא כעובדה. אל תמציא מספרים על הלקוח. "
     "זה מסמך, לא שיחה: בלי הקדמה, ובלי שאלה או הצעה להמשך בסוף."
 )
 
@@ -53,8 +53,8 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     response = questionnaire_store.latest_answered(client_id)
     if not response:
         auto.log_action("no_questionnaire", "error", client_id=client_id,
-                        detail="אין תשובות לשאלון — אין על מה לבנות אסטרטגיה")
-        raise RuntimeError("הלקוח עוד לא מילא את השאלון — אין על מה לבנות אסטרטגיה. "
+                        detail="אין תשובות לשאלון - אין על מה לבנות אסטרטגיה")
+        raise RuntimeError("הלקוח עוד לא מילא את השאלון - אין על מה לבנות אסטרטגיה. "
                            "אפשר לשלוח לו את השאלון שוב.")
 
     snap, answers = response.get("snapshot") or [], response.get("answers") or {}
@@ -72,9 +72,9 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     )
     strategy = ai.complete(prompt, system=_SYSTEM, max_tokens=16000, thinking=True)
 
-    title = f"אסטרטגיה שיווקית — {name}"
-    document = f"# {title}\n\n{strategy}"
-    saved = deliverables.save_markdown_doc(crm, client, title, document, dry_run=dry_run)
+    saved = deliverables.save_markdown_doc(
+        crm, client, strategy, file_name=f"אסטרטגיה שיווקית - {name}",
+        title="אסטרטגיה שיווקית", subtitle=deliverables.prepared_for(name), dry_run=dry_run)
 
     _notify_dror(auto, client_id, name, saved["url"], dry_run=dry_run)
     crm.append_automation_log(client_id, f"🤖 טיוטת האסטרטגיה מוכנה לבדיקה\n{saved['url']}")
@@ -82,7 +82,7 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         "strategy_ready", client_id=client_id, url=saved["url"],
         detail=f"לפי שאלון מ-{str(response.get('answered_at', ''))[:10]}, {len(social)} ערוצים נותחו",
     )
-    return {"strategy": document, "saved": saved}
+    return {"strategy": strategy, "saved": saved}
 
 
 def _notify_dror(auto: Automation, client_id: str, client_name: str, url: str,
@@ -94,7 +94,7 @@ def _notify_dror(auto: Automation, client_id: str, client_name: str, url: str,
     to = config.get("DROR_EMAIL")
     if not to:
         auto.log_action("dror_not_notified", "skipped", client_id=client_id,
-                        detail="DROR_EMAIL not set — the draft is in Drive and on the task")
+                        detail="DROR_EMAIL not set - the draft is in Drive and on the task")
         return
     try:
         emails.send_template("strategy_ready", to, client_name=client_name,

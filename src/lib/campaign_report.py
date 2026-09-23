@@ -29,9 +29,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from . import campaign_charts, campaign_metrics, contract
+from . import branded_doc, campaign_charts, campaign_metrics, contract
 
-EMPTY = "—"
+EMPTY = "-"
 
 # Brand-family bar colours, one hue per chart (dataviz: a single series needs no
 # legend — the heading names it).
@@ -230,13 +230,19 @@ def render(
 
 _CSS = """
 * { box-sizing: border-box; }
-/* Rendered by headless Chromium (src/lib/pdf_chromium): real CSS, zero page
-   margins, a full-bleed banner, crisp output. */
-@page { size: A4; margin: 0; }
+/* Rendered by headless Chromium (src/lib/pdf_chromium): real CSS, a
+   full-bleed banner on the first page, crisp output. Pages after the first get
+   a top margin (text used to start at the paper's edge), and every page a footer
+   with Dror's details and the page number, in the @page margin box. */
+@page { size: A4; margin: 14mm 0 16mm;
+  @bottom-center { content: "{{footer_line}}   |   עמוד " counter(page) " מתוך " counter(pages);
+    direction: rtl; font-family: 'Segoe UI', system-ui, Arial, sans-serif; font-size: 8.5pt;
+    color: #5b6472; border-top: 0.5pt solid #dde3ea; margin: 0 16mm; padding-top: 3mm; } }
+@page :first { margin-top: 0; }
 html, body { margin:0; padding:0; }
 body { color:#14171a; font-family:'Segoe UI',system-ui,Arial,sans-serif;
   -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-/* Full-bleed gradient banner — edge to edge, no page margin. */
+/* Full-bleed gradient banner - edge to edge, no page margin. */
 .brand-banner { margin:0; padding:30px 40px; text-align:center;
   background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%); }
 .brand-logo { width:230px; height:auto; display:block; margin:0 auto; }
@@ -250,7 +256,7 @@ table.campaigns { width:100%; border-collapse:collapse; margin:6px 0; font-size:
 table.campaigns th, table.campaigns td { border:1px solid #dfe3e8; padding:8px 10px;
   text-align:right; }
 table.campaigns thead th { background:#f6f7f9; }
-/* KPI cards — coloured tiles with white text. */
+/* KPI cards - coloured tiles with white text. */
 table.kpis { width:100%; border-collapse:separate; border-spacing:8px; }
 table.kpis td.kpi { width:33%; padding:16px 14px; border-radius:12px;
   color:#ffffff; text-align:center; }
@@ -259,7 +265,14 @@ table.kpis td.kpi { width:33%; padding:16px 14px; border-radius:12px;
 .chart { margin:6px 0 4px; }
 .chart img { max-width:100%; height:auto; display:block; }
 .ai p { font-size:14px; line-height:1.85; margin:0 0 10px; }
+/* A heading never ends a page without what it heads; a chart or a row never splits. */
+h2 { break-after: avoid-page; }
+.chart, table.kpis, tr { break-inside: avoid; }
 """
+
+
+def _css_string(text: str) -> str:
+    return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
 
 
 def build_document(body: str, *, title: str = "דוח קמפיינים") -> str:
@@ -273,5 +286,6 @@ def build_document(body: str, *, title: str = "דוח קמפיינים") -> str:
         "<!doctype html><html lang=\"he\" dir=\"rtl\"><head>"
         "<meta charset=\"utf-8\">"
         f"<title>{html.escape(title)}</title>"
-        f"<style>{_CSS}</style></head><body>{body}</body></html>"
+        f"<style>{_CSS.replace('{{footer_line}}', _css_string(branded_doc.footer_line()))}</style>"
+        f"</head><body>{body}</body></html>"
     )

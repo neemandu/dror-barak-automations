@@ -23,7 +23,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from .lib import deliverables, questionnaire, questionnaire_store, signing
+from .lib import branded_doc, deliverables, questionnaire, questionnaire_store, signing
 from .lib.clients.crm import CrmClient
 from .lib.logging_setup import get_logger
 
@@ -292,7 +292,7 @@ def render_form(defn: dict[str, Any], *, client_name: str = "", action: str = ""
     sections = defn.get("sections") or []
     parts = []
     if preview:
-        parts.append('<div class="preview" id="previewnote">תצוגה מקדימה — כך הלקוח יראה את השאלון. '
+        parts.append('<div class="preview" id="previewnote">תצוגה מקדימה - כך הלקוח יראה את השאלון. '
                      'התשובות לא נשמרות.</div>')
     parts.append(f'<h1>{_esc(defn.get("title"))}</h1>')
     if defn.get("intro"):
@@ -303,7 +303,7 @@ def render_form(defn: dict[str, Any], *, client_name: str = "", action: str = ""
         parts.append(f'<div class="notice">{_esc(notice)}</div>')
     if errors:
         parts.append(f'<div class="errbox" role="alert">יש {len(errors)} '
-                     f'{"שדה שדורש" if len(errors) == 1 else "שדות שדורשים"} תיקון — מסומנים באדום.</div>')
+                     f'{"שדה שדורש" if len(errors) == 1 else "שדות שדורשים"} תיקון - מסומנים באדום.</div>')
     parts.append('<div class="progress" aria-hidden="true"><div class="meta"><span id="steplabel"></span>'
                  '<span id="stepcount"></span></div><div class="bar"><i id="fill"></i></div></div>')
     flags = (" data-preview" if preview else "") + (" data-prefilled" if answers else "")
@@ -381,17 +381,18 @@ def _finalise(client_id: str, client: dict[str, Any], defn: dict[str, Any],
         signing.clear_questionnaire_pending(client_id)
 
     snap = questionnaire.snapshot(defn)
-    body = questionnaire.to_document_html(defn.get("title") or "שאלון", name, snap, answers)
-    doc_html = f'<html><head><meta charset="utf-8"></head><body dir="rtl">{body}</body></html>'
+    title = str(defn.get("title") or "שאלון")
     doc: dict[str, str] = {"url": ""}
     try:
-        doc = deliverables.save_html_doc(crm, {**client, "id": client_id},
-                                         f"{defn.get('title')} — {name}", doc_html, dry_run=dry_run)
+        doc = deliverables.save_doc(
+            crm, {**client, "id": client_id}, file_name=f"{title} - {name}", title=title,
+            subtitle=f"{name}   ·   מולא ב-{branded_doc.hebrew_date()}",
+            blocks=questionnaire.to_document_blocks(snap, answers), dry_run=dry_run)
     except Exception as exc:  # noqa: BLE001 - the answers are stored below either way
         auto.log_action("questionnaire_doc_failed", "error", client_id=client_id, detail=str(exc))
 
     questionnaire_store.record_answer(client_id, name, defn, answers, doc_url=doc["url"])
-    crm.append_automation_log(client_id, "📋 השאלון מולא" + (f" — התשובות בדרייב:\n{doc['url']}" if doc["url"] else ""))
+    crm.append_automation_log(client_id, "📋 השאלון מולא" + (f" - התשובות בדרייב:\n{doc['url']}" if doc["url"] else ""))
     auto.log_action("questionnaire_answered", client_id=client_id,
                     detail=str(defn.get("title") or ""), url=doc["url"] or None)
 

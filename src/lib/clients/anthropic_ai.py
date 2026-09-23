@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from .. import config
+from .. import config, text_style
 from .base import BaseClient
 
 DEFAULT_MODEL = "claude-opus-4-8"
@@ -63,8 +63,10 @@ class AnthropicClient(BaseClient):
         """Return the model's text response to a single prompt.
 
         ``web`` enables web search/fetch; ``thinking`` enables adaptive thinking
-        for the heavier deliverables (a strategy, not a paragraph).
+        for the heavier deliverables (a strategy, not a paragraph). Everything
+        comes back in the house style (:mod:`text_style`): it is sent in Dror's name.
         """
+        system = f"{system}\n\n{text_style.AI_STYLE}" if system else text_style.AI_STYLE
         if self.dry_run:
             self._record(
                 "complete", model=self.model, system=system, prompt=prompt[:200],
@@ -97,7 +99,7 @@ class AnthropicClient(BaseClient):
 
         if response.stop_reason == "refusal":
             raise RuntimeError("Claude declined this request (stop_reason=refusal)")
-        return final_text(response.content)
+        return text_style.humanize(final_text(response.content))
 
 
 _TOOL_BLOCKS = {"server_tool_use", "web_search_tool_result", "web_fetch_tool_result"}

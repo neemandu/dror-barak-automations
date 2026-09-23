@@ -123,7 +123,7 @@ def _copy_name(template_name: str, client_name: str) -> str:
     The template's own name, then the client's — so the file is recognisable
     both in the folder and once Dror has downloaded or forwarded it.
     """
-    return f"{template_name} — {client_name}"
+    return f"{template_name} - {client_name}"
 
 
 def _copy_templates(auto: Automation, google: GoogleClient, client_id: str,
@@ -138,7 +138,7 @@ def _copy_templates(auto: Automation, google: GoogleClient, client_id: str,
         # Silence here used to look like success. It is not: the client's folder
         # comes out empty and nobody finds out until Dror opens it.
         auto.log_action("no_templates", "skipped", client_id=client_id,
-                        detail="DRIVE_TEMPLATE_IDS is empty — no templates copied")
+                        detail="DRIVE_TEMPLATE_IDS is empty - no templates copied")
         return {"copied": [], "skipped": [], "failed": []}
 
     try:
@@ -151,8 +151,10 @@ def _copy_templates(auto: Automation, google: GoogleClient, client_id: str,
     copied, skipped, failed = [], [], []
     for tid in ids:
         try:
-            title = _copy_name(google.file_name(tid), name)
-            if title in present:
+            template_name = google.file_name(tid)
+            title = _copy_name(template_name, name)
+            # Copies made before 2026-09-23 were named with a long dash.
+            if title in present or f"{template_name} \u2014 {name}" in present:
                 skipped.append(title)
                 continue
             google.copy_file(tid, title, folder_id)
@@ -183,7 +185,7 @@ def _send_welcome_flow(auto: Automation, client: dict[str, Any], *, dry_run: boo
     flow = config.get("MANYCHAT_FLOW_ONBOARDING")
     if not flow:
         auto.log_action("no_welcome_flow", "skipped", client_id=client_id,
-                        detail="MANYCHAT_FLOW_ONBOARDING not set — no approved welcome template yet")
+                        detail="MANYCHAT_FLOW_ONBOARDING not set - no approved welcome template yet")
         return False
     phone = to_e164(str(client.get("phone") or ""), config.get("SMOOVE_DEFAULT_COUNTRY_CODE", "972"))
     if not phone:
@@ -212,11 +214,11 @@ def _check_meta_account(auto: Automation, crm: CrmClient, client: dict[str, Any]
 
     auto.log_action(
         "meta_account_missing", "skipped", client_id=client_id,
-        detail="אין חשבון מודעות Meta — הדוח החודשי לא יוכל לרוץ ללקוח הזה",
+        detail="אין חשבון מודעות Meta - הדוח החודשי לא יוכל לרוץ ללקוח הזה",
     )
     crm.append_automation_log(
         client_id,
-        "📊 חסר חשבון מודעות Meta במשימה. בלעדיו הדוח החודשי לא ירוץ ללקוח הזה — "
+        "📊 חסר חשבון מודעות Meta במשימה. בלעדיו הדוח החודשי לא ירוץ ללקוח הזה - "
         "ראה נוהל 'חיבור חשבון מודעות Meta של לקוח חדש' ב-docs/OPERATIONS.md.",
     )
     return ""
@@ -238,7 +240,7 @@ def _summarise(auto: Automation, crm: CrmClient, client_id: str, name: str,
     if copied:
         lines.append(f"📄 {copied} תבניות הועתקו לתיקייה")
     if templates.get("failed"):
-        lines.append(f"⚠️ {len(templates['failed'])} תבניות נכשלו בהעתקה — ראה את הדוח היומי")
+        lines.append(f"⚠️ {len(templates['failed'])} תבניות נכשלו בהעתקה - ראה את הדוח היומי")
     if result.get("questionnaire_sent"):
         lines.append("📋 שאלון האסטרטגיה נשלח, ותישלח תזכורת אם לא ימולא")
     lines.append("🚀 הסטטוס עודכן ל'לקוח פעיל' / 'בעבודה'")

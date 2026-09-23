@@ -78,7 +78,7 @@ def run(
     auto.log_action(
         "flow_sent",
         client_id=phone,
-        detail=(f"{'נוצר איש קשר חדש' if created else 'איש קשר קיים'} — "
+        detail=(f"{'נוצר איש קשר חדש' if created else 'איש קשר קיים'} - "
                 f"נשלח Flow '{msg}' ל־{phone}"),
         msg=msg,
         subscriber_id=subscriber_id,

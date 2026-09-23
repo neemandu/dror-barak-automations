@@ -56,7 +56,7 @@ def _sam_bucket(session: Any) -> str:
     for o in cf.describe_stacks(StackName="aws-sam-cli-managed-default")["Stacks"][0]["Outputs"]:
         if o["OutputKey"] == "SourceBucket":
             return str(o["OutputValue"])
-    raise SystemExit("no aws-sam-cli-managed-default stack — run one sam deploy first")
+    raise SystemExit("no aws-sam-cli-managed-default stack - run one sam deploy first")
 
 
 def build_zip(pack_tar: Path, out: Path) -> None:

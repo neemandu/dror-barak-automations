@@ -118,7 +118,7 @@ def _page(title: str, body: str) -> str:
 # client reads Hebrew, so the page translates the ones a client can actually hit.
 _CLIENT_MESSAGES = {
     "this signing link is not valid": "הקישור אינו תקין.",
-    "malformed signing link": "הקישור אינו תקין — ייתכן שהוא נקטע בהעתקה.",
+    "malformed signing link": "הקישור אינו תקין - ייתכן שהוא נקטע בהעתקה.",
     "this signing link has expired": "תוקף הקישור פג.",
     "the signature is missing or not a PNG image": "לא התקבלה חתימה. אנא חתום/חתמי בתיבה ונסה/י שוב.",
     "the signature image is corrupt": "החתימה לא נקלטה כראוי. אנא נסה/י לחתום שוב.",
@@ -197,7 +197,7 @@ def render_sign_page(
         )
 
     err = f'<div class="err">{_esc(error)}</div>' if error else ""
-    return _page("הסכם התקשרות — לחתימה", f"""
+    return _page("הסכם התקשרות - לחתימה", f"""
 <div class="sheet">
   {err}
   <form method="post" action="?t={_esc(token)}" id="f">
@@ -354,7 +354,7 @@ def _finalise(
 
     # Drive keeps the readable Hebrew name; ClickUp is given an ASCII one, because
     # it rejects non-ASCII filenames outright.
-    name = f"הסכם חתום — {client.get('name') or client_id}.pdf"
+    name = f"הסכם חתום - {client.get('name') or client_id}.pdf"
     clickup_name = f"signed-contract-{client_id}.pdf"
     if dry_run:
         log.info("would_finalise", extra={"client_id": client_id, "name": name,

@@ -54,11 +54,11 @@ def _prompt(role: str, url: str, focus: str) -> str:
         f"רשת: {network}\nקישור: {url}\nמטרה: {_PURPOSE.get(focus, focus)}\n\n"
         "פתח את הקישור. אם הדף חסום או דורש התחברות, חפש ברשת מידע ציבורי על החשבון "
         "או על העסק.\n\n"
-        "כתוב ב-Markdown, בדיוק במבנה הזה, ופתח ישירות בשורת מקור המידע — בלי הקדמה:\n"
-        f"{_SOURCE_LINE} משפט אחד — האם פתחת את הדף, מצאת מידע בחיפוש, או לא הצלחת לגשת.\n"
+        "כתוב ב-Markdown, בדיוק במבנה הזה, ופתח ישירות בשורת מקור המידע - בלי הקדמה:\n"
+        f"{_SOURCE_LINE} משפט אחד - האם פתחת את הדף, מצאת מידע בחיפוש, או לא הצלחת לגשת.\n"
         "### מיצוב\nפסקה אחת: למי הם מדברים, מה ההבטחה, מה הטון.\n"
         "### התוכן האחרון\nעד 5 פוסטים/סרטונים אחרונים שראית בפועל, שורה לכל אחד. "
-        "אם לא ראית תוכן — כתוב שלא ניתן היה לראות, בלי לנחש.\n"
+        "אם לא ראית תוכן - כתוב שלא ניתן היה לראות, בלי לנחש.\n"
         "### 3 המלצות\nשלוש המלצות קונקרטיות, ממוספרות.\n"
     )
 
@@ -88,10 +88,12 @@ def analyze_profiles(
         return dict(pool.map(one, items))
 
 
-def _compile_report(name: str, profiles: dict[str, str], analyses: dict[str, str]) -> str:
-    lines = [f"# דוח הכנה — נוכחות דיגיטלית · {name}", ""]
+def _compile_report(profiles: dict[str, str], analyses: dict[str, str]) -> str:
+    """One section per network; the title and the client are the title block's."""
+    lines: list[str] = []
     for role, text in analyses.items():
-        lines += [f"## {questionnaire.ROLES.get(role, role)}", f"קישור: {profiles.get(role, '')}", "", text, ""]
+        lines += [f"## {questionnaire.ROLES.get(role, role)}", f"**קישור:** {profiles.get(role, '')}",
+                  "", text, ""]
     return "\n".join(lines)
 
 
@@ -118,15 +120,16 @@ def run(
         profiles = profiles_for(client_id)
     if not profiles:
         auto.log_action("no_profiles", "skipped", client_id=client_id,
-                        detail="בשאלון לא מולאו קישורים לרשתות — אין מה לנתח")
+                        detail="בשאלון לא מולאו קישורים לרשתות - אין מה לנתח")
         crm.append_automation_log(
             client_id, "ℹ️ דוח רשתות לא נבנה: בשאלון לא מולאו קישורים לרשתות חברתיות או לאתר.")
         return {"report": "", "analyses": {}, "saved": {}}
 
     analyses = analyze_profiles(profiles, AnthropicClient(dry_run=dry_run))
-    report = _compile_report(name, profiles, analyses)
-    saved = deliverables.save_markdown_doc(crm, client, f"דוח הכנה לרשתות — {name}", report,
-                                           dry_run=dry_run)
+    report = _compile_report(profiles, analyses)
+    saved = deliverables.save_markdown_doc(
+        crm, client, report, file_name=f"דוח הכנה לרשתות - {name}",
+        title="דוח הכנה: נוכחות דיגיטלית", subtitle=deliverables.prepared_for(name), dry_run=dry_run)
     crm.append_automation_log(
         client_id, f"🔎 דוח ההכנה לרשתות מוכן ({len(analyses)} ערוצים)\n{saved['url']}")
     auto.log_action("prep_report_ready", client_id=client_id,

@@ -282,7 +282,7 @@ def test_run_all_month_defaults_to_the_previous_month(monkeypatch):
 
 def test_strategy_bot(read_log, answered):
     result = strategy_bot.run("42", dry_run=True)
-    assert "אסטרטגיה" in result["strategy"]
+    assert result["strategy"] and result["saved"]["url"]
     assert "strategy_ready" in _actions(read_log)
 
 

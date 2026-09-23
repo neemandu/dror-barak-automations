@@ -335,7 +335,7 @@ def sign_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS, short: bool = Tr
     base = config.get("SIGN_BASE_URL") or config.get("AWS_API_BASE_URL")
     if not base:
         raise SigningError(
-            "SIGN_BASE_URL is not set — there is nowhere for the client to open "
+            "SIGN_BASE_URL is not set - there is nowhere for the client to open "
             "the contract. Use the deployed API base, e.g. "
             "https://xxx.execute-api.eu-central-1.amazonaws.com/dev"
         )
@@ -348,7 +348,7 @@ def questionnaire_url(client_id: str, *, ttl: int = DEFAULT_TTL_SECONDS) -> str:
     signing — it carries the client id — pointed at the questionnaire page."""
     base = config.get("SIGN_BASE_URL") or config.get("AWS_API_BASE_URL")
     if not base:
-        raise SigningError("SIGN_BASE_URL is not set — nowhere to host the form.")
+        raise SigningError("SIGN_BASE_URL is not set - nowhere to host the form.")
     return f"{base.rstrip('/')}/questionnaire?t={_link_token(client_id, ttl, True)}"
 
 

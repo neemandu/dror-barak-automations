@@ -20,11 +20,11 @@ def _render(rows, *, analysis="ניתוח.", recs="המלצה."):
 
 def test_renders_a_zero_spend_month_rather_than_refusing():
     # The whole reason this isn't contract.py: a paused month is a finding, not a
-    # hole. It must render, and its undefined rates show as —.
+    # hole. It must render, and its undefined rates show as a plain dash.
     html = _render([{"campaign_name": "paused", "spend": "0",
                      "impressions": "0", "clicks": "0"}])
     assert "מכללת דוגמה" in html
-    assert "—" in html  # cost-per-lead / CTR are undefined at zero spend
+    assert f">{cr.EMPTY}<" in html  # cost-per-lead / CTR are undefined at zero spend
 
 
 def test_renders_a_normal_month_with_real_numbers():
@@ -60,5 +60,5 @@ def test_a_template_placeholder_with_no_code_key_is_an_error():
 
 def test_empty_ai_sections_render_as_a_dash_not_a_refusal():
     html = _render([{"campaign_name": "a", "spend": "1"}], analysis="", recs="")
-    # Two AI sections, both empty → both —; the report still renders.
-    assert html.count("—") >= 2
+    # Two AI sections, both empty → both a dash; the report still renders.
+    assert html.count(f">{cr.EMPTY}<") >= 2
