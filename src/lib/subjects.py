@@ -36,6 +36,86 @@ SUBJECTS: dict[str, Subject] = {
 
 UNKNOWN = Subject("other", "אחר", "•")
 
+#: What each logged action means, in the words Dror would use. The run-log keeps
+#: the stable English names; the dashboard and the daily email show these.
+ACTION_LABELS: dict[str, str] = {
+    # leads and tasks
+    "contact_saved": "הליד נשמר באנשי הקשר",
+    "no_phone": "לליד אין מספר טלפון",
+    "flow_sent": "הודעת וואטסאפ נשלחה לליד",
+    "unknown_msg": "הודעה לא מוכרת מ-Smoove",
+    "draft_posted": "Claude השלים משימה",
+    "draft_failed": "Claude לא הצליח להשלים משימה",
+    "drive_doc_created": "Claude יצר מסמך ב-Drive",
+    "gmail_draft_created": "Claude הכין טיוטת מייל",
+    # quotes and signing
+    "quote_sent": "הצעת המחיר נשלחה לחתימה",
+    "no_price": "חסר מחיר להצעה",
+    "signed": "ההסכם נחתם",
+    "reminder_sent": "נשלחה תזכורת ללקוח",
+    "reminder_failed": "תזכורת לא נשלחה",
+    "reminders_done": "סבב התזכורות הסתיים",
+    "no_pending_record": "אין חתימה שממתינה",
+    # questionnaire
+    "questionnaire_sent": "השאלון נשלח ללקוח",
+    "questionnaire_send_failed": "שליחת השאלון נכשלה",
+    "questionnaire_answered": "הלקוח מילא את השאלון",
+    "questionnaire_doc_failed": "מסמך התשובות לא נוצר",
+    "questionnaire_unanswered": "השאלון עדיין לא מולא",
+    "questionnaire_reminders_done": "סבב התזכורות לשאלון הסתיים",
+    "no_email": "אין ללקוח כתובת מייל",
+    # onboarding and Drive
+    "drive_folder_created": "נפתחה תיקיית לקוח",
+    "drive_folder_reused": "תיקיית הלקוח כבר קיימת",
+    "subfolders_created": "נוצרו תיקיות משנה",
+    "subfolders_failed": "יצירת תיקיות המשנה נכשלה",
+    "templates_copied": "התבניות הועתקו לתיקייה",
+    "template_copy_failed": "העתקת תבנית נכשלה",
+    "no_templates": "לא הוגדרו תבניות להעתקה",
+    "folder_listing_failed": "קריאת תיקיית הלקוח נכשלה",
+    "welcome_flow_sent": "נשלחה הודעת ברוכים הבאים",
+    "welcome_flow_failed": "הודעת ברוכים הבאים לא נשלחה",
+    "no_welcome_flow": "אין עדיין הודעת ברוכים הבאים מאושרת",
+    "no_phone_for_welcome": "אין טלפון להודעת ברוכים הבאים",
+    "meta_account_present": "חשבון המודעות ב-Meta מחובר",
+    "meta_account_missing": "חסר חשבון מודעות ב-Meta",
+    "onboarding_done": "האונבורדינג הושלם",
+    "summary_comment_failed": "סיכום האונבורדינג לא נכתב במשימה",
+    # AI
+    "prep_report_ready": "דוח ההכנה לרשתות מוכן",
+    "no_profiles": "אין קישורים לרשתות בשאלון",
+    "strategy_ready": "טיוטת האסטרטגיה מוכנה",
+    "no_questionnaire": "אין תשובות לשאלון, האסטרטגיה לא נבנתה",
+    "dror_notified": "נשלח אליך מייל",
+    "dror_not_notified": "לא נשלח אליך מייל",
+    "notify_failed": "המייל אליך נכשל",
+    "task_failed": "משימה ברקע נכשלה",
+    # campaigns
+    "campaign_summary_ready": "דוח הקמפיינים מוכן לאישור",
+    "campaign_report_built": "דוח הקמפיינים נבנה",
+    "campaign_reports_done": "סבב דוחות הקמפיינים הסתיים",
+    "no_ad_account": "אין ללקוח חשבון מודעות",
+    "report_failed": "דוח הקמפיינים נכשל",
+    "approval_email_failed": "מייל האישור לדוח נכשל",
+    # system
+    "email_sent": "הסיכום היומי נשלח",
+    "email_prepared": "הסיכום היומי הוכן",
+    "email_failed": "שליחת מייל נכשלה",
+    "no_recipient": "אין נמען לסיכום היומי",
+    "summary_sent": "הסיכום היומי נשלח",
+    "migration_done": "ההעברה מ-Taskey הסתיימה",
+    "task_created": "משימה נוצרה ב-ClickUp",
+    "task_error": "יצירת משימה נכשלה",
+    "mapping_resolved": "מיפוי השדות הושלם",
+    "limit_reached": "הגענו למגבלה",
+}
+
+
+def label_for(entry: dict[str, Any]) -> str:
+    """The Hebrew line for an entry's action (the raw name if it has none)."""
+    action = str(entry.get("action") or "")
+    return ACTION_LABELS.get(action) or action.replace("_", " ")
+
 # Checked in order; first substring match on the action name wins.
 _ACTION_RULES: tuple[tuple[str, str], ...] = (
     ("drive", "drive"),

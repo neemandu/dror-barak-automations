@@ -54,7 +54,7 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
         if failed:
             rows = "".join(
                 f'<tr><td style="padding:4px 0;color:#c0271c">✕</td>'
-                f'<td style="padding:4px 8px"><b>{_esc(e.get("action"))}</b>'
+                f'<td style="padding:4px 8px"><b>{_esc(subjects.label_for(e))}</b>'
                 f'<div style="color:#6b7280;font-size:13px">{_esc(e.get("client_id") or "")} - {_esc(e.get("detail"))}</div></td></tr>'
                 for e in failed[:10]
             )
@@ -85,7 +85,7 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
                     f'<tr><td style="padding:4px 0;color:{colour};width:16px">{mark}</td>'
                     f'<td style="padding:4px 8px;color:#6b7280;font-size:13px;white-space:nowrap">'
                     f'{_esc(subjects.parse_ts(e) or "")}</td>'
-                    f'<td style="padding:4px 8px"><b>{_esc(e.get("action"))}</b>{links}{note}</td>'
+                    f'<td style="padding:4px 8px"><b>{_esc(subjects.label_for(e))}</b>{links}{note}</td>'
                     f'<td style="padding:4px 8px;color:#6b7280;font-size:13px">{_esc(e.get("client_id") or "")}</td></tr>'
                 )
             inner += (
@@ -117,7 +117,7 @@ def build_text(entries: list[dict[str, Any]], date: str) -> str:
         lines.append(f"{subject.label} ({len(group)}):")
         for e in group:
             mark = {"ok": "v", "error": "x", "skipped": "-"}.get(str(e.get("status")), ".")
-            lines.append(f"  [{mark}] {e.get('action')} {e.get('client_id') or ''}")
+            lines.append(f"  [{mark}] {subjects.label_for(e)} {e.get('client_id') or ''}")
         lines.append("")
     return "\n".join(lines)
 

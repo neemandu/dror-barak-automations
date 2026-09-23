@@ -29,6 +29,7 @@ import json
 from typing import Any, Optional
 from urllib.parse import parse_qs
 
+from . import ui
 from .lib import client_folder, config, contract, idempotency, pdf, signing
 from .lib.clients.crm import CrmClient
 from .lib.logging_setup import get_logger
@@ -58,72 +59,124 @@ def _esc(v: Any) -> str:
 # ------------------------------------------------------------------ rendering
 
 PAGE_CSS = """
-* { box-sizing: border-box; }
-body { margin:0; background:#eef0f3; color:#14171a; font-family:system-ui,"Segoe UI",Arial,sans-serif; }
-.sheet { max-width:820px; margin:24px auto; background:#fff; padding:40px 48px;
-  border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
-.brand-banner { border-radius:8px; margin:0 0 24px; padding:26px 30px;
-  background:linear-gradient(90deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%);
-  display:flex; align-items:center; }
-/* The logo is white-on-transparent: it only reads against the gradient. */
-.brand-logo { max-width:250px; height:auto; display:block; }
-.brand-footer { margin-top:34px; text-align:center; }
-.brand-footer img { max-width:100%; height:auto; }
-.contract h1 { font-size:24px; margin:0 0 6px; }
-.contract h2 { font-size:17px; margin:26px 0 8px; }
-.contract h3 { font-size:15px; margin:16px 0 6px; }
-.contract p, .contract li { font-size:14px; line-height:1.75; }
-.contract hr { border:0; border-top:1px solid #dfe3e8; margin:22px 0; }
-.contract .lead { color:#444; font-size:15px; }
-.filled { background:#fff6d6; padding:0 3px; border-radius:3px; font-weight:600; }
-.parties { display:flex; gap:32px; flex-wrap:wrap; }
-.party { flex:1; min-width:220px; }
-table.annex { width:100%; border-collapse:collapse; margin:12px 0; font-size:13px; }
-table.annex th, table.annex td { border:1px solid #dfe3e8; padding:8px; text-align:right; }
-table.annex .total { font-weight:700; background:#f6f7f9; }
-.signatures { display:flex; gap:32px; flex-wrap:wrap; }
-.sig { flex:1; min-width:240px; }
-.sig-box { border-bottom:1px solid #14171a; height:70px; margin:6px 0; }
-.form { background:#f6f7f9; border:1px solid #dfe3e8; border-radius:8px; padding:20px; margin:24px 0; }
-.form h2 { margin:0 0 4px; font-size:17px; }
-.form .why { color:#5b6472; font-size:13px; margin:0 0 14px; }
-.row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
-.row label { flex:1; min-width:200px; font-size:13px; }
-.row input { width:100%; padding:9px 11px; margin-top:4px; border:1px solid #c9cfd6;
-  border-radius:6px; font:inherit; }
-canvas { border:1px dashed #9aa3ad; border-radius:6px; background:#fff;
-  touch-action:none; width:100%; height:170px; display:block; }
-.actions { display:flex; gap:12px; align-items:center; margin-top:16px; flex-wrap:wrap; }
-button { font:inherit; padding:11px 22px; border-radius:8px; border:0; cursor:pointer; }
-button.primary { background:#0a7c42; color:#fff; font-weight:600; }
-button.primary:disabled { background:#9aa3ad; cursor:not-allowed; }
-button.link { background:transparent; color:#5b6472; text-decoration:underline; padding:6px; }
-.err { background:#fdecea; border:1px solid #c0271c; color:#8c1d16; padding:12px 14px;
-  border-radius:8px; margin-bottom:16px; font-size:14px; }
-.done { text-align:center; padding:56px 20px; }
-.done .tick { font-size:56px; }
-.note { color:#5b6472; font-size:12px; }
+html.public body { background: #eef1f5; }
+.sbar { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, #ffffff 86%, transparent); backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px); }
+.sbar-in { max-width: 880px; margin: 0 auto; padding: 0 20px; height: 60px; display: flex; align-items: center; gap: 12px; }
+.sbar .title { font-weight: 700; font-size: 15px; }
+.sbar .spacer { flex: 1; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 26px 20px 120px; }
+.intro { padding: 22px 24px; margin-bottom: 18px; }
+.intro h1 { margin: 0 0 6px; font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+.intro p { margin: 0; color: var(--fg-muted); }
+.flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.flow-step { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2);
+  border: 1px solid var(--border); font-size: 14px; font-weight: 500; color: var(--fg-muted); transition: all var(--d3) var(--ease); }
+.flow-step .n { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--surface-active); color: var(--fg-2); transition: all var(--d3) var(--ease); }
+.flow-step .n svg { display: none; width: 13px; height: 13px; stroke-width: 3; }
+.flow-step.is-done { color: var(--success-ink); background: var(--success-soft); border-color: var(--success-border); }
+.flow-step.is-done .n { background: var(--success); color: #fff; animation: pop var(--d3) var(--spring); }
+.flow-step.is-done .n b { display: none; }
+.flow-step.is-done .n svg { display: block; }
+.paper { background: #fff; border-radius: 16px; padding: 44px 52px; margin-bottom: 18px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 18px 40px -22px rgba(16, 24, 40, .25); }
+.brand-banner { border-radius: 12px; margin: 0 0 28px; padding: 26px 30px; background: var(--brand-grad); display: flex; align-items: center; }
+.brand-logo { max-width: 240px; height: auto; display: block; }
+.brand-footer { margin-top: 34px; text-align: center; }
+.brand-footer img { max-width: 100%; height: auto; }
+.contract { color: #1d2939; }
+.contract h1 { font-size: 26px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 6px; }
+.contract h2 { font-size: 17px; font-weight: 700; margin: 30px 0 8px; }
+.contract h3 { font-size: 15px; font-weight: 700; margin: 18px 0 6px; }
+.contract p, .contract li { font-size: 14.5px; line-height: 1.85; }
+.contract hr { border: 0; border-top: 1px solid var(--border); margin: 26px 0; }
+.contract .lead { color: var(--fg-muted); font-size: 15.5px; }
+.filled { background: #fff4d6; padding: 1px 5px; border-radius: 5px; font-weight: 600; transition: background var(--d3); }
+.filled.pulse { animation: flash .9s var(--ease); }
+.parties { display: flex; gap: 32px; flex-wrap: wrap; }
+.party { flex: 1; min-width: 220px; }
+table.annex { width: 100%; border-collapse: separate; border-spacing: 0; margin: 14px 0; font-size: 13.5px; border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; }
+table.annex th, table.annex td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--border-soft); }
+table.annex th { background: var(--surface-2); font-weight: 600; color: var(--fg-2); }
+table.annex tr:last-child td { border-bottom: 0; }
+table.annex .total { font-weight: 700; background: var(--surface-2); }
+.signatures { display: flex; gap: 32px; flex-wrap: wrap; }
+.sig { flex: 1; min-width: 240px; }
+.sig-box { border-bottom: 1.5px solid #1d2939; height: 70px; margin: 6px 0; }
+.panel { padding: 24px; margin-bottom: 16px; }
+.panel h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+.panel h2 .n { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--fg); color: #fff; font-size: 13px; }
+.panel .why { margin: 0 0 18px; color: var(--fg-muted); font-size: 14px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.fields .input { height: 48px; font-size: 16px; border-radius: 12px; border-width: 1.5px; box-shadow: none; }
+.fields .input[type=email], .fields .input[type=tel] { direction: ltr; text-align: left; }
+.pad-wrap { position: relative; border-radius: 14px; border: 1.5px dashed var(--border-strong); background: var(--surface-2);
+  transition: border-color var(--d2), background var(--d2); overflow: hidden; }
+.pad-wrap.has-ink { border-style: solid; border-color: var(--brand); background: #fff; }
+.pad-wrap canvas { display: block; width: 100%; height: 190px; touch-action: none; cursor: crosshair; }
+.pad-hint { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  color: var(--fg-subtle); font-size: 15px; pointer-events: none; transition: opacity var(--d3) var(--ease), transform var(--d3) var(--ease); }
+.pad-hint .icon { width: 26px; height: 26px; }
+.pad-wrap.has-ink .pad-hint { opacity: 0; transform: scale(.96); }
+.pad-line { position: absolute; left: 28px; right: 28px; bottom: 40px; border-top: 1px dashed var(--border-strong); pointer-events: none; }
+.pad-tools { display: flex; align-items: center; gap: 10px; margin-top: 10px; min-height: 30px; }
+.pad-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--success-ink); font-size: 13.5px; font-weight: 600;
+  opacity: 0; transition: opacity var(--d3); }
+.pad-ok.on { opacity: 1; }
+.submit { padding: 22px 24px; }
+.missing { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13.5px; color: var(--fg-muted); }
+.missing .badge { background: var(--warn-soft); color: var(--warn-ink); }
+.note { margin: 14px 0 0; color: var(--fg-subtle); font-size: 12.5px; display: flex; gap: 6px; align-items: flex-start; }
+.note .icon { margin-top: 2px; }
+.gobar { position: fixed; z-index: 50; bottom: 18px; left: 50%; transform: translate(-50%, 0); display: flex; align-items: center; gap: 12px;
+  padding: 8px 8px 8px 18px; border-radius: 99px; background: #101828; color: #fff; font-size: 14px; font-weight: 500;
+  box-shadow: var(--sh-xl); transition: transform var(--d3) var(--ease), opacity var(--d3); white-space: nowrap; }
+.gobar.is-hidden { transform: translate(-50%, 140%); opacity: 0; pointer-events: none; }
+.gobar .btn { --h: 38px; border-radius: 99px; }
+.center { text-align: center; }
+.done-wrap { max-width: 560px; margin: 8vh auto 0; padding: 40px 30px; text-align: center; }
+.done-wrap h1 { margin: 20px 0 8px; font-size: 26px; font-weight: 800; }
+.done-wrap p { margin: 0 auto; color: var(--fg-muted); max-width: 400px; }
+.check-anim { width: 88px; height: 88px; margin: 0 auto; }
+.check-anim circle { fill: var(--success-soft); stroke: var(--success); stroke-width: 3; stroke-dasharray: 252; stroke-dashoffset: 252;
+  animation: draw .7s var(--ease) forwards; }
+.check-anim path { fill: none; stroke: var(--success); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 60; stroke-dashoffset: 60; animation: draw .4s .55s var(--ease) forwards; }
+.fail-icon { width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center;
+  background: var(--danger-soft); color: var(--danger-ink); box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger-soft) 55%, transparent); }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@media (max-width: 640px) {
+  .wrap { padding: 16px 12px 110px; }
+  .paper { padding: 26px 20px; border-radius: 14px; }
+  .flow { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .flow-step { flex-direction: column; gap: 6px; padding: 10px 6px; font-size: 12.5px; text-align: center; }
+  .fields { grid-template-columns: 1fr; }
+  .panel, .submit { padding: 20px 18px; }
+  .sbar .lockbadge span { display: none; }
+}
 """
 
 
-def _page(title: str, body: str) -> str:
-    return f"""<!doctype html>
-<html lang="he" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<title>{_esc(title)}</title><style>{PAGE_CSS}</style></head><body>{body}</body></html>"""
+def _page(title: str, body: str, *, script: str = "") -> str:
+    bar = (f'<header class="sbar"><div class="sbar-in">{ui.BRAND_MARK}<span class="title">דרור ברק</span>'
+           f'<span class="spacer"></span><span class="badge badge-ok lockbadge">{ui.icon("lock", 12)}'
+           '<span>חתימה מאובטחת</span></span></div></header>')
+    return ui.document(title, bar + body, kind="public", css=PAGE_CSS, script=script)
 
 
 # SigningError messages are English because they are also what the logs say. The
 # client reads Hebrew, so the page translates the ones a client can actually hit.
 _CLIENT_MESSAGES = {
     "this signing link is not valid": "הקישור אינו תקין.",
-    "malformed signing link": "הקישור אינו תקין - ייתכן שהוא נקטע בהעתקה.",
+    "malformed signing link": "הקישור אינו תקין. ייתכן שהוא נקטע בהעתקה.",
     "this signing link has expired": "תוקף הקישור פג.",
-    "the signature is missing or not a PNG image": "לא התקבלה חתימה. אנא חתום/חתמי בתיבה ונסה/י שוב.",
-    "the signature image is corrupt": "החתימה לא נקלטה כראוי. אנא נסה/י לחתום שוב.",
-    "the signature image is not a PNG": "החתימה לא נקלטה כראוי. אנא נסה/י לחתום שוב.",
-    "the signature appears to be blank": "תיבת החתימה ריקה. אנא חתום/חתמי ונסה/י שוב.",
+    "the signature is missing or not a PNG image": "לא התקבלה חתימה. אנא חתמו בתיבה ונסו שוב.",
+    "the signature image is corrupt": "החתימה לא נקלטה כראוי. אנא נסו לחתום שוב.",
+    "the signature image is not a PNG": "החתימה לא נקלטה כראוי. אנא נסו לחתום שוב.",
+    "the signature appears to be blank": "תיבת החתימה ריקה. אנא חתמו ונסו שוב.",
 }
 
 
@@ -138,18 +191,20 @@ def client_message(message: str) -> str:
 
 
 def error_page(message: str) -> str:
-    return _page("שגיאה", f"""<div class="sheet"><div class="err">{_esc(client_message(message))}</div>
-      <p class="note">אם הקישור אינו פועל, אנא פנה/י לדרור ברק.</p></div>""")
+    return _page("הקישור לא נפתח", f"""<main class="wrap"><div class="card done-wrap reveal">
+      <div class="fail-icon">{ui.icon("alert", 28)}</div><h1>הקישור לא נפתח</h1>
+      <p>{_esc(client_message(message))}</p>
+      <p style="margin-top:10px;font-size:14px">אפשר לפנות לדרור ברק ונשלח קישור חדש.</p></div></main>""")
 
 
 def done_page(link: str = "") -> str:
-    extra = (f'<p><a href="{_esc(link)}" target="_blank" rel="noopener">להורדת ההסכם החתום</a></p>'
-             if link else "")
-    return _page("נחתם", f"""<div class="sheet"><div class="done">
-        <div class="tick">✅</div>
+    extra = (f'<a class="btn btn-primary btn-lg" style="margin-top:24px" href="{_esc(link)}" target="_blank" rel="noopener">'
+             f'{ui.icon("download", 17)}<span>להורדת ההסכם החתום</span></a>' if link else "")
+    check = ('<svg class="check-anim" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="40"/>'
+             '<path d="M26 43l11 11 21-23"/></svg>')
+    return _page("ההסכם נחתם", f"""<main class="wrap"><div class="card done-wrap reveal">{check}
         <h1>ההסכם נחתם בהצלחה</h1>
-        <p>עותק חתום נשמר ונשלח לדרור. תודה!</p>{extra}
-      </div></div>""")
+        <p>עותק חתום נשמר ונשלח לדרור. תודה, ומתחילים לעבוד!</p>{extra}</div></main>""")
 
 
 def _form_html(fields: dict[str, str]) -> str:
@@ -157,15 +212,91 @@ def _form_html(fields: dict[str, str]) -> str:
     rows = ""
     for key, label, kind in ASK_CLIENT:
         value = fields.get(key) or ""
-        rows += (f'<label>{_esc(label)}'
-                 f'<input name="{key}" type="{kind}" value="{_esc(value)}" required '
-                 f'data-field="{key}"></label>')
-    return f"""<div class="form">
-      <h2>פרטי הלקוח</h2>
-      <p class="why">הפרטים האלה מופיעים בהסכם ומזהים אותך כצד לו. הם מתעדכנים במסמך
-         מעלה תוך כדי הקלדה.</p>
-      <div class="row">{rows}</div>
-    </div>"""
+        auto = {"email": ' autocomplete="email"', "tel": ' autocomplete="tel"'}.get(kind, "")
+        rows += (f'<label class="field"><span class="label">{_esc(label)}</span>'
+                 f'<input class="input" name="{key}" type="{kind}" value="{_esc(value)}" required '
+                 f'data-field="{key}"{auto}></label>')
+    return f"""<section class="card panel reveal" id="details">
+      <h2><span class="n">2</span>פרטי הלקוח</h2>
+      <p class="why">הפרטים מופיעים בהסכם ומזהים אתכם כצד לו. הם מתעדכנים במסמך תוך כדי הקלדה.</p>
+      <div class="fields">{rows}</div></section>"""
+
+
+SIGN_JS = r"""
+(function () {
+  var form = document.getElementById('f'), go = document.getElementById('go'), sig = document.getElementById('sig');
+  var inputs = Array.prototype.slice.call(document.querySelectorAll('input[data-field]'));
+  var steps = {read: document.getElementById('s-read'), details: document.getElementById('s-details'), sign: document.getElementById('s-sign')};
+  var drawn = false, readDone = false;
+
+  // Live-bind the form inputs into the contract text above, with a brief highlight.
+  inputs.forEach(function (input) {
+    input.addEventListener('input', function () {
+      var target = document.querySelector('[data-bind="' + input.name + '"]');
+      if (target) { target.textContent = input.value || '―――'; target.classList.remove('pulse'); void target.offsetWidth; target.classList.add('pulse'); }
+      update();
+    });
+  });
+
+  // Signature pad: pointer events, smoothed strokes, retina-sharp.
+  var wrap = document.getElementById('padwrap'), pad = document.getElementById('pad'), ctx = pad.getContext('2d');
+  function size() {
+    var ratio = window.devicePixelRatio || 1, w = pad.clientWidth, h = pad.clientHeight;
+    var keep = drawn ? pad.toDataURL() : null;
+    pad.width = w * ratio; pad.height = h * ratio; ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#101828';
+    if (keep) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0, w, h); }; img.src = keep; }
+  }
+  size(); window.addEventListener('resize', size);
+  var drawing = false, last = null, mid = null;
+  function at(e) { var r = pad.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top, t: Date.now()}; }
+  pad.addEventListener('pointerdown', function (e) { drawing = true; pad.setPointerCapture(e.pointerId); last = at(e); mid = last;
+    ctx.beginPath(); ctx.arc(last.x, last.y, 1.1, 0, Math.PI * 2); ctx.fillStyle = '#101828'; ctx.fill(); e.preventDefault(); });
+  pad.addEventListener('pointermove', function (e) {
+    if (!drawing) return; var p = at(e), m = {x: (last.x + p.x) / 2, y: (last.y + p.y) / 2};
+    var speed = Math.hypot(p.x - last.x, p.y - last.y) / Math.max(1, p.t - last.t);
+    ctx.lineWidth = Math.max(1.4, Math.min(3.2, 3.4 - speed * 1.2));
+    ctx.beginPath(); ctx.moveTo(mid.x, mid.y); ctx.quadraticCurveTo(last.x, last.y, m.x, m.y); ctx.stroke();
+    last = p; mid = m;
+    if (!drawn) { drawn = true; wrap.classList.add('has-ink'); update(); }
+    e.preventDefault();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { pad.addEventListener(n, function () { drawing = false; }); });
+  document.getElementById('clear').addEventListener('click', function () {
+    ctx.clearRect(0, 0, pad.width, pad.height); drawn = false; wrap.classList.remove('has-ink'); update(); });
+
+  function update() {
+    var missing = inputs.filter(function (i) { return !i.value.trim(); }).map(function (i) { return i.closest('label').querySelector('.label').textContent; });
+    if (!drawn) missing.push('חתימה');
+    steps.details.classList.toggle('is-done', inputs.every(function (i) { return i.value.trim(); }));
+    steps.sign.classList.toggle('is-done', drawn);
+    document.getElementById('padok').classList.toggle('on', drawn);
+    go.disabled = missing.length > 0;
+    var box = document.getElementById('missing'); box.innerHTML = '';
+    if (missing.length) { box.appendChild(document.createTextNode('נשאר: '));
+      missing.forEach(function (m) { var b = document.createElement('span'); b.className = 'badge'; b.textContent = m; box.appendChild(b); }); }
+  }
+
+  // Reading counts once the contract's end has been on screen.
+  var sign = document.getElementById('signpanel'), gobar = document.getElementById('gobar');
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting && !readDone) { readDone = true; steps.read.classList.add('is-done'); } }); })
+      .observe(document.getElementById('paper-end'));
+    new IntersectionObserver(function (es) { es.forEach(function (e) {
+      gobar.classList.toggle('is-hidden', e.isIntersecting || e.boundingClientRect.top < 0); }); }, {threshold: .05})
+      .observe(document.getElementById('details'));
+  } else { steps.read.classList.add('is-done'); gobar.classList.add('is-hidden'); }
+  document.getElementById('jump').addEventListener('click', function () {
+    document.getElementById('details').scrollIntoView({behavior: 'smooth', block: 'start'}); });
+
+  form.addEventListener('submit', function (e) {
+    if (!drawn) { e.preventDefault(); wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); return; }
+    sig.value = pad.toDataURL('image/png');
+    go.classList.add('is-loading'); go.disabled = true;
+  });
+  update();
+})();
+"""
 
 
 def render_sign_page(
@@ -196,74 +327,41 @@ def render_sign_page(
             1,
         )
 
-    err = f'<div class="err">{_esc(error)}</div>' if error else ""
+    err = (f'<div class="alert alert-danger shake" role="alert" style="margin-bottom:16px">{ui.icon("alert")}'
+           f'<span>{_esc(client_message(error))}</span></div>' if error else "")
+    name = fields.get("client_name") or ""
+    hello = f"שלום {_esc(name)}," if name else "שלום,"
+    flow = "".join(
+        f'<div class="flow-step" id="s-{key}"><span class="n"><b>{n}</b>{ui.icon("check", 13)}</span><span>{label}</span></div>'
+        for n, (key, label) in enumerate((("read", "קריאה"), ("details", "פרטים"), ("sign", "חתימה")), start=1))
     return _page("הסכם התקשרות - לחתימה", f"""
-<div class="sheet">
+<main class="wrap">
   {err}
+  <section class="card intro reveal"><h1>{hello} ההסכם מוכן לחתימה</h1>
+    <p>קוראים את ההסכם, משלימים כמה פרטים וחותמים. לוקח בערך שתי דקות.</p>
+    <div class="flow">{flow}</div></section>
   <form method="post" action="?t={_esc(token)}" id="f">
-    {body}
+    <article class="paper reveal" style="--i:1">{body}<span id="paper-end"></span></article>
     {_form_html(fields)}
-    <div class="form">
-      <h2>חתימה</h2>
-      <p class="why">חתמו בתוך המסגרת באמצעות העכבר או האצבע.</p>
-      <canvas id="pad"></canvas>
+    <section class="card panel" id="signpanel">
+      <h2><span class="n">3</span>חתימה</h2>
+      <p class="why">חתמו בתוך המסגרת, עם העכבר או האצבע.</p>
+      <div class="pad-wrap" id="padwrap"><canvas id="pad" aria-label="תיבת חתימה"></canvas><span class="pad-line"></span>
+        <div class="pad-hint">{ui.icon("pen", 26)}<span>חתמו כאן</span></div></div>
+      <div class="pad-tools"><button type="button" class="btn btn-sm" id="clear">{ui.icon("rotate", 14)}<span>ניקוי</span></button>
+        <span class="pad-ok" id="padok">{ui.icon("check-circle", 15)}<span>החתימה נקלטה</span></span></div>
       <input type="hidden" name="signature" id="sig">
-      <div class="actions">
-        <button type="button" class="link" id="clear">נקה חתימה</button>
-        <button type="submit" class="primary" id="go" disabled>אני מאשר/ת וחותם/ת על ההסכם</button>
-      </div>
-      <p class="note">בלחיצה על הכפתור נרשמים מועד החתימה, כתובת ה־IP וטביעת אצבע
-         דיגיטלית של נוסח ההסכם המוצג לך.</p>
-    </div>
+    </section>
+    <section class="card submit">
+      <button type="submit" class="btn btn-primary btn-lg btn-block" id="go" disabled>{ui.icon("pen", 17)}<span>חתימה על ההסכם</span></button>
+      <div class="missing" id="missing"></div>
+      <p class="note">{ui.icon("lock", 13)}<span>בלחיצה על הכפתור נרשמים מועד החתימה, כתובת ה-IP וטביעת אצבע
+         דיגיטלית של נוסח ההסכם המוצג לך.</span></p>
+    </section>
   </form>
-</div>
-<script>
-(function () {{
-  // Live-bind the form inputs into the contract text above.
-  document.querySelectorAll('input[data-field]').forEach(function (input) {{
-    input.addEventListener('input', function () {{
-      var target = document.querySelector('[data-bind="' + input.name + '"]');
-      if (target) target.textContent = input.value || '―――';
-    }});
-  }});
-
-  var pad = document.getElementById('pad'), go = document.getElementById('go'),
-      sig = document.getElementById('sig'), drawn = false;
-  function size() {{
-    var ratio = window.devicePixelRatio || 1, w = pad.clientWidth, h = pad.clientHeight;
-    pad.width = w * ratio; pad.height = h * ratio;
-    var c = pad.getContext('2d');
-    c.scale(ratio, ratio); c.lineWidth = 2; c.lineCap = 'round'; c.strokeStyle = '#14171a';
-  }}
-  size(); window.addEventListener('resize', size);
-
-  var ctx = pad.getContext('2d'), drawing = false;
-  function pos(e) {{
-    var r = pad.getBoundingClientRect(), t = e.touches ? e.touches[0] : e;
-    return {{ x: t.clientX - r.left, y: t.clientY - r.top }};
-  }}
-  function start(e) {{ drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }}
-  function move(e) {{
-    if (!drawing) return;
-    var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke();
-    drawn = true; go.disabled = false; e.preventDefault();
-  }}
-  function end() {{ drawing = false; }}
-  ['mousedown','touchstart'].forEach(function (n) {{ pad.addEventListener(n, start); }});
-  ['mousemove','touchmove'].forEach(function (n) {{ pad.addEventListener(n, move); }});
-  ['mouseup','mouseleave','touchend'].forEach(function (n) {{ pad.addEventListener(n, end); }});
-
-  document.getElementById('clear').addEventListener('click', function () {{
-    ctx.clearRect(0, 0, pad.width, pad.height); drawn = false; go.disabled = true;
-  }});
-
-  document.getElementById('f').addEventListener('submit', function (e) {{
-    if (!drawn) {{ e.preventDefault(); alert('נא לחתום לפני האישור'); return; }}
-    sig.value = pad.toDataURL('image/png');
-    go.disabled = true; go.textContent = 'רגע…';
-  }});
-}})();
-</script>""")
+</main>
+<div class="gobar" id="gobar"><span>מוכנים לחתום?</span><button type="button" class="btn btn-primary" id="jump">
+  <span>לפרטים ולחתימה</span>{ui.icon("arrow-down", 15)}</button></div>""", script=SIGN_JS)
 
 
 # --------------------------------------------------------------------- logic

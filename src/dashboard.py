@@ -28,9 +28,9 @@ import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
-from . import questionnaire_admin
+from . import questionnaire_admin, ui
 from .lib import config, run_log, subjects
 
 SESSION_COOKIE = "dror_dash"
@@ -113,174 +113,212 @@ def _esc(value: Any) -> str:
     return html.escape("" if value is None else str(value), quote=True)
 
 
-_STATUS_STYLE = {
-    "ok": ("✓", "ok"),
-    "error": ("✕", "err"),
-    "skipped": ("-", "skip"),
+_STATUS = {
+    "ok": ("check", "ok", "הצליח"),
+    "error": ("x", "err", "נכשל"),
+    "skipped": ("minus", "skip", "דילוג"),
 }
 
+#: Lucide icons for the subjects (the emoji in ``subjects`` stay for the email).
+_SUBJECT_ICONS = {"clickup": "clipboard", "quotes": "pen", "morning": "file", "meta": "gauge",
+                  "whatsapp": "message", "drive": "folder", "ai": "sparkles", "system": "activity",
+                  "other": "info"}
+
 CSS = """
-:root { color-scheme: light dark; --bg:#f6f7f9; --card:#fff; --line:#e3e6ea;
-  --text:#1a1d21; --muted:#6b7280; --ok:#0a7c42; --err:#c0271c; --skip:#8a6d16; }
-@media (prefers-color-scheme: dark) { :root { --bg:#14171a; --card:#1c2024;
-  --line:#2c3238; --text:#e7eaee; --muted:#9aa3ad; --ok:#3ec27f; --err:#ff6b5e;
-  --skip:#d6a92b; } }
-* { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,
-  "Segoe UI", Arial, sans-serif; font-size:15px; line-height:1.5; }
-.wrap { max-width:1000px; margin:0 auto; padding:24px 16px 64px; }
-h1 { font-size:22px; margin:0 0 4px; }
-.sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
-.cards { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:10px;
-  padding:10px 16px; min-width:96px; }
-.card b { display:block; font-size:22px; }
-.card span { color:var(--muted); font-size:12px; }
-form.filters { background:var(--card); border:1px solid var(--line);
-  border-radius:10px; padding:12px; margin-bottom:20px; display:flex;
-  flex-wrap:wrap; gap:8px; align-items:center; }
-select, input, button { font:inherit; padding:6px 10px; border-radius:8px;
-  border:1px solid var(--line); background:var(--bg); color:var(--text); }
-button { cursor:pointer; }
-section { background:var(--card); border:1px solid var(--line); border-radius:10px;
-  margin-bottom:14px; overflow:hidden; }
-section > h2 { font-size:15px; margin:0; padding:10px 14px;
-  border-bottom:1px solid var(--line); }
-section > h2 span { color:var(--muted); font-weight:400; font-size:13px; }
-table { width:100%; border-collapse:collapse; }
-td { padding:8px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
-tr:last-child td { border-bottom:0; }
-.t { color:var(--muted); white-space:nowrap; width:1%; font-variant-numeric:tabular-nums; }
-.s { width:1%; font-weight:700; }
-.s.ok { color:var(--ok); } .s.err { color:var(--err); } .s.skip { color:var(--skip); }
-.who { color:var(--muted); font-size:13px; }
-.tag { display:inline-block; font-size:11px; border:1px solid var(--line);
-  border-radius:6px; padding:0 5px; color:var(--muted); margin-inline-start:6px; }
-a { color:inherit; }
-.alert { border-color:var(--err); }
-.alert > h2 { color:var(--err); }
-.empty { padding:28px 14px; text-align:center; color:var(--muted); }
-.login { max-width:320px; margin:14vh auto; background:var(--card);
-  border:1px solid var(--line); border-radius:12px; padding:24px; }
-.login input { width:100%; margin:10px 0; }
-.login button { width:100%; background:var(--text); color:var(--bg); border:0; }
-.bad { color:var(--err); font-size:13px; }
+.log-card { overflow: hidden; margin-bottom: 14px; }
+.log-card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; user-select: none; transition: background var(--d1); }
+.log-card > summary::-webkit-details-marker { display: none; }
+.log-card > summary:hover { background: var(--surface-hover); }
+.log-card[open] > summary { border-bottom: 1px solid var(--border); }
+.log-card .chev { margin-inline-start: auto; color: var(--fg-subtle); transition: transform var(--d2) var(--ease); }
+.log-card:not([open]) .chev { transform: rotate(90deg); }
+.subj-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--surface-active); color: var(--fg-2); }
+.log-card.is-alert { border-color: var(--danger-border); }
+.log-card.is-alert .subj-icon { background: var(--danger-soft); color: var(--danger-ink); }
+.log-card.is-alert > summary .card-title { color: var(--danger-ink); }
+.log-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start;
+  padding: 12px 18px; border-bottom: 1px solid var(--border-soft); transition: background var(--d1); }
+.log-row:last-child { border-bottom: 0; }
+.log-row:hover { background: var(--surface-2); }
+.log-dot { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; margin-top: 1px; }
+.log-dot svg { width: 13px; height: 13px; stroke-width: 2.6; }
+.log-dot.ok { background: var(--success-soft); color: var(--success-ink); }
+.log-dot.err { background: var(--danger-soft); color: var(--danger-ink); }
+.log-dot.skip { background: var(--warn-soft); color: var(--warn-ink); }
+.log-title { font-weight: 600; color: var(--fg); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.log-meta { margin-top: 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--fg-muted); font-size: 13px; }
+.log-detail { color: var(--fg-muted); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+.log-row.err .log-detail { color: var(--danger-ink); }
+.log-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.log-time { color: var(--fg-subtle); font-size: 12.5px; white-space: nowrap; margin-top: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px;
+  background: var(--surface-active); color: var(--fg-2); font-size: 12px; font-weight: 500; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+.filters .with-icon { flex: 1 1 260px; }
+.filters .select { width: auto; min-width: 150px; }
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; position: relative; overflow: hidden; }
+.login-wrap::before, .login-wrap::after { content: ""; position: absolute; width: 520px; height: 520px; border-radius: 50%;
+  filter: blur(90px); opacity: .22; pointer-events: none; }
+.login-wrap::before { background: #00c2e0; top: -180px; right: -140px; }
+.login-wrap::after { background: #2f7de1; bottom: -200px; left: -160px; }
+.login { position: relative; width: 100%; max-width: 380px; padding: 32px 28px 28px; }
+.login .brand-mark { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 18px; }
+.login .brand-mark svg { width: 22px; height: 22px; }
+.login h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.login p { margin: 6px 0 22px; color: var(--fg-muted); font-size: 14px; }
+.login .pw { position: relative; }
+.login .pw .input { height: 44px; padding-inline-end: 44px; font-size: 15px; }
+.login .pw button { position: absolute; inset-inline-end: 4px; top: 4px; }
+.login .alert { margin-bottom: 14px; }
+.login .btn-primary { margin-top: 14px; }
+.login-foot { margin-top: 18px; text-align: center; font-size: 12.5px; color: var(--fg-subtle); display: flex;
+  align-items: center; justify-content: center; gap: 6px; }
+@media (max-width: 720px) { .log-row { grid-template-columns: auto 1fr; } .log-time { grid-column: 2; margin-top: 0; }
+  .filters .select { flex: 1 1 40%; min-width: 0; } .filters .btn[type=submit] { display: none; } }
 """
 
 
 def _page(title: str, body: str) -> bytes:
-    return f"""<!doctype html>
-<html lang="he" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<title>{_esc(title)}</title><style>{CSS}</style></head>
-<body>{body}</body></html>""".encode("utf-8")
+    """A bare page in the product's look (login, not found)."""
+    return ui.document(title, body, kind="app", css=CSS).encode("utf-8")
 
 
 def _login_page(error: str = "", base: str = "") -> bytes:
     """``base`` is the path prefix the page lives under — "" locally, "/dev" behind
     API Gateway — so every link and form action lands on the same deployment."""
-    note = f'<p class="bad">{_esc(error)}</p>' if error else ""
-    return _page(
-        "כניסה - לוח בקרה",
-        f"""<form class="login" method="post" action="{base}/login">
-        <h1>לוח בקרה</h1>
-        <div class="sub">האוטומציות של דרור ברק</div>
-        {note}
-        <input type="password" name="password" placeholder="סיסמה" autofocus
-               autocomplete="current-password">
-        <button type="submit">כניסה</button></form>""",
-    )
+    note = (f'<div class="alert alert-danger shake" role="alert">{ui.icon("alert")}<span>{_esc(error)}</span></div>'
+            if error else "")
+    body = f"""<div class="login-wrap"><form class="card login reveal" method="post" action="{base}/login" data-busy>
+      {ui.BRAND_MARK}<h1>כניסה ללוח הבקרה</h1><p>האוטומציות של דרור ברק</p>{note}
+      <label class="field"><span class="label">סיסמה</span><span class="pw">
+        <input class="input" type="password" name="password" id="pw" autofocus autocomplete="current-password" required>
+        <button type="button" class="btn btn-ghost btn-sm btn-icon" id="reveal" data-tip="הצג סיסמה">{ui.icon("eye", 16)}</button>
+      </span></label>
+      <button type="submit" class="btn btn-primary btn-lg btn-block"><span>כניסה</span>{ui.icon("arrow-left", 17)}</button>
+      <div class="login-foot">{ui.icon("lock", 13)}<span>חיבור מאובטח · נשאר מחובר 12 שעות</span></div>
+    </form></div>"""
+    script = r"""
+document.getElementById('reveal').addEventListener('click', function () {
+  var pw = document.getElementById('pw'), show = pw.type === 'password';
+  pw.type = show ? 'text' : 'password';
+  this.innerHTML = UI.icon(show ? 'eye-off' : 'eye'); this.setAttribute('data-tip', show ? 'הסתר סיסמה' : 'הצג סיסמה');
+  pw.focus();
+});"""
+    return ui.document("כניסה · לוח בקרה", body, kind="app", css=CSS, script=script, base=base).encode("utf-8")
 
 
-def _row(entry: dict[str, Any]) -> str:
-    mark, cls = _STATUS_STYLE.get(str(entry.get("status")), ("•", ""))
-    when = subjects.parse_ts(entry) or ""
-    bits = [f'<td class="t">{_esc(when)}</td>', f'<td class="s {cls}">{mark}</td>']
-
-    main = f"<b>{_esc(entry.get('action'))}</b>"
+def _row(entry: dict[str, Any], i: int = 0) -> str:
+    ico, cls, status_label = _STATUS.get(str(entry.get("status")), ("info", "skip", ""))
+    title = f"<span>{_esc(subjects.label_for(entry))}</span>"
     if entry.get("dry_run"):
-        main += '<span class="tag">הרצת ניסיון</span>'
+        title += '<span class="badge badge-outline">הרצת ניסיון</span>'
+    meta = []
+    who = entry.get("client_id") or ""
+    if who:
+        meta.append(f'<span class="chip" data-client="{_esc(who)}">{ui.icon("users", 12)}'
+                    f'<span>{_esc(who)}</span></span>')
     detail = entry.get("detail")
     # A detail that is just a URL is rendered as the link below, not as text.
-    if detail and not str(detail).startswith("http"):
-        main += f'<div class="who">{_esc(detail)}</div>'
-    for label, url in subjects.links_for(entry):
-        main += f'<div><a href="{_esc(url)}" target="_blank" rel="noopener noreferrer">{_esc(label)} ↗</a></div>'
-    bits.append(f"<td>{main}</td>")
+    detail_html = (f'<div class="log-detail"><bdi>{_esc(detail)}</bdi></div>'
+                   if detail and not str(detail).startswith("http") else "")
+    links = "".join(
+        f'<a class="btn btn-sm" href="{_esc(url)}" target="_blank" rel="noopener noreferrer">'
+        f'<span>{_esc(label)}</span>{ui.icon("external", 13)}</a>'
+        for label, url in subjects.links_for(entry))
+    links_html = f'<div class="log-links">{links}</div>' if links else ""
+    return (f'<div class="log-row {cls}" title="{_esc(entry.get("action"))}">'
+            f'<span class="log-dot {cls}" aria-label="{status_label}">{ui.icon(ico, 14)}</span>'
+            f'<div><div class="log-title">{title}</div><div class="log-meta">{"".join(meta)}</div>'
+            f'{detail_html}{links_html}</div>'
+            f'<span class="log-time">{ui.when(entry.get("ts"), str(subjects.parse_ts(entry) or ""))}</span></div>')
 
-    who = entry.get("client_id") or ""
-    bits.append(f'<td class="who">{_esc(who)}</td>')
-    return "<tr>" + "".join(bits) + "</tr>"
+
+def _query(q: dict[str, str], **change: str) -> str:
+    merged = {**q, **change}
+    return "&".join(f"{k}={quote(str(v))}" for k, v in merged.items() if v)
 
 
 def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str = "") -> bytes:
     counts = subjects.counts(entries)
-    cards = "".join(
-        f'<div class="card"><b>{counts[key]}</b><span>{label}</span></div>'
-        for key, label in (
-            ("total", "פעולות"),
-            ("ok", "הצליחו"),
-            ("error", "שגיאות"),
-            ("skipped", "דילוגים"),
-        )
-    )
+    days = q.get("days", "7")
+    ranges = "".join(
+        f'<a class="{"is-active" if days == str(d) else ""}" href="{base}/dashboard?{_query(q, days=str(d))}">{label}</a>'
+        for d, label in ((1, "היום"), (7, "7 ימים"), (30, "30 יום"), (365, "הכל")))
+    head = ui.page_head("פעילות", "כל מה שהאוטומציות עשו. לצפייה בלבד: שום דבר לא מופעל מכאן.",
+                        f'<div class="segmented" role="tablist" aria-label="טווח זמן">{ranges}</div>')
+    stats = (ui.stat("פעולות", counts["total"], ico="activity", tone="brand", i=0)
+             + ui.stat("הצליחו", counts["ok"], ico="check-circle", tone="ok", i=1)
+             + ui.stat("שגיאות", counts["error"], ico="x-circle", tone="err", i=2, hot=counts["error"] > 0)
+             + ui.stat("דילוגים", counts["skipped"], ico="minus-circle", tone="warn", i=3))
 
     subject_opts = '<option value="">כל הנושאים</option>' + "".join(
-        f'<option value="{s.key}"{" selected" if q.get("subject") == s.key else ""}>'
-        f"{s.icon} {_esc(s.label)}</option>"
-        for s in subjects.SUBJECTS.values()
-    )
+        f'<option value="{s.key}"{" selected" if q.get("subject") == s.key else ""}>{_esc(s.label)}</option>'
+        for s in subjects.SUBJECTS.values())
     # Every known client, not just those in the current filter — otherwise picking
     # one client would remove every other option and strand you there.
     all_entries = _SAMPLE if DRY_RUN else run_log.read_all()
     client_opts = '<option value="">כל הלקוחות</option>' + "".join(
-        f'<option value="{_esc(c)}"{" selected" if q.get("client") == c else ""}>{_esc(c)}</option>'
-        for c in subjects.client_ids(all_entries)
-    )
-    days_opts = "".join(
-        f'<option value="{d}"{" selected" if q.get("days", "7") == str(d) else ""}>'
-        f"{label}</option>"
-        for d, label in ((1, "היום"), (7, "7 ימים"), (30, "30 יום"), (365, "הכל"))
-    )
-
-    filters = f"""<form class="filters" method="get" action="{base}/dashboard">
-      <select name="subject">{subject_opts}</select>
-      <select name="client">{client_opts}</select>
-      <select name="days">{days_opts}</select>
-      <input type="search" name="q" placeholder="חיפוש חופשי" value="{_esc(q.get('q',''))}">
-      <button type="submit">סנן</button>
+        f'<option value="{_esc(c)}" data-client="{_esc(c)}"{" selected" if q.get("client") == c else ""}>{_esc(c)}</option>'
+        for c in subjects.client_ids(all_entries))
+    filters = f"""<form class="filters reveal" method="get" action="{base}/dashboard" style="--i:4">
+      <input type="hidden" name="days" value="{_esc(days)}">
+      <label class="with-icon">{ui.icon("search", 16)}<input class="input" type="search" name="q" data-search
+        placeholder="חיפוש בפעילות" value="{_esc(q.get('q', ''))}" aria-label="חיפוש"><span class="kbd">/</span></label>
+      <select class="select" name="subject" data-autosubmit aria-label="נושא">{subject_opts}</select>
+      <select class="select" name="client" data-autosubmit aria-label="לקוח">{client_opts}</select>
+      <button type="submit" class="btn">סינון</button>
     </form>"""
 
-    body_sections = ""
+    sections = ""
     # Failures first — being in the dark about breakages is the problem this solves.
     failed = subjects.failures(entries)
     if failed:
         rows = "".join(_row(e) for e in failed[:20])
-        body_sections += (
-            f'<section class="alert"><h2>⚠️ דורש טיפול <span>({len(failed)})</span></h2>'
-            f"<table>{rows}</table></section>"
-        )
-
-    for subject, group in subjects.group_by_subject(entries):
-        rows = "".join(
-            _row(e) for e in sorted(group, key=lambda e: str(e.get("ts")), reverse=True)
-        )
-        body_sections += (
-            f"<section><h2>{subject.icon} {_esc(subject.label)} "
-            f"<span>({len(group)})</span></h2><table>{rows}</table></section>"
-        )
-
+        sections += (f'<details class="card log-card is-alert reveal" open style="--i:5"><summary>'
+                     f'<span class="subj-icon">{ui.icon("alert", 16)}</span><h2 class="card-title">דורש טיפול</h2>'
+                     f'<span class="badge badge-err num">{len(failed)}</span>'
+                     f'{ui.icon("chevron-down", 16, cls="chev")}</summary>{rows}</details>')
+    for n, (subject, group) in enumerate(subjects.group_by_subject(entries)):
+        rows = "".join(_row(e) for e in sorted(group, key=lambda e: str(e.get("ts")), reverse=True))
+        sections += (f'<details class="card log-card reveal" open style="--i:{6 + n}"><summary>'
+                     f'<span class="subj-icon">{ui.icon(_SUBJECT_ICONS.get(subject.key, "info"), 16)}</span>'
+                     f'<h2 class="card-title">{_esc(subject.label)}</h2>'
+                     f'<span class="badge num">{len(group)}</span>'
+                     f'{ui.icon("chevron-down", 16, cls="chev")}</summary>{rows}</details>')
     if not entries:
-        body_sections = '<section><div class="empty">אין פעילות בטווח הזה.</div></section>'
+        sections = ('<div class="card">' + ui.empty(
+            "אין פעילות בטווח הזה.", "כשאוטומציה תרוץ, היא תופיע כאן. אפשר להרחיב את טווח הזמן או לנקות את הסינון.",
+            ico="activity", action=f'<a class="btn btn-sm" href="{base}/dashboard?days=365">{ui.icon("rotate", 14)}<span>הצג הכל</span></a>')
+            + "</div>")
 
-    return _page(
-        "לוח בקרה - דרור ברק",
-        f"""<style>{questionnaire_admin.ADMIN_CSS}</style>
-        <div class="wrap">{questionnaire_admin.nav(base, "dashboard")}<h1>לוח בקרה</h1>
-        <div class="sub">כל מה שהאוטומציות עשו. הדף לצפייה בלבד - לא מפעיל כלום.</div>
-        <div class="cards">{cards}</div>{filters}{body_sections}</div>""",
-    )
+    script = r"""
+// Client ids are ClickUp task ids; show names once ClickUp answers (cached for the tab).
+(function () {
+  function apply(map) {
+    document.querySelectorAll('[data-client]').forEach(function (n) {
+      var name = map[n.getAttribute('data-client')]; if (!name) return;
+      var t = n.tagName === 'OPTION' ? n : n.querySelector('span'); if (t) t.textContent = name;
+    });
+  }
+  var cached = null; try { cached = JSON.parse(sessionStorage.getItem('clients') || 'null'); } catch (e) {}
+  if (cached && Date.now() - cached.at < 600000) { apply(cached.map); return; }
+  if (!document.querySelector('[data-client]')) return;
+  UI.api('/clients').then(function (d) {
+    var map = {}; (d.clients || []).forEach(function (c) { map[c.id] = c.name; });
+    try { sessionStorage.setItem('clients', JSON.stringify({at: Date.now(), map: map})); } catch (e) {}
+    apply(map);
+  });
+})();"""
+    body = head + f'<div class="stats">{stats}</div>' + filters + sections
+    return ui.app_page(base, "dashboard", "לוח בקרה · דרור ברק", body, script=script, css=CSS).encode("utf-8")
+
+
+def _not_found(base: str = "") -> bytes:
+    return _page("לא נמצא", '<main class="page">' + ui.empty(
+        "הדף לא נמצא", "ייתכן שהקישור ישן.", ico="search",
+        action=f'<a class="btn btn-primary" href="{base}/dashboard">חזרה ללוח הבקרה</a>') + "</main>")
 
 
 # ------------------------------------------------------------------------ filters
@@ -360,7 +398,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, b"ok", "text/plain")
         if route.path == "/admin" or route.path.startswith("/admin/"):
             return self._admin("GET", route)
-        self._send(404, _page("404", '<div class="wrap">לא נמצא</div>'))
+        self._send(404, _not_found())
 
     def _admin(self, method: str, route: Any) -> None:
         if not self._authed():
@@ -382,7 +420,7 @@ class Handler(BaseHTTPRequestHandler):
         if route.path.startswith("/admin/"):
             return self._admin("POST", route)
         if route.path != "/login":
-            return self._send(404, _page("404", '<div class="wrap">לא נמצא</div>'))
+            return self._send(404, _not_found())
 
         ip = self.client_address[0]
         if _locked_out(ip):

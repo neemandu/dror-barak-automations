@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from . import ui
 from .lib import branded_doc, deliverables, questionnaire, questionnaire_store, signing
 from .lib.clients.crm import CrmClient
 from .lib.logging_setup import get_logger
@@ -45,87 +46,110 @@ def _logo_data_uri() -> str:
 
 
 PAGE_CSS = """
-:root { --ink:#14171a; --muted:#5b6472; --line:#dde3ea; --ground:#f2f5f8; --card:#fff;
-  --brand:#1f6fd6; --brand-ink:#1557ad; --brand-soft:#e7f0fc; --err:#b42318; --err-soft:#fdecea;
-  --ok:#0a7c42; --radius:14px; }
-* { box-sizing:border-box; }
-html { -webkit-text-size-adjust:100%; }
-body { margin:0; background:var(--ground); color:var(--ink);
-  font-family:"Heebo",system-ui,"Segoe UI",Arial,sans-serif; font-size:16px; line-height:1.6; }
-.band { background:linear-gradient(100deg,#00e5d0 0%,#00a8f0 45%,#2f7de1 100%);
-  padding:28px 20px 76px; text-align:center; }
-.band img { width:210px; max-width:62%; height:auto; }
-.band .name { color:#fff; font-weight:700; font-size:22px; letter-spacing:.3px; }
-.wrap { max-width:720px; margin:-56px auto 48px; padding-inline:16px; }
-.card { background:var(--card); border-radius:var(--radius);
-  box-shadow:0 1px 2px rgba(16,24,40,.06),0 12px 32px -18px rgba(16,24,40,.28); padding:32px 34px; }
-h1 { font-size:26px; line-height:1.25; margin:0 0 8px; text-wrap:balance; }
-.intro { color:var(--muted); margin:0 0 4px; }
-.for { color:var(--muted); font-size:14px; margin:0; }
-.notice { background:var(--brand-soft); color:var(--brand-ink); border-radius:10px; padding:10px 14px;
-  margin:18px 0 0; font-size:14.5px; }
-.errbox { background:var(--err-soft); color:var(--err); border-radius:10px; padding:12px 14px;
-  margin:18px 0 0; font-size:14.5px; }
-.progress { margin:26px 0 6px; display:none; }
-.progress .meta { display:flex; justify-content:space-between; font-size:13.5px; color:var(--muted);
-  margin-bottom:8px; font-variant-numeric:tabular-nums; }
-.progress .bar { height:6px; background:var(--line); border-radius:99px; overflow:hidden; }
-.progress .bar i { display:block; height:100%; width:0; background:var(--brand); border-radius:99px;
-  transition:width .3s ease; }
-fieldset.step { border:0; margin:28px 0 0; padding:0; min-width:0; }
-fieldset.step legend { font-size:19px; font-weight:700; padding:0; margin-bottom:2px; }
-.step .desc { color:var(--muted); margin:0 0 6px; font-size:15px; }
-.q { margin-top:22px; }
-.q > label, .q > .label { display:block; font-weight:600; margin-bottom:6px; }
-.q .req { color:var(--err); margin-inline-start:2px; }
-.q .hint { display:block; font-weight:400; color:var(--muted); font-size:13.5px; margin-top:1px; }
-input[type=text], input[type=email], input[type=tel], input[type=number], textarea {
-  width:100%; font:inherit; color:inherit; padding:12px 14px; border:1.5px solid var(--line);
-  border-radius:10px; background:#fff; transition:border-color .15s, box-shadow .15s; }
-textarea { min-height:104px; resize:vertical; }
-input:focus, textarea:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
-input.ltr { direction:ltr; text-align:left; }
-.pills { display:flex; flex-wrap:wrap; gap:8px; }
-.pill { position:relative; display:inline-flex; align-items:center; gap:8px; padding:9px 14px;
-  border:1.5px solid var(--line); border-radius:99px; cursor:pointer; background:#fff; font-weight:500;
-  user-select:none; }
-.pill input { accent-color:var(--brand); margin:0; }
-.pill:has(input:checked) { border-color:var(--brand); background:var(--brand-soft); color:var(--brand-ink); }
-.pill:has(input:focus-visible) { box-shadow:0 0 0 3px var(--brand-soft); }
-.scale { display:flex; flex-wrap:wrap; gap:6px; }
-.scale .pill { width:46px; justify-content:center; padding:9px 0; font-variant-numeric:tabular-nums; }
-.scale .pill input { position:absolute; opacity:0; }
-.q.has-err input[type=text], .q.has-err input[type=email], .q.has-err input[type=tel],
-.q.has-err input[type=number], .q.has-err textarea { border-color:var(--err); }
-.q .err { display:none; color:var(--err); font-size:13.5px; margin-top:6px; }
-.q.has-err .err { display:block; }
-.nav { display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:32px;
-  padding-top:20px; border-top:1px solid var(--line); flex-wrap:wrap; }
-.btn { font:inherit; font-weight:600; border-radius:10px; padding:12px 26px; cursor:pointer;
-  border:1.5px solid transparent; }
-.btn.primary { background:var(--brand); color:#fff; }
-.btn.primary:hover { background:var(--brand-ink); }
-.btn.ghost { background:#fff; border-color:var(--line); color:var(--ink); }
-.btn:disabled { opacity:.6; cursor:default; }
-.btn:focus-visible { outline:3px solid var(--brand-soft); outline-offset:2px; }
-.saved { color:var(--muted); font-size:13px; }
-.foot { text-align:center; color:var(--muted); font-size:12.5px; margin-top:18px; }
-.done { text-align:center; padding:18px 0 8px; }
-.done .tick { width:64px; height:64px; margin:0 auto 14px; border-radius:50%; background:#e6f4ec;
-  color:var(--ok); display:grid; place-items:center; font-size:32px; }
-.preview { background:#fff6e0; color:#7a5200; border-radius:10px; padding:10px 14px; margin:0 0 18px;
-  font-size:14.5px; font-weight:500; }
-/* With JavaScript: one section at a time. */
-.js .progress { display:block; }
-.js fieldset.step { display:none; }
-.js fieldset.step.on { display:block; }
-.nojs-only { }
-.js .nojs-only { display:none; }
-.js-only { display:none; }
-.js .js-only { display:inline-block; }
-@media (max-width:560px) { .card { padding:24px 18px; } h1 { font-size:22px; }
-  .band { padding-bottom:70px; } .btn { padding:12px 18px; } }
-@media (prefers-reduced-motion:reduce) { .progress .bar i { transition:none; } }
+html.public body { background: var(--bg); }
+.hero { position: relative; overflow: hidden; padding: 34px 20px 104px; text-align: center; background: var(--brand-grad); }
+.hero::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(640px 260px at 88% -20%, rgba(255, 255, 255, .38), transparent 62%),
+              radial-gradient(520px 240px at 8% 130%, rgba(255, 255, 255, .22), transparent 60%); }
+.hero img { position: relative; width: 196px; max-width: 58%; height: auto; }
+.hero .name { position: relative; color: #fff; font-weight: 800; font-size: 22px; letter-spacing: .5px; }
+.shell { position: relative; max-width: 760px; margin: -76px auto 40px; padding: 0 16px; }
+.sheet { position: relative; background: var(--surface); border-radius: 22px; padding: 42px 46px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 28px 64px -28px rgba(16, 24, 40, .32); }
+.eyebrow { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 14px; padding: 5px 11px; border-radius: 99px;
+  background: var(--brand-soft); color: var(--brand-ink); font-size: 13px; font-weight: 600; }
+.sheet h1 { margin: 0 0 10px; font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+.lead { margin: 0; color: var(--fg-muted); font-size: 16.5px; }
+.for { margin: 14px 0 0; display: inline-flex; align-items: center; gap: 7px; color: var(--fg-muted); font-size: 14px; }
+.notice { margin-top: 20px; }
+.progress { margin: 32px 0 0; display: none; }
+.segs { display: flex; gap: 6px; }
+.segs i { position: relative; flex: 1; height: 6px; border-radius: 99px; overflow: hidden; background: var(--surface-active); }
+.segs i::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--brand-grad);
+  transform: scaleX(0); transform-origin: right; transition: transform .5s var(--ease); }
+.segs i.on::after { transform: none; }
+.progress .meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 13.5px; color: var(--fg-muted); }
+.progress .meta b { color: var(--fg); font-weight: 600; }
+fieldset.step { border: 0; margin: 30px 0 0; padding: 0; min-width: 0; }
+fieldset.step legend { padding: 0; margin-bottom: 4px; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+.step .desc { margin: 0 0 4px; color: var(--fg-muted); font-size: 15px; }
+.q { margin-top: 26px; }
+.q > label, .q > .qlabel { display: block; margin-bottom: 9px; font-size: 16px; font-weight: 600; color: var(--fg); }
+.q .req { color: var(--danger); margin-inline-start: 3px; }
+.q .qhint { display: block; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--fg-muted); }
+.control { width: 100%; height: 52px; padding: 0 16px; border: 1.5px solid var(--border); border-radius: 13px; background: var(--surface);
+  color: var(--fg); font: inherit; font-size: 16px; transition: border-color var(--d1), box-shadow var(--d2) var(--ease), background var(--d1); }
+textarea.control { height: auto; min-height: 124px; padding: 14px 16px; line-height: 1.6; resize: vertical; }
+.control:hover { border-color: var(--border-strong); }
+.control:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px var(--ring-soft); }
+.control::placeholder { color: var(--fg-subtle); }
+.control.ltr { direction: ltr; text-align: left; }
+.choices { display: flex; flex-wrap: wrap; gap: 10px; }
+.choice { position: relative; display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 16px 0 14px;
+  border: 1.5px solid var(--border); border-radius: 13px; background: var(--surface); cursor: pointer; font-weight: 500; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color var(--d1), background var(--d1), color var(--d1), transform var(--d1) var(--ease), box-shadow var(--d2); }
+.choice:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.choice:active { transform: scale(.97); }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice .tick { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-strong); display: grid;
+  place-items: center; transition: background var(--d2) var(--ease), border-color var(--d2); }
+.choice.multi .tick { border-radius: 6px; }
+.choice .tick svg { width: 12px; height: 12px; stroke-width: 3.2; color: #fff; transform: scale(0); transition: transform var(--d3) var(--spring); }
+.choice:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-ink); }
+.choice:has(input:checked) .tick { background: var(--brand); border-color: var(--brand); }
+.choice:has(input:checked) .tick svg { transform: scale(1); }
+.choice:has(input:focus-visible) { box-shadow: 0 0 0 4px var(--ring-soft); }
+.scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(42px, 1fr)); gap: 6px; }
+.scale .choice { justify-content: center; padding: 0; min-height: 50px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.scale .choice .tick { display: none; }
+.scale-ends { display: flex; justify-content: space-between; margin-top: 7px; font-size: 12.5px; color: var(--fg-subtle); }
+.q.has-err .control, .q.has-err .choice { border-color: var(--danger); }
+.q .err { display: flex; align-items: center; gap: 6px; max-height: 0; opacity: 0; overflow: hidden; margin-top: 0;
+  color: var(--danger-ink); font-size: 14px; font-weight: 500; transition: max-height var(--d3) var(--ease), opacity var(--d2), margin var(--d2); }
+.q.has-err .err { max-height: 48px; opacity: 1; margin-top: 8px; }
+.formnav { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 10px; margin: 40px -46px -42px;
+  padding: 18px 46px 22px; border-top: 1px solid var(--border); border-radius: 0 0 22px 22px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.formnav .spacer { flex: 1; }
+.saved { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg-muted); opacity: 0; transition: opacity var(--d3); }
+.saved.on { opacity: 1; }
+.saved .icon { color: var(--success); }
+.foot { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 22px 0 0; color: var(--fg-subtle); font-size: 13px; }
+.req-note { margin: 18px 0 0; font-size: 13.5px; color: var(--fg-muted); }
+.preview-bar { position: sticky; top: 0; z-index: 60; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 16px; background: #101828; color: #fff; font-size: 14px; font-weight: 500; }
+.step.enter-next { animation: step-next .42s var(--ease) both; }
+.step.enter-prev { animation: step-prev .42s var(--ease) both; }
+@keyframes step-next { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@keyframes step-prev { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+.done { text-align: center; padding: 14px 0 6px; }
+.done h1 { margin-top: 18px; }
+.done .lead { max-width: 440px; margin: 0 auto; }
+.check-anim { width: 84px; height: 84px; margin: 0 auto; }
+.check-anim circle { fill: var(--success-soft); stroke: var(--success); stroke-width: 3; stroke-dasharray: 252; stroke-dashoffset: 252;
+  animation: draw .7s var(--ease) forwards; }
+.check-anim path { fill: none; stroke: var(--success); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 60; stroke-dashoffset: 60; animation: draw .4s .55s var(--ease) forwards; }
+.fail-icon { width: 64px; height: 64px; margin: 0 auto 6px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--danger-soft); color: var(--danger-ink); box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger-soft) 55%, transparent); }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
+html.js .progress { display: block; }
+html.js fieldset.step { display: none; }
+html.js fieldset.step.on { display: block; }
+html.js .nojs-only { display: none; }
+.js-only { display: none; }
+html.js .js-only { display: inline-flex; }
+@media (max-width: 600px) {
+  .hero { padding: 26px 16px 92px; }
+  .shell { padding: 0 12px; margin-top: -72px; }
+  .sheet { padding: 28px 20px; border-radius: 20px; }
+  .sheet h1 { font-size: 24px; }
+  .formnav { margin: 32px -20px -28px; padding: 14px 20px 16px; border-radius: 0 0 20px 20px; }
+  .formnav .btn-lg { --h: 48px; padding: 0 18px; }
+  .saved span { display: none; }
+}
 """
 
 PAGE_JS = r"""
@@ -134,20 +158,24 @@ PAGE_JS = r"""
   var form = document.getElementById('qform'); if (!form) return;
   var steps = Array.prototype.slice.call(form.querySelectorAll('fieldset.step'));
   var prev = document.getElementById('prev'), next = document.getElementById('next'),
-      send = document.getElementById('send'), fill = document.getElementById('fill'),
+      send = document.getElementById('send'), segs = document.getElementById('segs'),
       label = document.getElementById('steplabel'), count = document.getElementById('stepcount'),
       saved = document.getElementById('saved');
   var preview = form.hasAttribute('data-preview');
   var key = 'qdraft:' + form.getAttribute('data-draft');
   var i = 0;
+  steps.forEach(function () { segs.appendChild(document.createElement('i')); });
 
-  function show(n) {
+  function show(n, dir) {
     i = Math.max(0, Math.min(steps.length - 1, n));
-    steps.forEach(function (s, k) { s.classList.toggle('on', k === i); });
+    steps.forEach(function (s, k) {
+      s.classList.toggle('on', k === i); s.classList.remove('enter-next', 'enter-prev');
+      if (k === i && dir) { void s.offsetWidth; s.classList.add(dir > 0 ? 'enter-next' : 'enter-prev'); }
+    });
+    Array.prototype.forEach.call(segs.children, function (seg, k) { seg.classList.toggle('on', k <= i); });
     prev.style.visibility = i === 0 ? 'hidden' : 'visible';
     next.style.display = i === steps.length - 1 ? 'none' : '';
     send.style.display = i === steps.length - 1 ? '' : 'none';
-    fill.style.width = (100 * (i + 1) / steps.length) + '%';
     count.textContent = 'שלב ' + (i + 1) + ' מתוך ' + steps.length;
     label.textContent = steps[i].getAttribute('data-title');
   }
@@ -168,17 +196,22 @@ PAGE_JS = r"""
       if (!err && email && email.value.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()))
         err = 'כתובת אימייל לא תקינה';
       q.classList.toggle('has-err', !!err);
-      if (err) { q.querySelector('.err').textContent = err; bad = bad || q; }
+      if (err) { q.querySelector('.err span').textContent = err; bad = bad || q; }
     });
-    if (bad) { var f = bad.querySelector('input,textarea'); if (f) f.focus(); }
+    if (bad) {
+      bad.classList.remove('shake'); void bad.offsetWidth; bad.classList.add('shake');
+      var f = bad.querySelector('input,textarea'); if (f) f.focus({preventScroll: true});
+      bad.scrollIntoView({block: 'center', behavior: 'smooth'});
+    }
     return !bad;
   }
+  var hideSaved;
   function save() {
     if (preview) return;
     var data = {};
     new FormData(form).forEach(function (v, k) { (data[k] = data[k] || []).push(v); });
-    try { localStorage.setItem(key, JSON.stringify(data)); saved.textContent = 'הטיוטה נשמרה במכשיר הזה'; }
-    catch (e) {}
+    try { localStorage.setItem(key, JSON.stringify(data)); saved.classList.add('on');
+      clearTimeout(hideSaved); hideSaved = setTimeout(function () { saved.classList.remove('on'); }, 2200); } catch (e) {}
   }
   function restore() {
     if (preview || form.hasAttribute('data-prefilled')) return;
@@ -190,21 +223,23 @@ PAGE_JS = r"""
         else el.value = data[k][0] || '';
       });
     });
-    saved.textContent = 'המשכת מהטיוטה ששמרת';
+    if (window.UI) UI.toast('המשכת מהטיוטה ששמרת במכשיר הזה', {icon: 'rotate'});
   }
+  function top() { document.querySelector('.sheet').scrollIntoView({behavior: 'smooth', block: 'start'}); }
   var timer;
   form.addEventListener('input', function (e) {
     var q = e.target.closest('.q'); if (q) q.classList.remove('has-err');
-    clearTimeout(timer); timer = setTimeout(save, 400);
+    clearTimeout(timer); timer = setTimeout(save, 450);
   });
-  next.addEventListener('click', function () {
-    if (check(steps[i])) { show(i + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  form.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT' && i < steps.length - 1) { e.preventDefault(); next.click(); }
   });
-  prev.addEventListener('click', function () { show(i - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  next.addEventListener('click', function () { if (check(steps[i])) { show(i + 1, 1); top(); } });
+  prev.addEventListener('click', function () { show(i - 1, -1); top(); });
   form.addEventListener('submit', function (e) {
-    for (var k = 0; k < steps.length; k++) { if (!check(steps[k])) { show(k); e.preventDefault(); return; } }
-    if (preview) { e.preventDefault(); document.getElementById('previewnote').scrollIntoView(); return; }
-    send.disabled = true; send.textContent = 'שולח…';
+    for (var k = 0; k < steps.length; k++) { if (!check(steps[k])) { if (k !== i) show(k, k > i ? 1 : -1); e.preventDefault(); return; } }
+    if (preview) { e.preventDefault(); if (window.UI) UI.toast('בתצוגה מקדימה התשובות לא נשלחות'); return; }
+    send.classList.add('is-loading'); send.disabled = true;
     try { localStorage.removeItem(key); } catch (err) {}
   });
   restore();
@@ -213,35 +248,52 @@ PAGE_JS = r"""
 })();
 """
 
+CONFETTI_JS = r"""
+(function () {
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var c = document.createElement('canvas'); c.id = 'confetti'; document.body.appendChild(c);
+  var ctx = c.getContext('2d'), W = c.width = innerWidth, H = c.height = innerHeight, parts = [];
+  var colors = ['#00e5d0', '#00a8f0', '#2f7de1', '#12b76a', '#fdb022'];
+  for (var k = 0; k < 110; k++) parts.push({x: W / 2, y: H * .32, vx: (Math.random() - .5) * 14, vy: -Math.random() * 13 - 4,
+    r: 3 + Math.random() * 4, c: colors[k % colors.length], a: Math.random() * 6, s: (Math.random() - .5) * .3});
+  var t0 = performance.now();
+  (function frame(t) {
+    var el = t - t0; ctx.clearRect(0, 0, W, H);
+    parts.forEach(function (p) { p.vy += .38; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.s;
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - el / 2400); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); ctx.restore(); });
+    if (el < 2400) requestAnimationFrame(frame); else c.remove();
+  })(t0);
+})();
+"""
 
-def _page(title: str, body: str, *, script: bool = False) -> str:
+
+def _page(title: str, body: str, *, script: str = "", preview: bool = False) -> str:
     logo = _logo_data_uri()
-    brand = (f'<img src="{logo}" alt="DROR BARAK">' if logo
-             else '<div class="name">DROR BARAK</div>')
-    js = f"<script>{PAGE_JS}</script>" if script else ""
-    return f"""<!doctype html>
-<html lang="he" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<title>{_esc(title)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap">
-<style>{PAGE_CSS}</style></head>
-<body><div class="band">{brand}</div><div class="wrap"><div class="card">{body}</div>
-<div class="foot">דרור ברק · ייעוץ שיווקי ואסטרטגי</div></div>{js}</body></html>"""
+    brand = (f'<img src="{logo}" alt="DROR BARAK">' if logo else '<div class="name">DROR BARAK</div>')
+    bar = (f'<div class="preview-bar">{ui.icon("eye", 16)}<span>תצוגה מקדימה: כך הלקוח יראה את השאלון. '
+           'התשובות לא נשמרות.</span></div>' if preview else "")
+    return ui.document(
+        title,
+        f'{bar}<header class="hero">{brand}</header><main class="shell"><div class="sheet reveal">{body}</div>'
+        f'<p class="foot">{ui.icon("lock", 13)}<span>דרור ברק · ליווי עסקים והגדלת מכירות</span></p></main>',
+        kind="public", css=PAGE_CSS, script=script)
 
 
 def error_page(message: str) -> str:
     from .sign_page import client_message  # one Hebrew wording for both pages
 
-    return _page("שגיאה", f'<div class="errbox">{_esc(client_message(message))}</div>'
-                 '<p class="for" style="margin-top:14px">אם הקישור אינו פועל, אנא פנה/י לדרור ברק.</p>')
+    return _page("הקישור לא נפתח", f'<div class="done"><div class="fail-icon">{ui.icon("alert", 28)}</div>'
+                 f'<h1>הקישור לא נפתח</h1><p class="lead">{_esc(client_message(message))}</p>'
+                 '<p class="req-note">אפשר לפנות לדרור ברק ונשלח קישור חדש.</p></div>')
 
 
 def done_page(defn: Optional[dict[str, Any]] = None) -> str:
     thanks = (defn or {}).get("thanks") or "קיבלנו את התשובות."
-    return _page("תודה", f'<div class="done"><div class="tick">✓</div><h1>תודה!</h1>'
-                         f'<p class="intro">{_esc(thanks)}</p></div>')
+    check = ('<svg class="check-anim" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="40"/>'
+             '<path d="M26 43l11 11 21-23"/></svg>')
+    return _page("תודה", f'<div class="done">{check}<h1>תודה!</h1><p class="lead">{_esc(thanks)}</p>'
+                         '<p class="req-note">אפשר לסגור את הדף.</p></div>', script=CONFETTI_JS)
 
 
 # ----------------------------------------------------------------- the form
@@ -249,11 +301,11 @@ def done_page(defn: Optional[dict[str, Any]] = None) -> str:
 
 def _question_html(q: dict[str, Any], value: Any, error: str) -> str:
     key, kind = q["key"], q["kind"]
-    req = ' <span class="req" aria-hidden="true">*</span>' if q.get("required") else ""
-    hint = f'<span class="hint">{_esc(q["hint"])}</span>' if q.get("hint") else ""
-    attrs = f' data-required="1"' if q.get("required") else ""
+    req = '<span class="req" aria-hidden="true">*</span>' if q.get("required") else ""
+    hint = f'<span class="qhint">{_esc(q["hint"])}</span>' if q.get("hint") else ""
+    attrs = ' data-required="1"' if q.get("required") else ""
     cls = "q has-err" if error else "q"
-    err = f'<div class="err" role="alert">{_esc(error)}</div>'
+    err = f'<div class="err" role="alert">{ui.icon("alert", 15)}<span>{_esc(error)}</span></div>'
     fid = f"f_{key}"
 
     if kind in ("choice", "multi", "scale"):
@@ -261,26 +313,29 @@ def _question_html(q: dict[str, Any], value: Any, error: str) -> str:
         chosen = set(value) if isinstance(value, list) else {str(value or "")}
         options = ([str(n) for n in range(1, int(q.get("scale_max") or 10) + 1)]
                    if kind == "scale" else q.get("options") or [])
+        tick = ui.icon("check", 12)
         pills = "".join(
-            f'<label class="pill"><input type="{itype}" name="{_esc(key)}" value="{_esc(o)}"'
-            f'{" checked" if o in chosen else ""}>{_esc(o)}</label>' for o in options)
-        wrap = "scale" if kind == "scale" else "pills"
+            f'<label class="choice{" multi" if kind == "multi" else ""}"><input type="{itype}" name="{_esc(key)}" '
+            f'value="{_esc(o)}"{" checked" if o in chosen else ""}><span class="tick">{tick}</span>'
+            f'<span>{_esc(o)}</span></label>' for o in options)
+        wrap = "scale" if kind == "scale" else "choices"
+        ends = ('<div class="scale-ends"><span>נמוך</span><span>גבוה</span></div>' if kind == "scale" else "")
         return (f'<div class="{cls}"{attrs} role="group" aria-labelledby="l_{_esc(key)}">'
-                f'<span class="label" id="l_{_esc(key)}">{_esc(q["label"])}{req}{hint}</span>'
-                f'<div class="{wrap}">{pills}</div>{err}</div>')
+                f'<span class="qlabel" id="l_{_esc(key)}">{_esc(q["label"])}{req}{hint}</span>'
+                f'<div class="{wrap}">{pills}</div>{ends}{err}</div>')
 
     label = f'<label for="{_esc(fid)}">{_esc(q["label"])}{req}{hint}</label>'
     text = _esc(questionnaire.display(value))
     required = " required" if q.get("required") else ""
     if kind == "textarea":
-        field = f'<textarea id="{_esc(fid)}" name="{_esc(key)}"{required}>{text}</textarea>'
+        field = f'<textarea class="control" id="{_esc(fid)}" name="{_esc(key)}"{required}>{text}</textarea>'
     else:
         input_type, extra = {
-            "email": ("email", ' class="ltr" autocomplete="email"'),
-            "tel": ("tel", ' class="ltr" autocomplete="tel"'),
-            "url": ("text", ' class="ltr" inputmode="url" placeholder="https://"'),
-            "number": ("text", ' inputmode="decimal"'),
-        }.get(kind, ("text", ""))
+            "email": ("email", ' class="control ltr" autocomplete="email" placeholder="name@example.com"'),
+            "tel": ("tel", ' class="control ltr" autocomplete="tel" placeholder="050-0000000"'),
+            "url": ("text", ' class="control ltr" inputmode="url" placeholder="https://"'),
+            "number": ("text", ' class="control" inputmode="decimal"'),
+        }.get(kind, ("text", ' class="control"'))
         field = f'<input type="{input_type}" id="{_esc(fid)}" name="{_esc(key)}" value="{text}"{extra}{required}>'
     return f'<div class="{cls}"{attrs}>{label}{field}{err}</div>'
 
@@ -290,22 +345,20 @@ def render_form(defn: dict[str, Any], *, client_name: str = "", action: str = ""
                 notice: str = "", preview: bool = False, draft_key: str = "") -> str:
     answers, errors = answers or {}, errors or {}
     sections = defn.get("sections") or []
-    parts = []
-    if preview:
-        parts.append('<div class="preview" id="previewnote">תצוגה מקדימה - כך הלקוח יראה את השאלון. '
-                     'התשובות לא נשמרות.</div>')
-    parts.append(f'<h1>{_esc(defn.get("title"))}</h1>')
+    n_questions = sum(len(s.get("questions") or []) for s in sections)
+    parts = [f'<span class="eyebrow">{ui.icon("clipboard", 14)}<span>{len(sections)} שלבים · {n_questions} שאלות</span></span>',
+             f'<h1>{_esc(defn.get("title"))}</h1>']
     if defn.get("intro"):
-        parts.append(f'<p class="intro">{_esc(defn["intro"])}</p>')
+        parts.append(f'<p class="lead">{_esc(defn["intro"])}</p>')
     if client_name:
-        parts.append(f'<p class="for">עבור {_esc(client_name)}</p>')
+        parts.append(f'<p class="for">{ui.icon("users", 15)}<span>עבור {_esc(client_name)}</span></p>')
     if notice:
-        parts.append(f'<div class="notice">{_esc(notice)}</div>')
+        parts.append(f'<div class="alert alert-info notice">{ui.icon("info")}<span>{_esc(notice)}</span></div>')
     if errors:
-        parts.append(f'<div class="errbox" role="alert">יש {len(errors)} '
-                     f'{"שדה שדורש" if len(errors) == 1 else "שדות שדורשים"} תיקון - מסומנים באדום.</div>')
-    parts.append('<div class="progress" aria-hidden="true"><div class="meta"><span id="steplabel"></span>'
-                 '<span id="stepcount"></span></div><div class="bar"><i id="fill"></i></div></div>')
+        parts.append(f'<div class="alert alert-danger notice" role="alert">{ui.icon("alert")}<span>יש {len(errors)} '
+                     f'{"שדה שדורש" if len(errors) == 1 else "שדות שדורשים"} תיקון. הם מסומנים באדום.</span></div>')
+    parts.append('<div class="progress" aria-hidden="true"><div class="segs" id="segs"></div>'
+                 '<div class="meta"><b id="steplabel"></b><span id="stepcount" class="num"></span></div></div>')
     flags = (" data-preview" if preview else "") + (" data-prefilled" if answers else "")
     parts.append(f'<form id="qform" method="post" action="{_esc(action)}" novalidate'
                  f' data-draft="{_esc(draft_key or defn.get("id"))}"{flags}>')
@@ -315,13 +368,15 @@ def render_form(defn: dict[str, Any], *, client_name: str = "", action: str = ""
                      for q in s.get("questions") or [])
         parts.append(f'<fieldset class="step" data-title="{_esc(s.get("title"))}">'
                      f'<legend>{_esc(s.get("title"))}</legend>{desc}{qs}</fieldset>')
-    parts.append('<div class="nav"><button type="button" class="btn ghost js-only" id="prev">הקודם</button>'
-                 '<span class="saved" id="saved"></span>'
-                 '<span><button type="button" class="btn primary js-only" id="next">הבא</button>'
-                 f'<button type="submit" class="btn primary" id="send">{"שליחה" if not preview else "שליחה (תצוגה)"}</button>'
-                 '</span></div></form>')
-    parts.append('<p class="for" style="margin-top:14px">שדות המסומנים ב-<span class="req">*</span> הם חובה.</p>')
-    return _page(str(defn.get("title") or "שאלון"), "".join(parts), script=True)
+    parts.append('<p class="req-note">שדות המסומנים ב-<span class="req" style="color:var(--danger)">*</span> הם חובה.</p>')
+    parts.append(
+        '<div class="formnav">'
+        f'<button type="button" class="btn btn-lg js-only" id="prev">{ui.icon("arrow-right", 17)}<span>הקודם</span></button>'
+        f'<span class="saved" id="saved">{ui.icon("check-circle", 14)}<span>נשמר במכשיר</span></span><span class="spacer"></span>'
+        f'<button type="button" class="btn btn-primary btn-lg js-only" id="next"><span>הבא</span>{ui.icon("arrow-left", 17)}</button>'
+        f'<button type="submit" class="btn btn-primary btn-lg" id="send"><span>{"שליחה" if not preview else "שליחה (תצוגה)"}</span>'
+        f'{ui.icon("send", 16)}</button></div></form>')
+    return _page(str(defn.get("title") or "שאלון"), "".join(parts), script=PAGE_JS, preview=preview)
 
 
 def preview_page(defn: dict[str, Any]) -> str:

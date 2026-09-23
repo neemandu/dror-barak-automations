@@ -178,4 +178,4 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
             out["headers"]["Content-Disposition"] = resp.disposition
         return out
 
-    return _html(404, dashboard._page("404", '<div class="wrap">לא נמצא</div>'))
+    return _html(404, dashboard._not_found(base))

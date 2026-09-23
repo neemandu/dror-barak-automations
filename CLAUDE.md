@@ -168,6 +168,16 @@ Follow [`..\_shared\CONVENTIONS.md`](..\_shared\CONVENTIONS.md). Language:
 **Python**. Retry + backoff on all outbound calls, JSON structured logging, secrets
 from `.env` only, run instructions per automation in `README.md`.
 
+**Every page is built from `src\ui.py`.** The design system: tokens (light/dark for
+Dror's screens, always light for clients'), components (buttons with loading and
+success states, fields, switch, badges, tables, cards, modal, toasts with undo, menus,
+tooltips, empty states), Lucide icons, and the micro-interactions (count-up, relative
+times, the gliding tab, step transitions), all respecting `prefers-reduced-motion`.
+`ui.app_page` is Dror's shell, `ui.document(kind="public")` a client's. Use them rather
+than page-local styles, and check a change in a browser (light, dark, 390 px) before
+calling it done. Activity is shown with `subjects.label_for` (Hebrew), never the raw
+action name; `tests\test_house_style.py` fails on a logged action without a label.
+
 **Document every automation for Dror.** [`docs\OPERATIONS.md`](docs\OPERATIONS.md)
 is the Hebrew operator's guide — what each automation does, how Dror uses it, and
 the hands-on procedures (e.g. the Meta partner + system-user setup for a new

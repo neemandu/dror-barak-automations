@@ -88,3 +88,20 @@ def test_every_claude_call_carries_the_house_style():
     ai.complete("x", system="אתה אנליסט")
     ai.complete("y")
     assert all(text_style.AI_STYLE in c["system"] for c in ai.calls)
+
+
+def test_every_logged_action_has_a_hebrew_label():
+    """The dashboard and the daily email show Dror what happened in his words;
+    a new ``log_action("...")`` without a label would show him a code name."""
+    import ast
+
+    from src.lib import subjects
+
+    missing = set()
+    for p in (ROOT / "src").rglob("*.py"):
+        for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+            if (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "log_action"
+                    and node.args and isinstance(node.args[0], ast.Constant)):
+                if node.args[0].value not in subjects.ACTION_LABELS:
+                    missing.add(f"{p.relative_to(ROOT)}: {node.args[0].value}")
+    assert not missing, sorted(missing)
