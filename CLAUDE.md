@@ -86,6 +86,15 @@ the social analysis (real web research) and a campaign report take minutes. Butt
 and the questionnaire submit hand them to `src\lib\tasks.py::dispatch`, which re-invokes
 the webhook Lambda asynchronously; a failed task is logged and commented on the task.
 
+**Text in Dror's name reads like a person wrote it.** No long dashes (— or –) in any
+string the code emits, in the templates, or in what Claude writes: `src\lib\text_style.py`
+adds the rule to every prompt and cleans the output, and `tests\test_house_style.py` fails on
+a dash in a runtime string. No "תמלא/י" slashes, no emoji in a client's subject line. Emails
+are wrapped by `email_templates.layout` (brand band, Dror's signature); documents are branded
+`.docx` files from `src\lib\branded_doc.py` that Drive converts into Google Docs (band header on
+every page, footer with the page number). Drive's HTML import has no header or footer, and the
+Docs API is not enabled in the Google project.
+
 **`send_quote` is CLI/button-only, never automatic** — sending a client a
 contract is Dror's decision, not something a status change should trigger.
 
