@@ -51,3 +51,18 @@ def test_prune_drops_docs_and_tests_but_never_the_code(tmp_path):
     left = sorted(str(f.relative_to(fn)) for f in fn.rglob("*") if f.is_file())
     assert left == [".env.example", "PIL/Image.py", "src/app.py", "templates/t.html"]
     assert tool.prune_build(tmp_path) == 0, "idempotent"
+
+
+def test_a_change_set_that_removes_a_resource_is_named():
+    from src.tools.deploy_stack import removals
+
+    changes = [{"ResourceChange": {"Action": "Modify", "LogicalResourceId": "WebhookFunction"}},
+               {"ResourceChange": {"Action": "Remove", "LogicalResourceId": "QuestionnaireTable"}}]
+    assert removals(changes) == ["QuestionnaireTable"]
+
+
+def test_a_checkout_contains_its_own_history_but_not_an_unknown_commit():
+    from src.tools.deploy_stack import contains, head_commit
+
+    assert contains(head_commit())
+    assert not contains("0" * 40)

@@ -34,6 +34,13 @@ Parameters:
   ClickUpListId:
     Type: String
     Description: The לקוחות list.
+  GitCommit:
+    Type: String
+    Default: unknown
+    Description: >
+      The commit this stack was deployed from, set by deploy_stack. The next deploy
+      refuses to run from a checkout that does not contain it, so an old checkout
+      cannot quietly replace newer code (2026-09-23).
   ClickUpTasksWebhookSecret:
     Type: String
     NoEcho: true
@@ -663,6 +670,9 @@ Resources:
         PointInTimeRecoveryEnabled: false
 
 Outputs:
+  DeployedCommit:
+    Description: The commit this stack runs (see the GitCommit parameter).
+    Value: !Ref GitCommit
   WebhookUrl:
     Description: Register this in ClickUp (python -m src.tools.register_clickup_webhook)
     Value: !Sub "https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/clickup"

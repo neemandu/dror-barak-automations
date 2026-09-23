@@ -139,7 +139,13 @@ logging, and a `--dry-run` mode.
 - **Deploying.** Build from a clean checkout (`CodeUri: ../` packages the whole
   working folder), then `python -m src.tools.deploy_stack --stack <name>
   --env-file <.env>`: every parameter comes from the env file, the rest keep
-  their stack values, no secret touches a command line. A single value:
+  their stack values, no secret touches a command line. **More than one person
+  deploys this stack: `git pull` first.** The stack records the commit it runs
+  (`DeployedCommit` output) and `deploy_stack` refuses a checkout that lacks it, and
+  refuses a change set that removes a resource without `--allow-removals`; the data
+  tables are `Retain`. (2026-09-23: a deploy from an old checkout replaced the day's
+  code and deleted the questionnaire table; it was restored from the automatic
+  backup.) A single value:
   `python -m src.tools.push_stack_params <ParameterName>`. A second stack,
   `dror-automations-test` (`Stage=test`, `WEBHOOK_DRY_RUN=1`, fake tokens in
   `.env.test`), exercises the real wiring against mocks.

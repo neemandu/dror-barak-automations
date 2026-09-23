@@ -18,6 +18,15 @@ Usage:
     python -m src.tools.deploy_stack --stack dror-automations-dev  --env-file .env
     python -m src.tools.deploy_stack --stack dror-automations-test --env-file .env.test
     add --plan to stop after printing the change set, --yes to execute without asking.
+
+Two guards, since more than one person deploys this stack (2026-09-23: a deploy
+from an old checkout replaced the day's code and deleted the questionnaire table):
+
+* The stack records the commit it was deployed from (``GitCommit`` parameter,
+  ``DeployedCommit`` output). A deploy from a checkout that does not contain that
+  commit is refused: pull and merge first. ``--over-newer`` overrides.
+* A change set that **removes** a resource is not executed without
+  ``--allow-removals``: removing is how data and routes disappear.
 """
 
 from __future__ import annotations
@@ -80,6 +89,23 @@ def plan_parameters(params: dict[str, dict[str, Any]], env: dict[str, str], *,
             raise SystemExit(f"{name} has no value: add {key or name} to the env file "
                              f"(it has no default and the stack does not exist yet)")
     return out, lines
+
+
+def head_commit() -> str:
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def contains(commit: str, head: str = "HEAD") -> bool:
+    """Whether ``head`` already has ``commit`` (False when it is not even known here)."""
+    return subprocess.run(["git", "merge-base", "--is-ancestor", commit, head], cwd=ROOT,
+                          capture_output=True).returncode == 0
+
+
+def removals(changes: list[dict[str, Any]]) -> list[str]:
+    """Resources a change set would delete from the stack."""
+    return [c["ResourceChange"]["LogicalResourceId"] for c in changes
+            if c.get("ResourceChange", {}).get("Action") == "Remove"]
 
 
 def _session(env: dict[str, str]) -> Any:
@@ -152,11 +178,12 @@ def package(build_dir: Path, region: str, env: dict[str, str]) -> Path:
 
 
 def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
-        yes: bool = False) -> bool:
+        yes: bool = False, over_newer: bool = False, allow_removals: bool = False) -> bool:
     env = read_env_file(env_file)
     session = _session(env)
     region = session.region_name
     cf = session.client("cloudformation")
+    head = head_commit()
     try:
         current = cf.describe_stacks(StackName=stack)["Stacks"][0]
         existing: Optional[set[str]] = {p["ParameterKey"] for p in current["Parameters"]}
@@ -164,7 +191,16 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
     except cf.exceptions.ClientError as exc:
         if "does not exist" not in str(exc):
             raise
-        existing, change_type = None, "CREATE"
+        current, existing, change_type = {}, None, "CREATE"
+
+    live = next((o["OutputValue"] for o in current.get("Outputs", [])
+                 if o["OutputKey"] == "DeployedCommit"), "")
+    if live and live != "unknown" and not contains(live):
+        message = (f"{stack} runs commit {live[:10]}, which this checkout ({head[:10]}) does not "
+                   f"contain: someone deployed newer code. git pull (and merge) first.")
+        if not over_newer:
+            raise SystemExit(message + " (--over-newer to deploy anyway)")
+        print("WARNING:", message)
 
     freed = prune_build(build_dir)
     if freed:
@@ -180,6 +216,11 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
     packaged = package(build_dir, region, env)
     params = template_parameters(packaged)
     parameters, lines = plan_parameters(params, env, existing=existing)
+    if "GitCommit" in params:
+        parameters = [p for p in parameters if p["ParameterKey"] != "GitCommit"]
+        parameters.append({"ParameterKey": "GitCommit", "ParameterValue": head})
+        lines = [ln for ln in lines if not ln.strip().startswith("GitCommit ")]
+        lines.append(f"  {'GitCommit':<26} = {head[:10]} (this checkout)")
     print(f"{change_type} {stack} from {env_file} ({len(parameters)} parameters):")
     print("\n".join(lines))
 
@@ -206,9 +247,17 @@ def run(stack: str, env_file: Path, *, build_dir: Path, plan_only: bool = False,
         r = c["ResourceChange"]
         attrs = sorted({f"{x['Target'].get('Name')}" for x in r.get("Details", []) if x["Target"].get("Name")})
         print(f"  {r['Action']:<7} {r['LogicalResourceId']:<42} {r['ResourceType']:<30} {attrs}")
+    removed = removals(d["Changes"])
+    if removed:
+        print(f"\nThis change set REMOVES {', '.join(removed)} from the stack. If you did not "
+              f"mean to delete them, your checkout is probably behind: git pull first.")
     if plan_only:
         print("\n--plan: change set left for review:", cs["Id"])
         return True
+    if removed and not allow_removals:
+        cf.delete_change_set(StackName=stack, ChangeSetName=cs["Id"])
+        print("not executed (--allow-removals to remove them); change set deleted")
+        return False
     if not yes:
         answer = input("\nExecute? [y/N] ").strip().lower()
         if answer != "y":
@@ -234,8 +283,13 @@ def main() -> None:
     parser.add_argument("--build-dir", default=Path(".aws-sam/build"), type=Path)
     parser.add_argument("--plan", action="store_true", help="Create the change set and stop.")
     parser.add_argument("--yes", action="store_true", help="Execute without asking.")
+    parser.add_argument("--over-newer", action="store_true",
+                        help="Deploy even though the stack runs a commit this checkout lacks.")
+    parser.add_argument("--allow-removals", action="store_true",
+                        help="Execute a change set that removes resources.")
     args = parser.parse_args()
-    ok = run(args.stack, args.env_file, build_dir=args.build_dir, plan_only=args.plan, yes=args.yes)
+    ok = run(args.stack, args.env_file, build_dir=args.build_dir, plan_only=args.plan, yes=args.yes,
+             over_newer=args.over_newer, allow_removals=args.allow_removals)
     sys.exit(0 if ok else 1)
 
 
