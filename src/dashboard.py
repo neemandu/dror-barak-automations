@@ -30,6 +30,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
+from . import questionnaire_admin
 from .lib import config, run_log, subjects
 
 SESSION_COOKIE = "dror_dash"
@@ -249,7 +250,6 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
       <select name="days">{days_opts}</select>
       <input type="search" name="q" placeholder="חיפוש חופשי" value="{_esc(q.get('q',''))}">
       <button type="submit">סנן</button>
-      <a href="{base}/logout" style="margin-inline-start:auto"><button type="button">יציאה</button></a>
     </form>"""
 
     body_sections = ""
@@ -276,7 +276,8 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
 
     return _page(
         "לוח בקרה — דרור ברק",
-        f"""<div class="wrap"><h1>לוח בקרה</h1>
+        f"""<style>{questionnaire_admin.ADMIN_CSS}</style>
+        <div class="wrap">{questionnaire_admin.nav(base, "dashboard")}<h1>לוח בקרה</h1>
         <div class="sub">כל מה שהאוטומציות עשו. הדף לצפייה בלבד — לא מפעיל כלום.</div>
         <div class="cards">{cards}</div>{filters}{body_sections}</div>""",
     )
@@ -357,10 +358,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._redirect("/login", clear=True)
         if route.path == "/healthz":
             return self._send(200, b"ok", "text/plain")
+        if route.path == "/admin" or route.path.startswith("/admin/"):
+            return self._admin("GET", route)
         self._send(404, _page("404", '<div class="wrap">לא נמצא</div>'))
 
+    def _admin(self, method: str, route: Any) -> None:
+        if not self._authed():
+            if route.path.startswith("/admin/api/"):
+                return self._send(401, b'{"errors":["login"]}', "application/json")
+            return self._redirect("/login")
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(length) if length else b""
+        query = {k: v[0] for k, v in parse_qs(route.query).items() if v}
+        headers = {k.lower(): v for k, v in self.headers.items()}
+        resp = questionnaire_admin.handle(method, route.path, query, body, headers, dry_run=DRY_RUN)
+        if resp.status in (301, 302, 303):
+            return self._redirect(resp.location)
+        extra = {"Content-Disposition": resp.disposition} if resp.disposition else {}
+        self._send(resp.status, resp.body.encode("utf-8"), resp.content_type, extra)
+
     def do_POST(self) -> None:  # noqa: N802
-        if urlparse(self.path).path != "/login":
+        route = urlparse(self.path)
+        if route.path.startswith("/admin/"):
+            return self._admin("POST", route)
+        if route.path != "/login":
             return self._send(404, _page("404", '<div class="wrap">לא נמצא</div>'))
 
         ip = self.client_address[0]
@@ -414,13 +435,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def _send(self, status: int, data: bytes, ctype: str = "text/html; charset=utf-8") -> None:
+    def _send(self, status: int, data: bytes, ctype: str = "text/html; charset=utf-8",
+              extra: Optional[dict[str, str]] = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", ctype)
+        for name, value in (extra or {}).items():
+            self.send_header(name, value)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 

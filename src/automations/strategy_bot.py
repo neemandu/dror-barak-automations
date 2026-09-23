@@ -1,14 +1,16 @@
 """T8 — Strategy bot.
 
-Trigger: manual — the ``בנה אסטרטגיה`` button on the ClickUp task, or the CLI —
-once a client's questionnaire is in.
-Action: from the questionnaire answers, analyze target audience + competitors +
-digital presence (reusing the social-profile analysis from T3), produce a full
-strategy, inject it into Dror's strategy template, save it to the client's Drive
-folder, and email Dror to review before it reaches the client.
+Trigger: the ``בנה אסטרטגיה`` button on the ClickUp task (run in the
+background), or the CLI — once the client has answered the questionnaire.
+Action: from the client's questionnaire answers plus a live look at their
+digital presence (the social analysis from T3, with real web access), Claude
+writes a full marketing strategy. It lands as an editable Google Doc in the
+client's ``אסטרטגיה`` folder, linked on the task, and Dror gets an email to
+review it before it reaches the client.
 
-Per the proposal, only the *strategy authoring* part is built here; the social
-profile analysis is reused from :mod:`src.automations.social_prep`.
+Refuses without answers. The strategy used to read ``questionnaire_answers`` from
+the CRM record — which is always empty, since answers live in the questionnaire
+store — so every strategy was written from the client's name alone.
 
 Manual/dry-run:
     python -m src.automations.strategy_bot --client-id 42 --dry-run
@@ -18,66 +20,66 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..lib import client_folder, config, emails
+from ..lib import config, deliverables, emails, questionnaire, questionnaire_store
 from ..lib.clients.anthropic_ai import AnthropicClient
 from ..lib.clients.crm import CrmClient
-from ..lib.clients.google import GoogleClient
 from .base import Automation, build_arg_parser, run_cli
 from .social_prep import analyze_profiles
 
 NAME = "strategy_bot"
 
 _SYSTEM = (
-    "You are Dror Barak's strategy assistant. Using the client's questionnaire "
-    "answers and social analysis, produce a full marketing strategy in Hebrew for "
-    "a college looking to enrol more students via webinars and funnels. Cover: "
-    "target audience, competitor landscape, positioning, channel plan, and a "
-    "90-day action plan."
+    "אתה אסטרטג שיווק בכיר בחברת הייעוץ של דרור ברק, שמלווה מכללות, אקדמיות ויוצרי "
+    "קורסים בהגדלת הרשמות: וובינרים, משפכי שיווק, תוכן, וקמפיינים ממומנים במטא. "
+    "אתה כותב מסמך אסטרטגיה בעברית, מעשי ומותאם ללקוח הספציפי — לא תבנית כללית.\n\n"
+    "מבנה המסמך (כותרות Markdown ברמה 2):\n"
+    "1. תקציר מנהלים\n2. קהל היעד והפרסונות\n3. שוק, מתחרים ובידול\n"
+    "4. מסר ומיצוב\n5. תוכנית ערוצים ומשפך (כולל וובינר, תוכן וקמפיינים ממומנים)\n"
+    "6. תוכנית פעולה ל-90 יום (לפי שבועות או חודשים)\n7. מדדי הצלחה ויעדים\n"
+    "8. הנחות ושאלות פתוחות ללקוח\n\n"
+    "בסס כל טענה על תשובות השאלון ועל ניתוח הנוכחות הדיגיטלית שקיבלת. כשאתה מניח הנחה "
+    "שלא נאמרה — סמן אותה בסעיף 8 ולא כעובדה. אל תמציא מספרים על הלקוח."
 )
 
 
 def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     auto = Automation(NAME, dry_run=dry_run)
     crm = CrmClient(dry_run=dry_run)
-    google = GoogleClient(dry_run=dry_run)
     ai = AnthropicClient(dry_run=dry_run)
+    client = {**crm.get_client(client_id), "id": client_id}
+    name = str(client.get("name") or client_id)
 
-    client = crm.get_client(client_id)
-    answers = client.get("questionnaire_answers", {})
-    profiles = client.get("social_profiles", {})
+    response = questionnaire_store.latest_answered(client_id)
+    if not response:
+        auto.log_action("no_questionnaire", "error", client_id=client_id,
+                        detail="אין תשובות לשאלון — אין על מה לבנות אסטרטגיה")
+        raise RuntimeError("הלקוח עוד לא מילא את השאלון — אין על מה לבנות אסטרטגיה. "
+                           "אפשר לשלוח לו את השאלון שוב.")
 
-    # Reuse T3's social analysis as strategy input.
-    social = analyze_profiles(profiles, ai, focus="strategy")
-
+    snap, answers = response.get("snapshot") or [], response.get("answers") or {}
+    profiles = questionnaire.social_profiles(snap, answers)
+    social = analyze_profiles(profiles, ai, focus="strategy") if profiles else {}
+    social_text = "\n\n".join(f"### {questionnaire.ROLES.get(r, r)} ({profiles[r]})\n{t}"
+                              for r, t in social.items()) or "הלקוח לא מסר קישורים לנוכחות דיגיטלית."
     prompt = (
-        f"Questionnaire answers:\n{answers}\n\n"
-        f"Social analysis:\n{social}\n\n"
-        "Write the full strategy document now."
+        f"לקוח: {name}\n"
+        + (f"סוג השירות שנמכר ללקוח: {client['service_type']}\n" if client.get("service_type") else "")
+        + f"\n# תשובות הלקוח לשאלון ({response.get('questionnaire_title', '')})\n"
+        f"{questionnaire.as_text(snap, answers)}\n\n"
+        f"# ניתוח הנוכחות הדיגיטלית\n{social_text}\n\n"
+        "כתוב עכשיו את מסמך האסטרטגיה המלא."
     )
-    strategy = ai.complete(prompt, system=_SYSTEM, max_tokens=4000)
+    strategy = ai.complete(prompt, system=_SYSTEM, max_tokens=16000, thinking=True)
 
-    document = "\n".join(
-        [f"# אסטרטגיה שיווקית — {client.get('name','')}", "", strategy]
-    )
-    # The client's own folder, created if needed — not a key get_client never
-    # returns (the old drive_folder_id), which silently sent every strategy to the
-    # shared default parent.
-    folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=dry_run)
-    saved = google.upload_file(
-        name=f"strategy_{client_id}.md",
-        content=document.encode("utf-8"),
-        parent_id=folder["id"],
-        mime_type="text/markdown",
-    )
+    title = f"אסטרטגיה שיווקית — {name}"
+    document = f"# {title}\n\n{strategy}"
+    saved = deliverables.save_markdown_doc(crm, client, title, document, dry_run=dry_run)
 
-    _notify_dror(auto, client_id, client.get("name", ""),
-                 saved.get("webViewLink") or folder["url"], dry_run=dry_run)
-    crm.append_automation_log(client_id, "Strategy drafted (awaiting Dror's review)")
+    _notify_dror(auto, client_id, name, saved["url"], dry_run=dry_run)
+    crm.append_automation_log(client_id, f"🤖 טיוטת האסטרטגיה מוכנה לבדיקה\n{saved['url']}")
     auto.log_action(
-        "strategy_ready",
-        client_id=client_id,
-        detail=f"{len(social)} profiles used",
-        url=saved.get("webViewLink") or folder["url"],
+        "strategy_ready", client_id=client_id, url=saved["url"],
+        detail=f"לפי שאלון מ-{str(response.get('answered_at', ''))[:10]}, {len(social)} ערוצים נותחו",
     )
     return {"strategy": document, "saved": saved}
 

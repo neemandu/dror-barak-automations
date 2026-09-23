@@ -24,7 +24,7 @@ import time
 from typing import Any, Optional
 from urllib.parse import parse_qs
 
-from . import dashboard
+from . import dashboard, questionnaire_admin
 from .lib import config
 from .lib.logging_setup import get_logger
 
@@ -155,5 +155,27 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
 
     if route == "/healthz":
         return {"statusCode": 200, "headers": {"Content-Type": "text/plain"}, "body": "ok"}
+
+    if route == "/admin" or route.startswith("/admin/"):
+        if not valid_session(_cookie_value(event)):
+            if route.startswith("/admin/api/"):
+                return {"statusCode": 401, "headers": {"Content-Type": "application/json"},
+                        "body": '{"errors":["login"]}'}
+            return _redirect(f"{base}/login")
+        raw = event.get("body") or ""
+        body = base64.b64decode(raw) if event.get("isBase64Encoded") else str(raw).encode("utf-8")
+        headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
+        resp = questionnaire_admin.handle(method, route, q, body, headers, base=base,
+                                          dry_run=config.get_bool("WEBHOOK_DRY_RUN"))
+        if resp.status in (301, 302, 303):
+            return _redirect(resp.location)
+        out = {"statusCode": resp.status,
+               "headers": {"Content-Type": resp.content_type, "Cache-Control": "no-store",
+                           "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+                           "Referrer-Policy": "no-referrer"},
+               "body": resp.body}
+        if resp.disposition:
+            out["headers"]["Content-Disposition"] = resp.disposition
+        return out
 
     return _html(404, dashboard._page("404", '<div class="wrap">לא נמצא</div>'))

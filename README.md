@@ -55,6 +55,11 @@ top. Nothing can be triggered from it. On AWS it is `DashboardFunction` behind i
 own API (`DashboardUrl` output), password = the `DashboardPassword` parameter, with
 the session in a signed cookie so instances share nothing. Locally:
 
+The same app serves the **questionnaire admin** at `/admin/questionnaires`: an editor
+(sections, questions, types, required, choices, which link the AI analyses), a preview of
+the client's form, who was sent what and who answered, per-client answers, a link for any
+client, and CSV export. It edits content only — it sends nothing.
+
 ```bash
 python -m src.dashboard --dry-run     # sample data, no .env needed → http://localhost:8080
 python -m src.dashboard               # live; requires DASHBOARD_PASSWORD in .env
@@ -136,7 +141,7 @@ instructions. Language: Python.
 ## Testing
 
 ```bash
-python -m pytest        # 370 tests: infra, template, dashboard/auth, deploy tooling, and a dry-run test per automation
+python -m pytest        # 405 tests: infra, template, dashboard/auth, deploy tooling, and a dry-run test per automation
 ```
 
 Dry-run is not proof on its own. If you change something with a real runtime

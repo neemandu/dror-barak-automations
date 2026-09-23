@@ -31,7 +31,12 @@ def isolated_run_log(tmp_path, monkeypatch):
     # RUN_LOG_TABLE wins over RUN_LOG_PATH, so a developer's .env pointing at the
     # real table would send every test's log line to DynamoDB — slow, billable,
     # and it pollutes the dashboard Dror is looking at.
-    _blank(monkeypatch, "RUN_LOG_TABLE", "IDEMPOTENCY_TABLE")
+    _blank(monkeypatch, "RUN_LOG_TABLE", "IDEMPOTENCY_TABLE", "QUESTIONNAIRE_TABLE")
+    # Questionnaires and answers go to a file per test, never the real table.
+    monkeypatch.setenv("QUESTIONNAIRE_PATH", str(tmp_path / "questionnaires.json"))
+    # Background tasks run inline off Lambda; a stray function name would make
+    # them try to invoke AWS.
+    _blank(monkeypatch, "AWS_LAMBDA_FUNCTION_NAME")
     # Keep tests hermetic: no recipient side-channels unless a test sets them.
     _blank(monkeypatch, "DROR_WHATSAPP", "DRIVE_DEFAULT_PARENT_ID", "DRIVE_TEMPLATE_IDS")
 

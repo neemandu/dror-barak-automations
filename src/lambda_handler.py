@@ -270,8 +270,19 @@ def handle(raw_body: str, signature: str, dry_run: bool = False) -> dict[str, An
 
 
 def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
-    """API Gateway HTTP API (payload v2) entrypoint."""
+    """API Gateway HTTP API (payload v2) entrypoint — and background tasks.
+
+    A direct async invoke carries ``{"task": ...}`` (see :mod:`src.lib.tasks`);
+    API Gateway events never have that key, and only this function's own role
+    may invoke it directly.
+    """
     config.load_dotenv()
+    if isinstance(event, dict) and "task" in event:
+        from .lib import tasks
+
+        result = tasks.run(str(event["task"]), dict(event.get("args") or {}),
+                           dry_run=bool(event.get("dry_run")))
+        return {"ok": True, "task": event["task"], "result": result if isinstance(result, dict) else None}
 
     raw = event.get("body") or ""
     if event.get("isBase64Encoded"):

@@ -5,7 +5,7 @@ complete + dry-run verified**; live runs additionally need the credentials in
 `docs/CREDENTIALS.md`. Last audited against production (run-log, Lambda metrics,
 ClickUp) on 2026-09-15.
 
-`python -m pytest` → 370 passing.
+`python -m pytest` → 405 passing.
 
 ## Now — production is missing configuration, not code
 
@@ -72,7 +72,39 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 - [ ] **Add auth to `webhook_server.py`**, the local stdlib receiver, or retire it
   now that the Lambda is the real entrypoint.
 
+## Decisions for Dror about the funnel after the questionnaire
+
+- [ ] **When should the social-media prep happen?** It was built as meeting prep (before
+  the first meeting), but the questionnaire now comes after signing, so the report arrives
+  after the deal is closed. Options: a short pre-meeting questionnaire (the editor supports
+  several questionnaires), or accept it as input to the strategy only.
+- [ ] **Smoove leads into ClickUp?** Webinar leads get a WhatsApp Flow but never become
+  ClickUp tasks, so they are outside the funnel. Every lead as a task, or only some lists?
+- [ ] **What happens after the strategy?** Delivery to the client and kickoff are manual
+  today; worth defining the step (a delivery email, a kickoff meeting, a status).
+
 ## Done
+
+- [x] **Questionnaire editor + branded form (23.9).** Questions are data in
+  `QuestionnaireTable`, edited at `/admin/questionnaires` (sections, 9 question types,
+  required, choices, the link role the AI reads), with preview, several questionnaires and
+  a default, a responses view (who was sent what, who answered, per-client answers), links
+  for any client, and CSV export. The client form (`src/questionnaire_page.py`) is branded,
+  one section per step, keeps a draft on the device, and lets a client update answers.
+  Every submission stores a snapshot of the questions it answered.
+- [x] **The strategy now reads the answers (23.9).** It used to read `questionnaire_answers`
+  from the CRM record, which is always empty — every strategy was written from the client's
+  name. It now reads the stored submission, refuses without one, uses adaptive thinking, and
+  saves an editable Google Doc (not a `.md`) in the client's `אסטרטגיה` folder.
+- [x] **The social analysis actually reads the pages (23.9).** It gave Claude only a URL,
+  with no web access, so the "analysis of the last 5 videos" was invented. It now uses the
+  server-side web fetch/search tools and must state what it could and could not see. The
+  report went to a shared default folder (it looked for a folder field the CRM never
+  returns); it is now a Google Doc in the client's folder.
+- [x] **Long work runs in the background (23.9).** `src/lib/tasks.py`: the questionnaire
+  submit and the strategy/social/campaign buttons re-invoke the webhook Lambda
+  asynchronously instead of running past API Gateway's 30 s.
+- [x] **Claude through the official SDK (23.9).** `src/lib/clients/anthropic_ai.py`.
 
 - [x] **T0 — Shared infrastructure** (`src/lib`): config, structured logging,
   retry/backoff, HTTP helper, run-log, subjects, template store, API clients — each

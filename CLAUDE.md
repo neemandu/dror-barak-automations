@@ -38,7 +38,7 @@ Sheets). Dror asked for that to be left alone. Don't automate it.
 | **ManyChat** | WhatsApp to clients, over the **official Meta Business API** | REST API. Read the 24-hour-window constraint below before touching any messaging code. |
 | **Google Workspace** | Contacts (lead phones), Drive (client folders, templates, signed PDFs), Sheets (task board — read-only) | Service account with domain-wide delegation. |
 | **Meta Ads** | Campaign numbers for the monthly report | Graph API, system-user token with `ads_read`. |
-| **Claude / Anthropic** | Social analysis, strategy, campaign recommendations | Anthropic API (`claude-opus-4-8` / `claude-sonnet-5`). |
+| **Claude / Anthropic** | Social analysis, strategy, campaign recommendations | Official `anthropic` SDK (`src\lib\clients\anthropic_ai.py`), `claude-opus-4-8`; `web=True` adds server-side web search/fetch, `thinking=True` adaptive thinking. |
 | **Signing + questionnaire pages** | Digital signature on quotes/contracts; the strategy questionnaire form | **Ours**, served by the webhook Lambda (`/sign`, `/questionnaire`). Replaced Fillout and Google Forms. |
 
 Auth for every system is loaded **only** from `.env` (see `.env.example`, and
@@ -71,7 +71,20 @@ Consequences you must respect:
 
 **The dashboard is read-only.** Nothing is triggered from it, deliberately: a
 misclick that fires onboarding would create a duplicate Drive folder. Adding triggers is a
-decision for Dror, not a refactor to slip in.
+decision for Dror, not a refactor to slip in. The one write surface is the
+questionnaire admin (`/admin`, `src\questionnaire_admin.py`): it edits questionnaire
+*content* and mints client links — it never sends anything or runs an automation.
+
+**Questionnaire questions are data, not code.** They live in the questionnaire store
+(`src\lib\questionnaire_store.py`, DynamoDB `QuestionnaireTable`) and Dror edits them in
+the admin. Code must never find a question by its wording: answers are keyed by the
+question's immutable `key`, and meaning comes from its `role` (`instagram`, `website`, …).
+Each submission stores a snapshot of the questions it answered.
+
+**Long work runs in the background.** API Gateway cuts requests at 30 s; the strategy,
+the social analysis (real web research) and a campaign report take minutes. Button presses
+and the questionnaire submit hand them to `src\lib\tasks.py::dispatch`, which re-invokes
+the webhook Lambda asynchronously; a failed task is logged and commented on the task.
 
 **`send_quote` is CLI/button-only, never automatic** — sending a client a
 contract is Dror's decision, not something a status change should trigger.
@@ -91,17 +104,17 @@ logging, and a `--dry-run` mode.
 |---|---|---|---|
 | 0 | **Shared infra** (`src\lib`) | — | Config, logging, retry/backoff HTTP, run-log, subjects, message templates, API clients (all with dry-run/mock mode). |
 | 1 | **Lead → Google Contacts** | Webhook (ClickUp: new lead) | Save the lead's phone number to Google Contacts. |
-| 2 | **Send questionnaire** | Button (`שלח שאלון`) / CLI | Email the client the strategy-questionnaire link (our own form) and restart the chase. Onboarding (#5) sends it automatically after signing; the button re-sends a lost link. Nothing fires on `initial_meeting` any more — see History. |
-| 3 | **Social-media prep report** | Questionnaire submitted (`/questionnaire`) / Button (`בנה דוח רשתות`) | AI reads the social profiles from the questionnaire and writes a per-network prep report for Dror. Reused by #8. |
+| 2 | **Send questionnaire** | Button (`שלח שאלון`) / CLI | Email the client the link to the default questionnaire (our own branded form, `src\questionnaire_page.py`) and restart the chase; records who was sent what. Onboarding (#5) sends it automatically after signing; the button re-sends a lost link; the admin can mint a link without sending anything. Nothing fires on `initial_meeting` — see History. |
+| 3 | **Social-media prep report** | Questionnaire submitted (background task) / Button (`בנה דוח רשתות`) | Claude **opens** each profile link the client gave (server-side web fetch/search) and writes what it actually saw — and says what it could not see. Google Doc in the client's `אסטרטגיה` folder. Reused by #8. |
 | 4 | **Send quote + capture signature** | Manual + our signing page | Send a quote with a signature link; on signing, store the PDF in Drive and write the link back to ClickUp. |
 | 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder + its standard subfolders, copy templates, email the strategy questionnaire (and chase it), send the WhatsApp welcome Flow when `MANYCHAT_FLOW_ONBOARDING` names an approved one (a logged skip until then), flag a missing Meta ad account, promote the client to `active`/`in_work`, and summarise on the task. |
 | 5b | **Questionnaire chase** | Scheduled (daily) | Nudges an onboarded client who hasn't filled the questionnaire, at 3 and 7 days, then tells Dror and stops. Runs in the same daily job as the signature reminders (`src\scheduled.py::reminders_handler`). |
 | ~~6~~ | ~~Monthly payment requests~~ | — | **Removed.** Dror invoices clients himself; the system does not touch Morning. |
 | 7 | **Monthly campaign summary** | Scheduled (1st of month, `CampaignReportFunction`) / Button (`בנה דוח קמפיין`) | Pull the month's Meta Ads results, fill Dror's report template, add AI recommendations, send to Dror to approve → forward to client + save to Drive. The PDF renders in headless Chromium from a Lambda **layer** (`src\tools\publish_chromium_layer.py`), which `src\lib\pdf_chromium.py` inflates and drives over the DevTools protocol — no Playwright on Lambda (it renders only on a laptop, from `requirements-dev.txt`); prove it with a `{"check": "chromium"}` invoke. Emailing it still needs SMTP on the stack. |
-| 8 | **Strategy bot** | Button (`בנה אסטרטגיה`) / CLI | From the questionnaire answers: audience + competitors + digital presence → full strategy → Drive → email Dror. Reuses #3. |
+| 8 | **Strategy bot** | Button (`בנה אסטרטגיה`, background task) / CLI | From the stored questionnaire answers + a live look at the digital presence (#3), Claude (adaptive thinking) writes the full strategy → Google Doc in `אסטרטגיה` → email Dror. Refuses without answers. |
 | 9 | **ClickUp → Claude Code** (bonus) | Webhook (ClickUp task) | Turns a ClickUp task into a Claude Code work brief. |
 | 10 | **Daily report** | Scheduled (daily 16:30 UTC, `DailyEmailFunction`) | Emails Dror everything the automations did that day (`daily_email`). Needs `DrorEmail` + SMTP on the stack; until then it logs one skipped line a day. |
-| 11 | **Dashboard** | Always on (`DashboardFunction`, its own API) | Read-only web page over the run-log, grouped by subject, with links out. `src\dashboard.py` renders; `src\dashboard_lambda.py` serves it behind API Gateway with the session in a signed cookie. Password = the `DashboardPassword` parameter. Also runs locally: `python -m src.dashboard`. |
+| 11 | **Dashboard** | Always on (`DashboardFunction`, its own API) | Read-only web page over the run-log, grouped by subject, with links out — plus the questionnaire admin (`/admin`: editor, preview, responses, links, CSV). `src\dashboard.py` renders; `src\dashboard_lambda.py` serves it behind API Gateway with the session in a signed cookie. Password = the `DashboardPassword` parameter. Also runs locally: `python -m src.dashboard`. |
 | 12 | **Smoove → ManyChat** | Webhook (Smoove: lead) | Standalone AWS Lambda (`src\smoove_handler.py`). Smoove POSTs `{f_name, cellphone, msg}`; find/create the ManyChat contact by phone and trigger the **Flow** named by `msg` (`msg`→`MANYCHAT_FLOW_<MSG>`, unmapped is rejected). Flow because the message is business-initiated → Meta-approved template only. |
 
 ## How they run

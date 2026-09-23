@@ -236,6 +236,7 @@ Globals:
       Variables:
         IDEMPOTENCY_TABLE: !Ref IdempotencyTable
         RUN_LOG_TABLE: !Ref RunLogTable
+        QUESTIONNAIRE_TABLE: !Ref QuestionnaireTable
         CLICKUP_WEBHOOK_SECRET: !Ref ClickUpWebhookSecret
         AUTOMATION_TOKEN: !Ref AutomationToken
         CLICKUP_API_TOKEN: !Ref ClickUpApiToken
@@ -297,13 +298,21 @@ Resources:
       CodeUri: ../
       Handler: src.lambda_handler.lambda_handler
       Description: Receives ClickUp webhooks, verifies, de-duplicates, dispatches.
+      # HTTP requests are capped at 30 s by API Gateway anyway; the long budget is
+      # for the background tasks this function re-invokes itself for (strategy,
+      # social analysis with web research, a campaign report) — see src/lib/tasks.py.
+      Timeout: 900
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
         - DynamoDBCrudPolicy:
             TableName: !Ref RunLogTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QuestionnaireTable
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref GoogleSecretArn
+        - LambdaInvokePolicy:
+            FunctionName: !Sub "dror-webhook-${Stage}"
       Events:
         ClickUpWebhook:
           Type: HttpApi
@@ -433,6 +442,8 @@ Resources:
             TableName: !Ref IdempotencyTable
         - DynamoDBCrudPolicy:
             TableName: !Ref RunLogTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QuestionnaireTable
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref GoogleSecretArn
       Events:
@@ -536,7 +547,27 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RunLogTable
+        # The questionnaire editor writes definitions; "make a link" stores a
+        # short link code (idempotency table) and records who was given what.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QuestionnaireTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref GoogleSecretArn
       Events:
+        Admin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /admin/{proxy+}
+            Method: ANY
+        AdminRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /admin
+            Method: GET
         Root:
           Type: HttpApi
           Properties:
@@ -567,6 +598,22 @@ Resources:
             ApiId: !Ref DashboardApi
             Path: /logout
             Method: GET
+
+  # Questionnaires Dror edits, and every client's answers. Content he wrote and
+  # data clients gave — so point-in-time recovery is on, like the run-log.
+  QuestionnaireTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "dror-questionnaires-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
@@ -612,3 +659,6 @@ Outputs:
   RunLogTableName:
     Description: Feeds the dashboard and the daily email.
     Value: !Ref RunLogTable
+  QuestionnaireEditorUrl:
+    Description: The questionnaire editor (same password as the dashboard).
+    Value: !Sub "https://${DashboardApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/admin/questionnaires"

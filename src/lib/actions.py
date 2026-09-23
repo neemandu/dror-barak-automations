@@ -58,19 +58,19 @@ ACTIONS: dict[str, Action] = {
     "social_prep": Action(
         key="social_prep",
         label="בנה דוח רשתות",
-        confirm="✅ דוח רשתות חברתיות מוכן",
+        confirm="⏳ דוח הרשתות בהכנה — הקישור יופיע כאן כשיסתיים (כמה דקות)",
         once_only=False,
     ),
     "strategy_bot": Action(
         key="strategy_bot",
         label="בנה אסטרטגיה",
-        confirm="✅ אסטרטגיה נבנתה ונשמרה בדרייב",
+        confirm="⏳ האסטרטגיה בבנייה — הקישור יופיע כאן כשתסתיים (כמה דקות)",
         once_only=False,
     ),
     "campaign_summary": Action(
         key="campaign_summary",
         label="בנה דוח קמפיין",
-        confirm="✅ דוח קמפיין מוכן וממתין לאישורך",
+        confirm="⏳ דוח הקמפיין בהכנה — הקישור יופיע כאן כשיסתיים",
         once_only=False,
     ),
 }
@@ -93,21 +93,24 @@ def _send_questionnaire(client_id: str, dry_run: bool) -> dict[str, Any]:
 
 
 def _social_prep(client_id: str, dry_run: bool) -> dict[str, Any]:
-    from ..automations import social_prep
+    # Minutes of work: in the background, or API Gateway times the press out.
+    from . import tasks
 
-    return social_prep.run(client_id, dry_run=dry_run)
+    return tasks.dispatch("social_prep", client_id=client_id, dry_run=dry_run)
 
 
 def _strategy_bot(client_id: str, dry_run: bool) -> dict[str, Any]:
-    from ..automations import strategy_bot
+    # Minutes of work: in the background, or API Gateway times the press out.
+    from . import tasks
 
-    return strategy_bot.run(client_id, dry_run=dry_run)
+    return tasks.dispatch("strategy_bot", client_id=client_id, dry_run=dry_run)
 
 
 def _campaign_summary(client_id: str, dry_run: bool) -> dict[str, Any]:
-    from ..automations import campaign_summary
+    # Minutes of work: in the background, or API Gateway times the press out.
+    from . import tasks
 
-    return campaign_summary.run(client_id, dry_run=dry_run)
+    return tasks.dispatch("campaign_summary", client_id=client_id, dry_run=dry_run)
 
 
 _RUNNERS: dict[str, Callable[[str, bool], dict[str, Any]]] = {

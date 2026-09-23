@@ -1,14 +1,18 @@
 """T3 — Social-media prep report (AI).
 
-Trigger: webhook on questionnaire (Google Forms) submit, or manual.
-Action: for each social profile the client listed, ask Claude to analyze the
-profile and its last ~5 videos and produce a prep report (profile link, summary,
-recommendations) so Dror walks into the meeting prepared. Saves the report to the
-client's Drive folder (when known) and notes it in the CRM.
+Trigger: the client submits the questionnaire (run in the background), or the
+``בנה דוח רשתות`` button.
+Action: for each profile link the client gave — found by the question's *role*,
+not its wording — Claude opens the page with web fetch/search and writes what it
+actually saw: positioning, recent content, three recommendations. The report is a
+Google Doc in the client's ``אסטרטגיה`` folder, linked on the ClickUp task.
 
-The profile-analysis helper (:func:`analyze_profiles`) is reused by the strategy
-bot (T8), matching the proposal note that the social analysis built here is
-shared.
+It says what it could not see. Instagram and TikTok often refuse automated
+visitors; an analysis of videos nobody opened would be fiction presented as
+research, so the prompt makes the source of every observation explicit.
+
+The per-profile analysis (:func:`analyze_profiles`) is reused by the strategy
+bot (T8).
 
 Manual/dry-run:
     python -m src.automations.social_prep --client-id 42 --dry-run
@@ -16,21 +20,42 @@ Manual/dry-run:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
-from ..lib import config
+from ..lib import deliverables, questionnaire, questionnaire_store
 from ..lib.clients.anthropic_ai import AnthropicClient
 from ..lib.clients.crm import CrmClient
-from ..lib.clients.google import GoogleClient
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "social_prep"
 
 _SYSTEM = (
-    "You are a marketing analyst for a consulting agency that helps colleges "
-    "enrol more students. Analyze the given social profile and its recent videos "
-    "and produce concise, actionable notes for a sales/strategy meeting."
+    "אתה אנליסט שיווק דיגיטלי בחברת ייעוץ שעוזרת למכללות, אקדמיות ויוצרי קורסים "
+    "להגדיל הרשמות באמצעות וובינרים, משפכי שיווק וקמפיינים ממומנים. אתה כותב בעברית, "
+    "קצר ומעשי. אתה מתאר רק מה שראית בפועל: אם דף לא נפתח או שהתוכן חסום, אתה אומר "
+    "זאת במפורש ולא משלים מהדמיון."
 )
+
+_PURPOSE = {
+    "meeting_prep": "הכנה לפגישה עם הלקוח",
+    "strategy": "חומר גלם לבניית אסטרטגיה שיווקית",
+}
+
+
+def _prompt(role: str, url: str, focus: str) -> str:
+    network = questionnaire.ROLES.get(role, role)
+    return (
+        f"רשת: {network}\nקישור: {url}\nמטרה: {_PURPOSE.get(focus, focus)}\n\n"
+        "פתח את הקישור. אם הדף חסום או דורש התחברות, חפש ברשת מידע ציבורי על החשבון "
+        "או על העסק.\n\n"
+        "כתוב ב-Markdown, בדיוק במבנה הזה:\n"
+        "**מקור המידע:** משפט אחד — האם פתחת את הדף, מצאת מידע בחיפוש, או לא הצלחת לגשת.\n"
+        "### מיצוב\nפסקה אחת: למי הם מדברים, מה ההבטחה, מה הטון.\n"
+        "### התוכן האחרון\nעד 5 פוסטים/סרטונים אחרונים שראית בפועל, שורה לכל אחד. "
+        "אם לא ראית תוכן — כתוב שלא ניתן היה לראות, בלי לנחש.\n"
+        "### 3 המלצות\nשלוש המלצות קונקרטיות, ממוספרות.\n"
+    )
 
 
 def analyze_profiles(
@@ -39,33 +64,33 @@ def analyze_profiles(
     *,
     focus: str = "meeting_prep",
 ) -> dict[str, str]:
-    """Return ``{network: analysis_text}`` for each profile URL.
+    """``{role: analysis markdown}`` — one web-enabled Claude call per profile, in parallel."""
+    items = [(role, url) for role, url in profiles.items() if url]
+    if not items:
+        return {}
 
-    ``focus`` tunes the prompt: ``meeting_prep`` (T3) or ``strategy`` (T8).
-    """
-    out: dict[str, str] = {}
-    for network, url in profiles.items():
-        if not url:
-            continue
-        prompt = (
-            f"Network: {network}\nProfile: {url}\n"
-            f"Purpose: {focus}.\n"
-            "Give: (1) a one-paragraph summary of the profile's positioning, "
-            "(2) observations from the last 5 videos/posts, "
-            "(3) 3 concrete recommendations."
-        )
-        out[network] = ai.complete(prompt, system=_SYSTEM, max_tokens=1200)
-    return out
+    def one(item: tuple[str, str]) -> tuple[str, str]:
+        role, url = item
+        return role, ai.complete(_prompt(role, url, focus), system=_SYSTEM,
+                                 max_tokens=3000, web=True)
+
+    with ThreadPoolExecutor(max_workers=min(4, len(items))) as pool:
+        return dict(pool.map(one, items))
 
 
-def _compile_report(client: dict[str, Any], analyses: dict[str, str]) -> str:
-    lines = [f"# דוח הכנה לפגישה — {client.get('name', '')}", ""]
-    for network, text in analyses.items():
-        url = client.get("social_profiles", {}).get(network, "")
-        lines += [f"## {network}", f"פרופיל: {url}", "", text, ""]
-    if not analyses:
-        lines.append("_לא נמצאו פרופילים חברתיים בשאלון._")
+def _compile_report(name: str, profiles: dict[str, str], analyses: dict[str, str]) -> str:
+    lines = [f"# דוח הכנה — נוכחות דיגיטלית · {name}", ""]
+    for role, text in analyses.items():
+        lines += [f"## {questionnaire.ROLES.get(role, role)}", f"קישור: {profiles.get(role, '')}", "", text, ""]
     return "\n".join(lines)
+
+
+def profiles_for(client_id: str) -> dict[str, str]:
+    """The profile links from the client's latest submitted questionnaire."""
+    response = questionnaire_store.latest_answered(client_id)
+    if not response:
+        return {}
+    return questionnaire.social_profiles(response.get("snapshot") or [], response.get("answers") or {})
 
 
 def run(
@@ -76,32 +101,26 @@ def run(
 ) -> dict[str, Any]:
     auto = Automation(NAME, dry_run=dry_run)
     crm = CrmClient(dry_run=dry_run)
-    google = GoogleClient(dry_run=dry_run)
-    ai = AnthropicClient(dry_run=dry_run)
+    client = {**crm.get_client(client_id), "id": client_id}
+    name = str(client.get("name") or client_id)
 
-    client = crm.get_client(client_id)
-    profiles = profiles or client.get("social_profiles", {})
-    analyses = analyze_profiles(profiles, ai, focus="meeting_prep")
-    report = _compile_report(client, analyses)
+    if profiles is None:
+        profiles = profiles_for(client_id)
+    if not profiles:
+        auto.log_action("no_profiles", "skipped", client_id=client_id,
+                        detail="בשאלון לא מולאו קישורים לרשתות — אין מה לנתח")
+        crm.append_automation_log(
+            client_id, "ℹ️ דוח רשתות לא נבנה: בשאלון לא מולאו קישורים לרשתות חברתיות או לאתר.")
+        return {"report": "", "analyses": {}, "saved": {}}
 
-    saved: dict[str, Any] = {}
-    folder_id = client.get("drive_folder_id") or config.get("DRIVE_DEFAULT_PARENT_ID")
-    if folder_id:
-        saved = google.upload_file(
-            name=f"prep_{client_id}.md",
-            content=report.encode("utf-8"),
-            parent_id=folder_id,
-            mime_type="text/markdown",
-        )
+    analyses = analyze_profiles(profiles, AnthropicClient(dry_run=dry_run))
+    report = _compile_report(name, profiles, analyses)
+    saved = deliverables.save_markdown_doc(crm, client, f"דוח הכנה לרשתות — {name}", report,
+                                           dry_run=dry_run)
     crm.append_automation_log(
-        client_id, f"Generated social prep report ({len(analyses)} profiles)"
-    )
-    auto.log_action(
-        "prep_report_ready",
-        client_id=client_id,
-        detail=f"{len(analyses)} profiles analyzed",
-        report_url=saved.get("webViewLink"),
-    )
+        client_id, f"🔎 דוח ההכנה לרשתות מוכן ({len(analyses)} ערוצים)\n{saved['url']}")
+    auto.log_action("prep_report_ready", client_id=client_id,
+                    detail=f"{len(analyses)} ערוצים נותחו", url=saved["url"])
     return {"report": report, "saved": saved, "analyses": analyses}
 
 

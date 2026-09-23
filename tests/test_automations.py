@@ -32,10 +32,59 @@ def test_lead_to_contacts(read_log):
     assert "contact_saved" in _actions(read_log)
 
 
-def test_social_prep(read_log):
+@pytest.fixture
+def answered():
+    """Client 42 has answered the questionnaire, with two profile links."""
+    from src.lib import questionnaire_store as store
+
+    defn = store.get_definition(store.default_id())
+    store.record_answer("42", "מכללת דוגמה", defn, {
+        "business_name": "מכללת אלפא", "offering": "קורס ניהול חשבונות",
+        "instagram": "https://instagram.com/alpha", "website": "https://alpha.example",
+        "goals": "להכפיל הרשמות"})
+
+
+@pytest.fixture
+def prompts(monkeypatch):
+    """What was actually sent to Claude, and with which options."""
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    seen = []
+    monkeypatch.setattr(AnthropicClient, "complete",
+                        lambda self, prompt, **kw: seen.append((prompt, kw)) or "## ניתוח\nתוצאה")
+    return seen
+
+
+def test_social_prep(read_log, answered):
     result = social_prep.run("42", dry_run=True)
-    assert result["analyses"]  # at least one profile analyzed
+    assert set(result["analyses"]) == {"instagram", "website"}
     assert "prep_report_ready" in _actions(read_log)
+
+
+def test_social_prep_reads_the_pages_instead_of_guessing(answered, prompts):
+    social_prep.run("42", dry_run=True)
+    assert prompts and all(kw.get("web") is True for _p, kw in prompts), "no web access = invented analysis"
+    assert any("https://instagram.com/alpha" in p for p, _kw in prompts)
+    assert all("מקור המידע" in p for p, _kw in prompts), "it must say what it could not see"
+
+
+def test_social_prep_without_links_says_so_instead_of_failing(read_log):
+    result = social_prep.run("42", dry_run=True)
+    assert result["analyses"] == {}
+    assert next(e for e in read_log() if e["action"] == "no_profiles")["status"] == "skipped"
+
+
+def test_strategy_refuses_without_questionnaire_answers(read_log):
+    with pytest.raises(RuntimeError, match="לא מילא את השאלון"):
+        strategy_bot.run("42", dry_run=True)
+    assert next(e for e in read_log() if e["action"] == "no_questionnaire")["status"] == "error"
+
+
+def test_strategy_is_written_from_the_answers(answered, prompts):
+    strategy_bot.run("42", dry_run=True)
+    strategy_prompt, kw = prompts[-1]
+    assert "קורס ניהול חשבונות" in strategy_prompt and "להכפיל הרשמות" in strategy_prompt
+    assert kw.get("thinking") is True
 
 
 def test_send_questionnaire_emails_the_link(read_log, monkeypatch):
@@ -222,13 +271,13 @@ def test_run_all_month_defaults_to_the_previous_month(monkeypatch):
     assert seen["month"] is None
 
 
-def test_strategy_bot(read_log):
+def test_strategy_bot(read_log, answered):
     result = strategy_bot.run("42", dry_run=True)
     assert "אסטרטגיה" in result["strategy"]
     assert "strategy_ready" in _actions(read_log)
 
 
-def test_strategy_bot_tells_dror_by_email_not_whatsapp(read_log, monkeypatch):
+def test_strategy_bot_tells_dror_by_email_not_whatsapp(read_log, answered, monkeypatch):
     # Green API is gone; on the official API a WhatsApp to Dror would be a billed,
     # Meta-approved template. So the "come review this" goes by email — and when
     # there is no address, the run says so rather than silently telling nobody.
@@ -242,7 +291,7 @@ def test_strategy_bot_tells_dror_by_email_not_whatsapp(read_log, monkeypatch):
     assert skipped["status"] == "skipped"
 
 
-def test_strategy_bot_links_the_doc_and_uses_the_client_folder(read_log):
+def test_strategy_bot_links_the_doc_and_uses_the_client_folder(read_log, answered):
     # Same two bugs as campaign_summary, fixed here too: the log entry must carry a
     # clickable link, and the doc goes to the client's own folder via ensure().
     from src.lib import subjects

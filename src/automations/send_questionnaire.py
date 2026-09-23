@@ -55,6 +55,13 @@ def send_link(auto: Automation, crm: CrmClient, client: dict[str, Any],
         # (Re)start the clock for the chase job. Cleared when the form comes back.
         if not dry_run:
             signing.mark_questionnaire_pending(client_id)
+        # Which questionnaire this client got — the admin's "who answered" view,
+        # and the form they open keeps meaning this one even if the default changes.
+        from ..lib import questionnaire_store
+
+        questionnaire_store.record_sent(
+            client_id, str(client.get("name") or client_id),
+            questionnaire_store.definition_for_client(client_id)["id"])
         crm.append_automation_log(client_id, f"📋 שאלון האסטרטגיה נשלח ל־{to}")
         auto.log_action("questionnaire_sent", client_id=client_id, detail=to)
         return None

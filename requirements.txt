@@ -7,6 +7,10 @@
 # on your machine.
 requests>=2.31
 
+# Claude: the strategy, the social analysis (with server-side web search/fetch) and
+# the campaign recommendations. The official SDK, which also retries 429/5xx.
+anthropic>=1.8,<2
+
 # Mints Google access tokens from the service-account key. Tokens live one
 # hour, so a pasted token cannot work in production.
 google-auth>=2.28
