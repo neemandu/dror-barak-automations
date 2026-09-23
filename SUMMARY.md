@@ -38,11 +38,8 @@ email and the monthly report; DynamoDB for the run-log and idempotency.
 
 Configuration on the stack, not code (details and owners in `TASKS.md` → "Now"):
 
-- **No email can leave AWS** — `DrorEmail` and the SMTP parameters are empty. That
-  silences the questionnaire after signing, signature notices, report approvals,
-  the daily digest. Needs an App Password from Dror.
 - **The monthly report** — builds on AWS since 17.9 (Meta token set, Chromium layer
-  driven over DevTools); emailing it to Dror waits on SMTP.
+  driven over DevTools); emailed to Dror for approval.
 - **The Smoove endpoint is open** — `SmooveWebhookToken` is empty.
 - **Go-live on Dror's ClickUp** — the workspace wired to the stack is a test
   workspace. It is where end-to-end tests run; Dror's own list comes next

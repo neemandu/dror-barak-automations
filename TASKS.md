@@ -14,10 +14,8 @@ several parameters are empty, so whole automations cannot complete. None of thes
 needs code; most need a value from Dror. Once a value is in `.env`, it reaches the
 stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
-- [ ] **`DrorEmail` + `SmtpHost` / `SmtpUser` / `SmtpPassword`.** Nothing on AWS can
-  send email: not the strategy questionnaire after signing, not the signature
-  notification, not the report approval, not the daily digest, not the strategy
-  notice. Needs a Workspace **App Password** from Dror (`docs/CREDENTIALS.md`).
+- [x] **`DrorEmail` + SMTP (23.9).** Workspace App Password for dror@drorbrk.co.il,
+  pushed with `push_stack_params`; the daily email went out from Lambda the same day.
 - [x] **`MetaAccessToken`.** Was empty on the stack (the report died on 1.8 and 1.9
   before reading a campaign); verified against the active client's account and
   pushed on 16.9.
