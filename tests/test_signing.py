@@ -336,3 +336,14 @@ def test_no_dror_email_configured_is_not_an_error(monkeypatch):
     monkeypatch.delenv("DROR_EMAIL", raising=False)
     sign_page._notify_dror({"id": "c1", "name": "x"}, b"pdf",
                            signing.audit_record("c1", "terms"))
+
+
+def test_the_client_never_sees_an_english_error():
+    from src import sign_page
+    page = sign_page.error_page("this signing link is not valid")
+    assert "הקישור אינו תקין" in page and "not valid" not in page
+    assert "משהו השתבש" in sign_page.error_page("KeyError: 'x' at line 12"), "no internals on a client page"
+    assert "תיבת החתימה ריקה" in sign_page.error_page("the signature appears to be blank")
+    from src import questionnaire_page
+    q = questionnaire_page.error_page("this signing link is not valid")
+    assert "הקישור אינו תקין" in q and "not valid" not in q

@@ -69,7 +69,9 @@ def _page(title: str, body: str) -> str:
 
 
 def error_page(message: str) -> str:
-    return _page("שגיאה", f'<div class="sheet"><div class="err">{_esc(message)}</div>'
+    from .sign_page import client_message  # one Hebrew wording for both pages
+
+    return _page("שגיאה", f'<div class="sheet"><div class="err">{_esc(client_message(message))}</div>'
                  '<p class="note">אם הקישור אינו פועל, אנא פנה/י לדרור ברק.</p></div>')
 
 

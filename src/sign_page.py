@@ -114,8 +114,31 @@ def _page(title: str, body: str) -> str:
 <title>{_esc(title)}</title><style>{PAGE_CSS}</style></head><body>{body}</body></html>"""
 
 
+# SigningError messages are English because they are also what the logs say. The
+# client reads Hebrew, so the page translates the ones a client can actually hit.
+_CLIENT_MESSAGES = {
+    "this signing link is not valid": "הקישור אינו תקין.",
+    "malformed signing link": "הקישור אינו תקין — ייתכן שהוא נקטע בהעתקה.",
+    "this signing link has expired": "תוקף הקישור פג.",
+    "the signature is missing or not a PNG image": "לא התקבלה חתימה. אנא חתום/חתמי בתיבה ונסה/י שוב.",
+    "the signature image is corrupt": "החתימה לא נקלטה כראוי. אנא נסה/י לחתום שוב.",
+    "the signature image is not a PNG": "החתימה לא נקלטה כראוי. אנא נסה/י לחתום שוב.",
+    "the signature appears to be blank": "תיבת החתימה ריקה. אנא חתום/חתמי ונסה/י שוב.",
+}
+
+
+def client_message(message: str) -> str:
+    """The Hebrew a client should see for ``message``; unknown text passes through
+    only if it is already Hebrew, otherwise a generic line (never a stack detail)."""
+    if message in _CLIENT_MESSAGES:
+        return _CLIENT_MESSAGES[message]
+    if any("\u0590" <= ch <= "\u05ff" for ch in message):
+        return message
+    return "משהו השתבש בפתיחת הקישור."
+
+
 def error_page(message: str) -> str:
-    return _page("שגיאה", f"""<div class="sheet"><div class="err">{_esc(message)}</div>
+    return _page("שגיאה", f"""<div class="sheet"><div class="err">{_esc(client_message(message))}</div>
       <p class="note">אם הקישור אינו פועל, אנא פנה/י לדרור ברק.</p></div>""")
 
 
