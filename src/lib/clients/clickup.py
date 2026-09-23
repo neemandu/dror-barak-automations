@@ -1,8 +1,7 @@
-"""ClickUp client — read task details for the Claude Code bridge (bonus module).
+"""ClickUp client — task details for the משימות → Claude automation.
 
-The bonus automation turns a ClickUp task into a Claude Code run. This client
-fetches a task and can post a comment back with the result. Dry-run returns a
-canned task. What "hand to Claude Code" should concretely do is Open Question #11.
+Fetches a task and posts a comment back with Claude's draft. Dry-run returns a
+canned task.
 """
 
 from __future__ import annotations

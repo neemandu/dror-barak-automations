@@ -34,6 +34,13 @@ Parameters:
   ClickUpListId:
     Type: String
     Description: The לקוחות list.
+  ClickUpTasksWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      The secret of the second webhook, scoped to the משימות list (a ClickUp
+      webhook watches one list). Empty = that webhook's deliveries are rejected.
   ClickUpTasksListId:
     Type: String
     Default: ""
@@ -241,6 +248,7 @@ Globals:
         CLICKUP_API_TOKEN: !Ref ClickUpApiToken
         CLICKUP_LIST_ID: !Ref ClickUpListId
         CLICKUP_TASKS_LIST_ID: !Ref ClickUpTasksListId
+        CLICKUP_TASKS_WEBHOOK_SECRET: !Ref ClickUpTasksWebhookSecret
         CLICKUP_TEAM_ID: !Ref ClickUpTeamId
         WEBHOOK_DRY_RUN: !Ref WebhookDryRun
         ANTHROPIC_API_KEY: !Ref AnthropicApiKey
@@ -297,6 +305,9 @@ Resources:
       CodeUri: ../
       Handler: src.lambda_handler.lambda_handler
       Description: Receives ClickUp webhooks, verifies, de-duplicates, dispatches.
+      # A משימות task runs as an async invoke of this function (an Opus draft
+      # outlives API Gateway's 30 s), so it needs the time and the right to invoke itself.
+      Timeout: 900
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
@@ -304,6 +315,11 @@ Resources:
             TableName: !Ref RunLogTable
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref GoogleSecretArn
+        - LambdaInvokePolicy:
+            FunctionName: !Sub "dror-webhook-${Stage}"
+      # A failed draft is reported on the task; a retry would bill Opus again.
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
       Events:
         ClickUpWebhook:
           Type: HttpApi

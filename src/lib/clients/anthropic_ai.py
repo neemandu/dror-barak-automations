@@ -29,6 +29,55 @@ class AnthropicClient(BaseClient):
             ).rstrip("/")
             self.api_key = config.require("ANTHROPIC_API_KEY")
 
+    def create_message(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        system: Optional[str] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
+        max_tokens: int = 16000,
+    ) -> dict[str, Any]:
+        """One raw Messages API call — the building block of a tool-use loop.
+
+        Returns the response JSON as-is. The caller appends ``content`` back into
+        the conversation unchanged: with thinking on, the thinking blocks must be
+        returned exactly as they came. Dry-run returns a finished text answer, so
+        a loop built on this ends after one turn.
+        """
+        if self.dry_run:
+            self._record("create_message", model=self.model, turns=len(messages),
+                         tools=[t["name"] for t in tools or []])
+            return {
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": (
+                    "[DRY-RUN AI OUTPUT] On a live run Claude would do the task here, "
+                    "using the Drive and Gmail tools when the task needs them.")}],
+            }
+        body: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+            # Opus 4.8 thinks only when asked; a task that plans tool calls benefits.
+            "thinking": {"type": "adaptive"},
+        }
+        if system:
+            body["system"] = system
+        if tools:
+            body["tools"] = tools
+        resp = self._request(
+            "POST",
+            f"{self.base_url}/v1/messages",
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=body,
+            # A thinking turn with a long draft runs well past the 30s default.
+            timeout=300,
+        )
+        return resp.json()
+
     def complete(
         self,
         prompt: str,
