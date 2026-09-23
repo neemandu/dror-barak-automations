@@ -74,3 +74,8 @@ def test_hebrew_runs_are_marked_rtl_and_latin_ones_are_not():
 def test_hebrew_date():
     from datetime import date
     assert bd.hebrew_date(date(2026, 9, 23)) == "23 בספטמבר 2026"
+
+
+def test_a_link_in_a_hebrew_line_keeps_its_trailing_slash():
+    xml = _parts(bd.from_markdown("קישור: https://a.example/"))["word/document.xml"].decode()
+    assert "https://a.example/\u200e</w:t>" in xml

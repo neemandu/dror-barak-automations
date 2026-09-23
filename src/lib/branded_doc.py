@@ -212,6 +212,10 @@ class _Doc:
         if r.get("br"):
             return "<w:r><w:br/></w:r>"
         text = r.get("text") or ""
+        if r.get("url"):
+            # A left-to-right mark after the link: in a right-to-left line the
+            # URL's trailing "/" otherwise jumps to its start.
+            text += "\u200e"
         b = bold or r.get("bold")
         props = [f'<w:rFonts w:ascii="{FONT}" w:hAnsi="{FONT}" w:cs="{FONT}"/>']
         if b:
