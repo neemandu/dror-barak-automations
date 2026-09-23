@@ -53,3 +53,15 @@ def test_every_scheduled_function_can_write_the_run_log(functions):
         tables = [p["DynamoDBCrudPolicy"]["TableName"] for p in props.get("Policies", [])
                   if isinstance(p, dict) and "DynamoDBCrudPolicy" in p]
         assert "RunLogTable" in tables, f"{name} cannot log what it did"
+
+
+def test_no_deploy_can_delete_a_data_table():
+    # A deploy from a template without the questionnaire table deleted it, with
+    # every questionnaire and answer (2026-09-23). Retain drops a table from the
+    # stack without touching the data.
+    doc = yaml.load(TEMPLATE.read_text(encoding="utf-8"), Loader=_CfnLoader)
+    tables = {k: v for k, v in doc["Resources"].items() if v["Type"] == "AWS::DynamoDB::Table"}
+    assert tables
+    for name, res in tables.items():
+        assert res.get("DeletionPolicy") == "Retain", name
+        assert res.get("UpdateReplacePolicy") == "Retain", name

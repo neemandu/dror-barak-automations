@@ -403,6 +403,11 @@ Resources:
 
   RunLogTable:
     Type: AWS::DynamoDB::Table
+    # Data, not infrastructure: a deploy from a template without this table must
+    # drop it from the stack, never delete it (2026-09-23 one did, and took every
+    # questionnaire and answer with it).
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub "dror-runlog-${Stage}"
       BillingMode: PAY_PER_REQUEST
@@ -603,6 +608,11 @@ Resources:
   # data clients gave — so point-in-time recovery is on, like the run-log.
   QuestionnaireTable:
     Type: AWS::DynamoDB::Table
+    # Data, not infrastructure: a deploy from a template without this table must
+    # drop it from the stack, never delete it (2026-09-23 one did, and took every
+    # questionnaire and answer with it).
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub "dror-questionnaires-${Stage}"
       BillingMode: PAY_PER_REQUEST
@@ -617,6 +627,11 @@ Resources:
 
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
+    # Data, not infrastructure: a deploy from a template without this table must
+    # drop it from the stack, never delete it (2026-09-23 one did, and took every
+    # questionnaire and answer with it).
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub "dror-idempotency-${Stage}"
       BillingMode: PAY_PER_REQUEST
