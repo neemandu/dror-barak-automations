@@ -216,7 +216,9 @@ def _row(entry: dict[str, Any], i: int = 0) -> str:
         title += '<span class="badge badge-outline">הרצת ניסיון</span>'
     meta = []
     who = entry.get("client_id") or ""
-    if who:
+    # The agent's entries carry a ClickUp task id, not a client: its name is the
+    # detail line and the task is linked, so a chip would only show a code.
+    if who and entry.get("automation") != "clickup_to_claude":
         meta.append(f'<span class="chip" data-client="{_esc(who)}">{ui.icon("users", 12)}'
                     f'<span>{_esc(who)}</span></span>')
     detail = entry.get("detail")

@@ -519,15 +519,16 @@ JS = r"""
     requestAnimationFrame(step);
   }
 
-  // "לפני 5 דקות", with the exact time on hover.
-  var rtf = window.Intl && Intl.RelativeTimeFormat ? new Intl.RelativeTimeFormat('he', {numeric: 'auto'}) : null;
+  // "לפני 5 דקות", with the exact time on hover. Written out rather than
+  // Intl.RelativeTimeFormat, which renders Hebrew duals as "לפני שעתיים (2)".
   UI.ago = function (iso) {
-    var t = new Date(iso).getTime(); if (!t || !rtf) return '';
-    var s = Math.round((t - Date.now()) / 1000), a = Math.abs(s);
-    if (a < 45) return 'עכשיו';
-    if (a < 3600) return rtf.format(Math.round(s / 60), 'minute');
-    if (a < 86400) return rtf.format(Math.round(s / 3600), 'hour');
-    if (a < 86400 * 30) return rtf.format(Math.round(s / 86400), 'day');
+    var t = new Date(iso).getTime(); if (!t) return '';
+    var s = Math.round((Date.now() - t) / 1000);
+    if (s < 45) return 'עכשיו';
+    var m = Math.round(s / 60), h = Math.round(s / 3600), d = Math.round(s / 86400);
+    if (m < 60) return m <= 1 ? 'לפני דקה' : 'לפני ' + m + ' דקות';
+    if (h < 24) return h === 1 ? 'לפני שעה' : h === 2 ? 'לפני שעתיים' : 'לפני ' + h + ' שעות';
+    if (d < 30) return d === 1 ? 'אתמול' : d === 2 ? 'לפני יומיים' : 'לפני ' + d + ' ימים';
     return new Date(iso).toLocaleDateString('he-IL', {day: 'numeric', month: 'short', year: 'numeric'});
   };
   function times(root) {
