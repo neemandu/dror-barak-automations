@@ -37,7 +37,17 @@ SCOPES = [
     "https://www.googleapis.com/auth/forms.responses.readonly",  # questionnaire
 ]
 
-_cache: dict[str, Any] = {"token": None, "expires_at": 0.0, "key_info": None}
+# Only the משימות agent uses Gmail: read what Dror asks it to look at, and leave
+# drafts for him to send. Minted as a separate token, so the automations above
+# keep working on a domain where these two scopes were never granted — a Gmail
+# scope missing from delegation must not break onboarding.
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.compose",
+]
+
+_cache: dict[str, Any] = {"token": None, "expires_at": 0.0, "key_info": None,
+                          "tokens": {}}
 
 
 class GoogleAuthError(RuntimeError):
@@ -130,11 +140,32 @@ def _key_info() -> dict[str, Any]:
         raise GoogleAuthError(f"Service-account key not found at {path!r}.") from exc
 
 
-def access_token(force_refresh: bool = False) -> str:
-    """A valid Google access token, minted and cached as needed."""
+def access_token(force_refresh: bool = False, scopes: Optional[list[str]] = None) -> str:
+    """A valid Google access token, minted and cached as needed.
+
+    ``scopes`` defaults to :data:`SCOPES`; another set (``GMAIL_SCOPES``) gets its
+    own token and its own cache slot.
+    """
+    if scopes is not None and scopes != SCOPES:
+        key = " ".join(sorted(scopes))
+        slot = _cache["tokens"].get(key)
+        if not force_refresh and slot and slot[1] > time.time() + 60:
+            return str(slot[0])
+        token, expires_at = _mint(scopes)
+        _cache["tokens"][key] = (token, expires_at)
+        return token
+
     now = time.time()
     if not force_refresh and _cache["token"] and _cache["expires_at"] > now + 60:
         return str(_cache["token"])
+    token, expires_at = _mint(SCOPES)
+    _cache["token"] = token
+    _cache["expires_at"] = expires_at
+    return token
+
+
+def _mint(scopes: list[str]) -> tuple[str, float]:
+    """Mint a token for ``scopes`` as the impersonated user."""
 
     try:
         from google.oauth2 import service_account  # type: ignore[import-untyped]
@@ -160,20 +191,19 @@ def access_token(force_refresh: bool = False) -> str:
         )
     try:
         creds = service_account.Credentials.from_service_account_info(
-            info, scopes=SCOPES, subject=subject
+            info, scopes=scopes, subject=subject
         )
         creds.refresh(Request())
     except Exception as exc:  # noqa: BLE001 - surface Google's own message
         raise GoogleAuthError(
             f"Could not get a Google token as {subject!r}: {exc}\n"
             f"Usually this means domain-wide delegation is not set up for client id "
-            f"{info.get('client_id')!r}, or a scope is missing. "
-            f"See docs/GOOGLE_SETUP.md step 5."
+            f"{info.get('client_id')!r}, or a scope is missing "
+            f"({', '.join(scopes)}). See docs/GOOGLE_SETUP.md step 5."
         ) from exc
 
-    _cache["token"] = creds.token
-    _cache["expires_at"] = creds.expiry.timestamp() if creds.expiry else time.time() + 3000
-    return str(creds.token)
+    expires_at = creds.expiry.timestamp() if creds.expiry else time.time() + 3000
+    return str(creds.token), expires_at
 
 
 def reset_cache() -> None:
@@ -181,3 +211,4 @@ def reset_cache() -> None:
     _cache["token"] = None
     _cache["expires_at"] = 0.0
     _cache["key_info"] = None
+    _cache["tokens"] = {}

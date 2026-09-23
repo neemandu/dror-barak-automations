@@ -17,6 +17,7 @@ from src import lambda_handler
 from src.lib import idempotency
 
 SECRET = "whsec-test"
+TASKS_SECRET = "whsec-tasks"
 
 
 @pytest.fixture(autouse=True)
@@ -25,6 +26,7 @@ def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("IDEMPOTENCY_PATH", str(tmp_path / "idem.json"))
     monkeypatch.setenv("IDEMPOTENCY_TABLE", "")  # use the file store
     monkeypatch.delenv("CLICKUP_TASKS_LIST_ID", raising=False)
+    monkeypatch.setenv("CLICKUP_TASKS_WEBHOOK_SECRET", TASKS_SECRET)
     yield
 
 
@@ -95,7 +97,7 @@ def test_unsigned_request_never_reaches_an_automation(monkeypatch):
 
 def test_same_delivery_twice_runs_the_work_once(monkeypatch):
     runs = []
-    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False: runs.append(p["task_id"]) or {"ok": 1})
+    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False, **kw: runs.append(p["task_id"]) or {"ok": 1})
 
     body = payload(after={"name": "חתם"})
     first = lambda_handler.handle(body, sign(body))
@@ -108,7 +110,7 @@ def test_same_delivery_twice_runs_the_work_once(monkeypatch):
 
 def test_a_different_change_to_the_same_task_is_not_a_duplicate(monkeypatch):
     runs = []
-    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False: runs.append(p) or {})
+    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False, **kw: runs.append(p) or {})
     a = payload(hist_id="h1", after={"name": "נשלח שאלון"})
     b = payload(hist_id="h2", after={"name": "חתם"})
     lambda_handler.handle(a, sign(a))
@@ -119,7 +121,7 @@ def test_a_different_change_to_the_same_task_is_not_a_duplicate(monkeypatch):
 def test_failed_work_releases_the_claim_so_a_retry_can_succeed(monkeypatch):
     attempts = []
 
-    def flaky(p, dry_run=False):
+    def flaky(p, dry_run=False, **kw):
         attempts.append(1)
         if len(attempts) == 1:
             raise RuntimeError("Drive timed out")
@@ -276,7 +278,7 @@ def test_payload_without_task_id_is_rejected():
 
 
 def test_lambda_handler_returns_200_for_a_good_request(monkeypatch):
-    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False: {"ok": 1})
+    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False, **kw: {"ok": 1})
     body = payload(after={"name": "חתם"})
     resp = lambda_handler.lambda_handler(
         {"body": body, "headers": {"X-Signature": sign(body)}}
@@ -292,7 +294,7 @@ def test_lambda_handler_returns_401_for_a_forged_request():
 
 
 def test_lambda_handler_returns_500_so_clickup_retries(monkeypatch):
-    def boom(p, dry_run=False):
+    def boom(p, dry_run=False, **kw):
         raise RuntimeError("Morning is down")
 
     monkeypatch.setattr(lambda_handler, "route", boom)
@@ -306,7 +308,7 @@ def test_lambda_handler_returns_500_so_clickup_retries(monkeypatch):
 def test_base64_body_is_decoded_before_signing(monkeypatch):
     import base64
 
-    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False: {"ok": 1})
+    monkeypatch.setattr(lambda_handler, "route", lambda p, dry_run=False, **kw: {"ok": 1})
     body = payload(after={"name": "חתם"})
     resp = lambda_handler.lambda_handler({
         "body": base64.b64encode(body.encode()).decode(),
@@ -314,3 +316,42 @@ def test_base64_body_is_decoded_before_signing(monkeypatch):
         "headers": {"x-signature": sign(body)},
     })
     assert resp["statusCode"] == 200
+
+
+# ------------------------------------------------------- the משימות webhook
+
+
+def _sign_tasks(body: str) -> str:
+    return hmac.new(TASKS_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+
+
+def test_the_secret_that_matched_says_which_list_a_delivery_is_from():
+    body = payload()
+    assert lambda_handler.verify_signature(body, sign(body)) == "clients"
+    assert lambda_handler.verify_signature(body, _sign_tasks(body)) == "tasks"
+
+
+def test_a_new_task_on_the_tasks_list_goes_to_claude_not_to_contacts(monkeypatch):
+    from src.automations import clickup_to_claude, lead_to_contacts
+
+    ran = []
+    monkeypatch.setattr(clickup_to_claude, "run", lambda t, dry_run=False: ran.append(t) or {"draft": "x"})
+    monkeypatch.setattr(lead_to_contacts, "run", lambda *a, **k: pytest.fail("a task is not a lead"))
+    body = payload(event="taskCreated", task="m1", after=None)
+    lambda_handler.handle(body, _sign_tasks(body), dry_run=True)
+    assert ran == ["m1"]
+
+
+def test_an_update_on_the_tasks_list_is_ignored(monkeypatch):
+    from src.automations import clickup_to_claude
+
+    monkeypatch.setattr(clickup_to_claude, "run", lambda *a, **k: pytest.fail("posting the draft would loop"))
+    body = payload(event="taskUpdated", task="m1", after={"name": "x"})
+    assert "ignored" in lambda_handler.handle(body, _sign_tasks(body), dry_run=True)["result"]
+
+
+def test_the_async_claude_invoke_runs_the_task(monkeypatch):
+    from src.automations import clickup_to_claude
+
+    monkeypatch.setattr(clickup_to_claude, "run", lambda t, dry_run=False: {"task": t})
+    assert lambda_handler.lambda_handler({lambda_handler.CLAUDE_TASK_KEY: "m9"}) == {"task": "m9"}

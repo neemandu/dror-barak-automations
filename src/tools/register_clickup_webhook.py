@@ -15,11 +15,15 @@ Usage:
     # Create it:
     python -m src.tools.register_clickup_webhook --endpoint https://xyz.execute-api...
 
+    # The second webhook, for the משימות list (new tasks -> Claude drafts):
+    python -m src.tools.register_clickup_webhook --endpoint https://xyz... --tasks
+
     # Remove one:
     python -m src.tools.register_clickup_webhook --delete <webhook_id>
 
-Then put the printed secret in the stack:
-    CLICKUP_WEBHOOK_SECRET=<secret>
+Then put the printed secret in .env and push it to the stack:
+    CLICKUP_WEBHOOK_SECRET=<secret>        (--tasks: CLICKUP_TASKS_WEBHOOK_SECRET)
+    python -m src.tools.push_stack_params ClickUpWebhookSecret
 
 ClickUp disables a webhook after repeated delivery failures — `--list` shows the
 health, so that shows up here rather than as automations mysteriously not firing.
@@ -42,6 +46,8 @@ NAME = "register_clickup_webhook"
 #                 this is what actually fires the questionnaire and onboarding.
 # taskStatusUpdated -> the task status (the primary lifecycle).
 EVENTS = ["taskCreated", "taskUpdated", "taskStatusUpdated"]
+# The משימות list only drafts new tasks; updates would be ignored traffic.
+TASK_EVENTS = ["taskCreated"]
 
 
 def _headers() -> dict[str, str]:
@@ -74,17 +80,19 @@ def show(team_id: str) -> None:
             print("              then re-register - automations are not firing.")
 
 
-def create(team_id: str, endpoint: str, list_id: str | None, dry_run: bool) -> None:
-    body: dict[str, Any] = {"endpoint": endpoint, "events": EVENTS}
+def create(team_id: str, endpoint: str, list_id: str | None, dry_run: bool,
+           *, events: list[str] = EVENTS,
+           secret_key: str = "CLICKUP_WEBHOOK_SECRET") -> None:
+    body: dict[str, Any] = {"endpoint": endpoint, "events": events}
     if list_id:
-        # Scope to the clients list so unrelated task noise doesn't invoke Lambda.
+        # Scope to one list so unrelated task noise doesn't invoke Lambda.
         body["list_id"] = list_id
 
     if dry_run:
         print("Would POST to ClickUp (no writes):")
         print(f"  {_base()}/team/{team_id}/webhook")
         print(json.dumps(body, indent=2))
-        print("\nClickUp would return a `secret` - that goes in CLICKUP_WEBHOOK_SECRET.")
+        print(f"\nClickUp would return a `secret` - that goes in {secret_key}.")
         return
 
     resp = http_request(
@@ -96,8 +104,8 @@ def create(team_id: str, endpoint: str, list_id: str | None, dry_run: bool) -> N
     print(f"  id:       {hook.get('id')}")
     print(f"  endpoint: {hook.get('endpoint')}")
     print(f"  events:   {hook.get('events')}")
-    print("\n  Put this in .env and in the Lambda's CLICKUP_WEBHOOK_SECRET:\n")
-    print(f"  CLICKUP_WEBHOOK_SECRET={hook.get('secret')}")
+    print(f"\n  Put this in .env and in the Lambda's {secret_key}:\n")
+    print(f"  {secret_key}={hook.get('secret')}")
     print("\n  Without it the Lambda rejects every delivery as unsigned.")
 
 
@@ -111,6 +119,9 @@ def main() -> None:
     parser.add_argument("--list", action="store_true", help="Show registered webhooks.")
     parser.add_argument("--endpoint", help="Public URL to receive events.")
     parser.add_argument("--list-id", help="Scope to a list (default: CLICKUP_LIST_ID).")
+    parser.add_argument("--tasks", action="store_true",
+                        help="Register the משימות webhook (CLICKUP_TASKS_LIST_ID, "
+                             "taskCreated only) instead of the clients one.")
     parser.add_argument("--delete", metavar="WEBHOOK_ID", help="Delete a webhook.")
     parser.add_argument("--dry-run", action="store_true", help="No writes; print the plan.")
     args = parser.parse_args()
@@ -138,6 +149,14 @@ def main() -> None:
         print(f"Endpoint must be https. Got: {args.endpoint}")
         sys.exit(1)
 
+    if args.tasks:
+        tasks_list = config.get("CLICKUP_TASKS_LIST_ID")
+        if not tasks_list:
+            print("CLICKUP_TASKS_LIST_ID is not set.")
+            sys.exit(1)
+        create(str(team_id), args.endpoint, str(tasks_list), args.dry_run,
+               events=TASK_EVENTS, secret_key="CLICKUP_TASKS_WEBHOOK_SECRET")
+        return
     create(str(team_id), args.endpoint, args.list_id or config.get("CLICKUP_LIST_ID"),
            args.dry_run)
 

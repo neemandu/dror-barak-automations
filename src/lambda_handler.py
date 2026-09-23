@@ -24,6 +24,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 from typing import Any
 
 from .lib import actions, config, idempotency
@@ -32,6 +33,9 @@ from .lib.crm_fields import canonical_sub_status
 from .lib.logging_setup import get_logger
 
 log = get_logger("webhook", "lambda")
+
+# An async self-invoke carrying a משימות task for Claude (see _dispatch_claude_task).
+CLAUDE_TASK_KEY = "claude_task_id"
 
 
 class Rejected(Exception):
@@ -43,12 +47,18 @@ class Rejected(Exception):
         self.reason = reason
 
 
-def verify_signature(raw_body: str, signature: str) -> None:
+def verify_signature(raw_body: str, signature: str) -> str:
     """Reject anything not signed with the webhook secret.
 
     ClickUp signs the raw body with HMAC-SHA256, hex-encoded, in ``X-Signature``.
     The body must be hashed exactly as received — re-serialising the parsed JSON
     changes the bytes and the signature will never match.
+
+    Two webhooks post here, each with its own secret: one scoped to the לקוחות
+    list, one to משימות (a ClickUp webhook watches a single list). Either secret
+    is accepted, and which one matched is returned — ``"clients"`` or ``"tasks"``
+    — because it says which list the task is on without trusting the payload's
+    shape to carry a list id.
     """
     secret = config.get("CLICKUP_WEBHOOK_SECRET")
     if not secret:
@@ -57,11 +67,17 @@ def verify_signature(raw_body: str, signature: str) -> None:
         raise Rejected(500, "CLICKUP_WEBHOOK_SECRET is not set; refusing to serve")
     if not signature:
         raise Rejected(401, "missing X-Signature")
-    expected = hmac.new(
-        secret.encode("utf-8"), raw_body.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-    if not hmac.compare_digest(expected, signature):
-        raise Rejected(401, "bad signature")
+    candidates = [("clients", secret),
+                  ("tasks", config.get("CLICKUP_TASKS_WEBHOOK_SECRET"))]
+    for source, candidate in candidates:
+        if not candidate:
+            continue
+        expected = hmac.new(
+            candidate.encode("utf-8"), raw_body.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(expected, signature):
+            return source
+    raise Rejected(401, "bad signature")
 
 
 def _sub_status_of(task_id: str, dry_run: bool) -> str | None:
@@ -83,8 +99,16 @@ def _sub_status_of(task_id: str, dry_run: bool) -> str | None:
     return canonical_sub_status(str(sub)) or (str(sub) if sub else None)
 
 
-def route(payload: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
-    """Pick the automation for a ClickUp event and run it."""
+def route(
+    payload: dict[str, Any], dry_run: bool = False, source: str = ""
+) -> dict[str, Any]:
+    """Pick the automation for a ClickUp event and run it.
+
+    ``source`` is the webhook that signed the delivery (see
+    :func:`verify_signature`). A task signed by the משימות webhook must never fall
+    through to the lead branch below — that would save a marketing task to Google
+    Contacts.
+    """
     from .automations import (
         clickup_to_claude,
         lead_to_contacts,
@@ -97,10 +121,14 @@ def route(payload: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
         raise Rejected(400, "payload has no task_id")
 
     tasks_list = config.get("CLICKUP_TASKS_LIST_ID")
-    # A משימות task is work for Claude Code, not a client. Same webhook shape, so
-    # the list id is what tells them apart.
-    if tasks_list and str(payload.get("list_id") or "") == tasks_list:
-        return clickup_to_claude.run(task_id, dry_run=dry_run)
+    # A משימות task is work for Claude, not a client. Same webhook shape, so the
+    # list id is what tells them apart.
+    if source == "tasks" or (tasks_list and _list_id_of(payload) == tasks_list):
+        if event != "taskCreated":
+            # Posting the draft changes the task. Drafting on updates would loop
+            # and bill Opus for every edit.
+            return {"ignored": f"{event} on the tasks list"}
+        return _dispatch_claude_task(task_id, dry_run, clickup_to_claude)
 
     if event == "taskCreated":
         return lead_to_contacts.run(task_id, dry_run=dry_run)
@@ -124,6 +152,43 @@ def route(payload: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
         return {"ignored": f"no automation for {event} -> {sub}"}
 
     return {"ignored": f"no automation for event {event}"}
+
+
+def _list_id_of(payload: dict[str, Any]) -> str:
+    """The list a webhook's task lives in.
+
+    Taken from ``list_id`` when the payload has it, else from the history item's
+    ``parent_id`` (for a created task, the list it was created in).
+    """
+    if payload.get("list_id"):
+        return str(payload["list_id"])
+    for item in payload.get("history_items") or []:
+        if item.get("parent_id"):
+            return str(item["parent_id"])
+    return ""
+
+
+def _dispatch_claude_task(task_id: str, dry_run: bool, module: Any) -> dict[str, Any]:
+    """Hand a משימות task to Claude without holding the webhook open.
+
+    API Gateway cuts the request at 30 seconds; an Opus draft takes longer. So on
+    Lambda this acknowledges on the task and async-invokes this same function,
+    which :func:`lambda_handler` routes to ``clickup_to_claude.run``. Locally, in
+    tests and in dry-run there is nothing to parallelise — it runs inline.
+    """
+    function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    if dry_run or not function_name:
+        return module.run(task_id, dry_run=dry_run)
+
+    import boto3
+
+    boto3.client("lambda").invoke(
+        FunctionName=function_name,
+        InvocationType="Event",
+        Payload=json.dumps({CLAUDE_TASK_KEY: task_id}).encode("utf-8"),
+    )
+    _comment(task_id, "🤖 Claude עובד על המשימה. הטיוטה תופיע כאן כתגובה.", dry_run)
+    return {"dispatched": task_id}
 
 
 def verify_automation_token(supplied: str) -> None:
@@ -244,7 +309,7 @@ def _comment(task_id: str, message: str, dry_run: bool) -> None:
 
 def handle(raw_body: str, signature: str, dry_run: bool = False) -> dict[str, Any]:
     """Verify, dedupe, dispatch. Returns the response body."""
-    verify_signature(raw_body, signature)
+    source = verify_signature(raw_body, signature)
 
     try:
         payload = json.loads(raw_body or "{}")
@@ -259,7 +324,7 @@ def handle(raw_body: str, signature: str, dry_run: bool = False) -> dict[str, An
         return {"ok": True, "duplicate": True, "key": key}
 
     try:
-        result = route(payload, dry_run=dry_run)
+        result = route(payload, dry_run=dry_run, source=source)
     except Exception:
         # Give the claim back so ClickUp's retry can do the work. Holding it would
         # turn one blip into a permanently skipped onboarding.
@@ -283,6 +348,15 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         result = tasks.run(str(event["task"]), dict(event.get("args") or {}),
                            dry_run=bool(event.get("dry_run")))
         return {"ok": True, "task": event["task"], "result": result if isinstance(result, dict) else None}
+
+    if CLAUDE_TASK_KEY in event:
+        # Our own async invoke, not API Gateway: no path, no headers, no signature.
+        # Only this function's role can invoke it, so there is nothing to verify.
+        from .automations import clickup_to_claude
+
+        return clickup_to_claude.run(
+            str(event[CLAUDE_TASK_KEY]), dry_run=config.get_bool("WEBHOOK_DRY_RUN")
+        )
 
     raw = event.get("body") or ""
     if event.get("isBase64Encoded"):

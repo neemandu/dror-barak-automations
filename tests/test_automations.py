@@ -312,9 +312,37 @@ def test_strategy_bot_links_the_doc_and_uses_the_client_folder(read_log, answere
 
 def test_clickup_to_claude(read_log):
     result = clickup_to_claude.run("abc123", dry_run=True)
-    assert "ClickUp task abc123" in result["brief"]
-    assert result["dispatched"] is False
-    assert "brief_built" in _actions(read_log)
+    assert result["draft"]
+    assert "draft_posted" in _actions(read_log)
+
+
+def test_the_tasks_agent_runs_tools_until_claude_answers(monkeypatch, read_log):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    turns = iter([
+        {"stop_reason": "tool_use", "content": [
+            {"type": "tool_use", "id": "t1", "name": "drive_search", "input": {"query": "בריף"}}]},
+        {"stop_reason": "end_turn", "content": [{"type": "text", "text": "הפוסט מוכן \u2014 בהצלחה"}]},
+    ])
+    seen = []
+    monkeypatch.setattr(AnthropicClient, "create_message",
+                        lambda self, messages, **kw: seen.append(list(messages)) or next(turns))
+    result = clickup_to_claude.run("abc123", dry_run=True)
+    assert result["draft"] == "הפוסט מוכן - בהצלחה", "the comment is in the house style"
+    assert [c["tool"] for c in result["tool_calls"]] == ["drive_search"]
+    tool_result = seen[1][-1]["content"][0]
+    assert tool_result["type"] == "tool_result" and tool_result["tool_use_id"] == "t1"
+
+
+def test_the_tasks_agent_gives_up_after_max_turns(monkeypatch, read_log):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    monkeypatch.setattr(AnthropicClient, "create_message", lambda self, m, **kw: {
+        "stop_reason": "tool_use",
+        "content": [{"type": "tool_use", "id": "t", "name": "drive_search", "input": {"query": "x"}}]})
+    with pytest.raises(RuntimeError, match="tool rounds"):
+        clickup_to_claude.run("abc123", dry_run=True)
+    assert next(e for e in read_log() if e["action"] == "draft_failed")["status"] == "error"
 
 
 def test_daily_summary_reads_run_log(read_log):

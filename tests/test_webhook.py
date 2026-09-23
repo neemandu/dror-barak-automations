@@ -43,7 +43,7 @@ def test_the_retired_fillout_route_is_gone():
 
 def test_clickup_route():
     result = webhook_server._dispatch("/clickup/task", {"task_id": "abc"})
-    assert result["dispatched"] is False
+    assert result["draft"]
 
 
 def test_unknown_route_raises():

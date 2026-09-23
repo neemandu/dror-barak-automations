@@ -116,6 +116,14 @@ This is admin-only, and the step that makes the rest work.
 https://www.googleapis.com/auth/contacts,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/forms.responses.readonly
 ```
 
+   For the משימות agent (#9) to read Dror's mail and leave drafts, add two more to
+   the same line. Without them everything else works; the agent says it cannot
+   reach Gmail:
+
+```
+https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.compose
+```
+
 7. **Authorize**
 
 > Delegation can take a few minutes to take effect. If step 8 fails right away,

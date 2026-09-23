@@ -34,6 +34,13 @@ Parameters:
   ClickUpListId:
     Type: String
     Description: The לקוחות list.
+  ClickUpTasksWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      The secret of the second webhook, scoped to the משימות list (a ClickUp
+      webhook watches one list). Empty = that webhook's deliveries are rejected.
   ClickUpTasksListId:
     Type: String
     Default: ""
@@ -242,6 +249,7 @@ Globals:
         CLICKUP_API_TOKEN: !Ref ClickUpApiToken
         CLICKUP_LIST_ID: !Ref ClickUpListId
         CLICKUP_TASKS_LIST_ID: !Ref ClickUpTasksListId
+        CLICKUP_TASKS_WEBHOOK_SECRET: !Ref ClickUpTasksWebhookSecret
         CLICKUP_TEAM_ID: !Ref ClickUpTeamId
         WEBHOOK_DRY_RUN: !Ref WebhookDryRun
         ANTHROPIC_API_KEY: !Ref AnthropicApiKey
@@ -299,8 +307,9 @@ Resources:
       Handler: src.lambda_handler.lambda_handler
       Description: Receives ClickUp webhooks, verifies, de-duplicates, dispatches.
       # HTTP requests are capped at 30 s by API Gateway anyway; the long budget is
-      # for the background tasks this function re-invokes itself for (strategy,
-      # social analysis with web research, a campaign report) — see src/lib/tasks.py.
+      # for the work this function re-invokes itself for: the background tasks
+      # (strategy, social analysis with web research, a campaign report; see
+      # src/lib/tasks.py) and a משימות task done by the Claude agent.
       Timeout: 900
       Policies:
         - DynamoDBCrudPolicy:
@@ -313,6 +322,10 @@ Resources:
             SecretArn: !Ref GoogleSecretArn
         - LambdaInvokePolicy:
             FunctionName: !Sub "dror-webhook-${Stage}"
+      # A failed background run is logged and reported on the task; a retry would
+      # bill Opus again and could write a second strategy or draft.
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
       Events:
         ClickUpWebhook:
           Type: HttpApi
