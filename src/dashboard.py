@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import html
+import json
 import os
 import secrets
 import time
@@ -382,8 +383,10 @@ def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:
     leads = leads_from(entries)
     today = _il_day(datetime.now(timezone.utc).isoformat())
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    new_today = sum(1 for l in leads if _il_day(l["first"]) == today)
-    new_week = sum(1 for l in leads if str(l["first"]) >= week_ago)
+    # Both the counters and the period filter go by the latest signup; "today" is
+    # the calendar day in Israel, not the last 24 hours.
+    new_today = sum(1 for l in leads if _il_day(l["last"]) == today)
+    new_week = sum(1 for l in leads if str(l["last"]) >= week_ago)
     sent = sum(l["sent"] for l in leads)
     stats = (ui.stat("נרשמו היום", new_today, ico="user-plus", tone="brand", i=0)
              + ui.stat("7 ימים אחרונים", new_week, ico="calendar", i=1)
@@ -405,7 +408,7 @@ def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:
         who = (f'<div class="lead-name">{_esc(name)}</div>' if name else '<div class="lead-name anon">ללא שם</div>')
         search = f"{name} {l['phone']} {phone} {phone.replace('-', '')}".lower()
         last_ms = int(datetime.fromisoformat(str(l["last"]).replace("Z", "+00:00")).timestamp() * 1000) if l.get("last") else 0
-        rows += (f'<tr data-last="{last_ms}" data-lists="{_esc(" ".join(l["lists"]))}" data-q="{_esc(search)}">'
+        rows += (f'<tr data-last="{last_ms}" data-day="{_il_day(l.get("last"))}" data-lists="{_esc(" ".join(l["lists"]))}" data-q="{_esc(search)}">'
                  f'<td><div class="lead-cell">{avatar}<div>{who}<div class="lead-phone"><bdi>{_esc(phone)}</bdi></div>'
                  f'<div class="lead-sub show-sm">{_esc(" · ".join(_list_label(m) for m in l["lists"]))} · '
                  f'{ui.when(l.get("last"), "-")} · {"וואטסאפ נשלח" if ok else _esc(subjects.label_for(l))}</div></div></div></td>'
@@ -433,11 +436,11 @@ def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:
         table = '<div class="card">' + ui.empty(
             "עדיין אין לידים", "כשמישהו נרשם דרך Smoove ומקבל הודעת וואטסאפ, הוא יופיע כאן.", ico="user-plus") + "</div>"
     script = r"""
-var days = 0, list = '', find = document.getElementById('find');
+var days = 0, list = '', find = document.getElementById('find'), TODAY = document.body.dataset.today;
 function apply() {
-  var q = (find ? find.value : '').trim().toLowerCase().replace(/-/g, ''), since = days ? Date.now() - days * 86400000 : 0, n = 0;
+  var q = (find ? find.value : '').trim().toLowerCase().replace(/-/g, ''), since = days > 1 ? Date.now() - days * 86400000 : 0, n = 0;
   document.querySelectorAll('tr[data-last]').forEach(function (tr) {
-    var ok = (+tr.dataset.last >= since) && (!list || (' ' + tr.dataset.lists + ' ').indexOf(' ' + list + ' ') >= 0) &&
+    var ok = (days === 1 ? tr.dataset.day === TODAY : +tr.dataset.last >= since) && (!list || (' ' + tr.dataset.lists + ' ').indexOf(' ' + list + ' ') >= 0) &&
              (!q || tr.dataset.q.replace(/-/g, '').indexOf(q) >= 0);
     tr.hidden = !ok; if (ok) n++; });
   var none = document.getElementById('none'); if (none) none.style.display = n ? 'none' : 'block';
@@ -449,6 +452,7 @@ var lf = document.getElementById('listf'); if (lf) lf.addEventListener('change',
 if (find) find.addEventListener('input', apply);
 document.addEventListener('click', function (e) { var b = e.target.closest('[data-copy]'); if (b) UI.copy(b.dataset.copy, b); });
 """
+    script = f"document.body.dataset.today = {json.dumps(today)};" + script
     return ui.app_page(base, "leads", "לידים · דרור ברק", head + note + f'<div class="stats">{stats}</div>' + table,
                        script=script, css=CSS + LEADS_CSS).encode("utf-8")
 
