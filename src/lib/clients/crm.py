@@ -50,8 +50,8 @@ __all__ = [
 # Fields an automation cannot work without. check_clickup_crm reports on these.
 REQUIRED_FIELDS = ["phone", "sub_status", "monthly_price"]
 OPTIONAL_FIELDS = [
-    "email", "service_type", "drive_folder", "signed_contract",
-    "recordings_path", "morning_status", "morning_client_id", "meta_ad_account",
+    "email", "price_strategy", "price_campaigns", "service_type", "drive_folder", "signed_contract",
+    "recordings_path", "meta_ad_account",
 ]
 
 

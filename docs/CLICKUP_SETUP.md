@@ -29,25 +29,18 @@ relationship lists every work task pointing at it. Or open `משימות` and
 
 ---
 
-## ⚠️ Read this first: the workspace is on Free Forever
+## The plan: check it first
 
-The plan caps the whole workspace at **60 Custom Field uses**, where a "use" is
-counted **each time a value is set on a task's custom field**, accumulating across
-the workspace and never resetting.
+As of 2026-09-24 the connected workspace (`Drorbrk`) is on **Business Plus**, a paid
+plan: Custom Field uses are unlimited, and nothing below is capped.
 
-The CRM design below puts ~10 fields on each client. That is **~6 clients before
-ClickUp stops accepting custom field values** — and the automations write to those
-fields constantly (Drive folder, contract link, Morning status, secondary status).
-
-**This design needs a paid ClickUp tier.** Paid plans lift the cap to unlimited;
-check ClickUp's current pricing for the per-member cost, and note it bills per
-member, so adding the campaign managers adds seats. For a system that runs the
-business this is a small line item — but it is a real one, and it wasn't in the
-original proposal's budget.
-
-**If Dror will not upgrade,** see [Plan B](#plan-b--staying-on-free-forever) at the
-bottom. It works, but it's worse in specific ways, and you should read them before
-choosing it.
+The cap matters only for a workspace on **Free Forever**: 60 Custom Field *uses* for the
+whole workspace, where a use is **each value set on a task's custom field** (by hand or
+through the API; creating fields does not count), accumulating and never resetting
+([ClickUp: Custom Fields uses](https://help.clickup.com/hc/en-us/articles/10993484102167-Custom-Fields-uses)).
+The CRM sets ~10 values per client, and each status change sets one more, so Free runs
+out at about 6 clients. If a workspace is on Free, see
+[Plan B](#plan-b--staying-on-free-forever).
 
 Check the plan any time:
 
@@ -225,11 +218,15 @@ its text, then configure its Automation as **Call webhook**:
 
 | Button text | `?action=` | Does |
 |---|---|---|
-| `שלח הצעת מחיר` | `send_quote` | Sends the quote with a signature link |
+| `שלח הצעת מחיר` (or `שלח חוזה`, which the list has) | `send_quote` | Sends the quote with a signature link (the dashboard's contract page can too) |
 | `שלח שאלון` | `send_questionnaire` | Emails the strategy-questionnaire link again (onboarding sends it first) |
 | `בנה דוח רשתות` | `social_prep` | Builds the social-media prep report |
 | `בנה אסטרטגיה` | `strategy_bot` | Builds the full strategy into Drive |
 | `בנה דוח קמפיין` | `campaign_summary` | Builds the monthly campaign report |
+
+The quickest way to add one: open the automation of the existing `שלח חוזה` button,
+note its URL and header, and create the new button's automation the same way,
+changing only `?action=`. `check_clickup_crm` then lists which buttons exist.
 
 Each press comments its result back on the task — `✅ נשלחה הצעת מחיר ללקוח`, or the
 error if it failed. Dror pressed a button; he shouldn't have to wonder.

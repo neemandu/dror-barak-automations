@@ -67,7 +67,7 @@ def plan_report(token: str) -> bool:
             print("       uses accumulate across the workspace and never reset.")
             print("       The CRM puts ~10 fields on a client -> ~6 clients, total.")
             print("       The automations then cannot write Drive links, contract")
-            print("       links or Morning status at all.")
+            print("       links or statuses at all.")
             print("       -> Upgrade, or use Plan B in docs/CLICKUP_SETUP.md.")
         else:
             print(f"{OK}paid plan - Custom Field uses are unlimited.")
@@ -99,6 +99,43 @@ def discover(token: str) -> None:
                 print(f"    list {lst['id']}: {lst['name']} "
                       f"({lst.get('task_count')} tasks)   <- CLICKUP_LIST_ID")
     print("\nPut the id of the clients list in .env as CLICKUP_LIST_ID.")
+
+
+_WRITES_SKIPPED = "automations writing it will report it as skipped"
+#: What a missing optional field means, where that is not just "skipped".
+MISSING_MEANS = {
+    "price_strategy": "Currency. Without both price fields, the contract prices strategy alone, from the monthly price",
+    "price_campaigns": "Currency. Without it, a contract never carries a campaigns line",
+    "service_type": "shown on the client card and given to the strategy and the campaign report",
+}
+
+#: Other names a button may carry for the same action (the text on it is Dror's).
+BUTTON_ALIASES = {"send_quote": ["שלח חוזה", "שליחת חוזה", "הצעת מחיר"],
+                  "social_prep": ["דוח רשתות"], "strategy_bot": ["אסטרטגיה"],
+                  "campaign_summary": ["דוח קמפיין"], "send_questionnaire": ["שאלון"]}
+
+
+def buttons_report(fields: list[dict[str, Any]]) -> set[str]:
+    """The Button fields that run the automations, by their text. Returns the names found.
+
+    Optional: the dashboard sends contracts too. The API cannot read which webhook a
+    button's Automation calls, so a present button is proven by pressing it once
+    (it comments its result on the task)."""
+    from ..lib.actions import ACTIONS
+
+    buttons = [f for f in fields if str(f.get("type")) == "button"]
+    found: set[str] = set()
+    print("\nbuttons (Button fields; each runs an Automation that calls ?action=<key>):")
+    for key, action in ACTIONS.items():
+        names = [crm_fields.normalize(n) for n in [action.label, *BUTTON_ALIASES.get(key, [])]]
+        match = next((b for b in buttons if any(n in crm_fields.normalize(str(b.get("name"))) for n in names)), None)
+        if match:
+            found.add(str(match["name"]))
+            print(f"{OK}{key:18} -> {match['name']!r}")
+        else:
+            print(f"{MISS}{key:18} -> no button. Add one named {action.label!r} "
+                  f"(docs/CLICKUP_SETUP.md, Step 2b)")
+    return found
 
 
 def check(list_id: str, token: str) -> bool:
@@ -167,8 +204,7 @@ def check(list_id: str, token: str) -> bool:
     for canonical in OPTIONAL_FIELDS:
         field = resolved.get(canonical)
         if not field:
-            print(f"{MISS}{canonical:18} -> not set up "
-                  f"(automations writing it will report it as skipped)")
+            print(f"{MISS}{canonical:18} -> not set up ({MISSING_MEANS.get(canonical, _WRITES_SKIPPED)})")
             continue
         print(f"{OK}{canonical:18} -> {field['name']!r} ({field['type']})")
         if str(field.get("type")) == "attachment" and not config.get("CLICKUP_TEAM_ID"):
@@ -199,7 +235,10 @@ def check(list_id: str, token: str) -> bool:
                       else f"{MISS}{canonical:20} -> no matching option. Name it one of: "
                            f"{crm_fields.SUB_STATUS_ALIASES[canonical][:2]}")
 
-    unknown = [f["name"] for f in fields if not crm_fields.canonical_for(f.get("name", ""))]
+    found_buttons = buttons_report(fields)
+
+    unknown = [f["name"] for f in fields if not crm_fields.canonical_for(f.get("name", ""))
+               and f.get("name") not in found_buttons and f is not resolved.get("sub_status")]
     if unknown:
         print(f"\nDror's own fields, left alone: {unknown}")
 

@@ -503,7 +503,7 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     link = str(rec.get("link") or "")
     if not link:
         folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=False)
-        link = pdf.upload_pdf(pdf_bytes, f"הסכם חתום - {name}.pdf", folder["id"]).get("webViewLink", "")
+        link = pdf.upload_pdf(pdf_bytes, f"הסכם חתום - {name}.pdf", _contracts_folder(folder["id"])).get("webViewLink", "")
         contract_store.update_signed(client_id, link=link)
 
     # `חוזה חתום` is an Attachment field, so the PDF itself lands on the task. ClickUp
@@ -529,6 +529,19 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
                                  link=link, copy_sent_to=copy_to, error="")
     log.info("signed", extra={"client_id": client_id, "link": link, "sha256": audit["contract_sha256"]})
     return {"link": link, "attached": bool(attached), "copy_sent_to": copy_to}
+
+
+def _contracts_folder(folder_id: str) -> str:
+    """The client's `חוזים` subfolder (made here if onboarding has not run yet: signing
+    comes first); the folder itself if Drive will not say."""
+    try:
+        from .lib.clients.google import GoogleClient
+
+        subs = client_folder.ensure_subfolders(GoogleClient(), folder_id)
+        return str((subs.get("חוזים") or {}).get("id") or folder_id)
+    except Exception as exc:  # noqa: BLE001 - the root is a fine place for a contract; no place is not
+        log.warning("contracts_subfolder_unavailable", extra={"error": str(exc)})
+        return folder_id
 
 
 def refile_unfiled(*, dry_run: bool = False, older_than_s: int = 15 * 60) -> list[str]:

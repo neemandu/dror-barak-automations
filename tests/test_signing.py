@@ -307,7 +307,9 @@ def _filing_fakes(monkeypatch, calls, *, chromium_fails=False):
     monkeypatch.setattr(pdf_chromium, "render", render)
     monkeypatch.setattr(pdf, "html_to_pdf", lambda doc, name="": calls.append("drive-pdf") or b"%PDF-drive")
     monkeypatch.setattr(client_folder, "ensure", lambda crm, c, dry_run=False: {"id": "folder1"})
-    monkeypatch.setattr(pdf, "upload_pdf", lambda b, name, parent: calls.append(("upload", name)) or
+    monkeypatch.setattr(client_folder, "ensure_subfolders", lambda google, fid, dry_run=False:
+                        {"חוזים": {"id": "contracts-sub"}, "אסטרטגיה": {"id": "strategy-sub"}})
+    monkeypatch.setattr(pdf, "upload_pdf", lambda b, name, parent: calls.append(("upload", name, parent)) or
                         {"webViewLink": "https://drive/x"})
     monkeypatch.setattr(emails, "send_template", lambda name, to, **kw: calls.append(("mail", name, to)))
     monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
@@ -324,6 +326,7 @@ def test_filing_stores_attaches_advances_and_sends_both_copies(monkeypatch):
     assert out["link"] == "https://drive/x" and out["copy_sent_to"] == "a@b.co"
     upload = next(c for c in calls if isinstance(c, tuple) and c[0] == "upload")
     assert upload[1] == "הסכם חתום - מכללת דוגמה.pdf"
+    assert upload[2] == "contracts-sub", "the signed contract goes in the client's חוזים folder"
     assert calls.index("chromium") < calls.index(upload)
     # `חתם` starts onboarding, so it moves only after the PDF is stored.
     assert calls.index(("status", {"sub_status": "signed"})) > calls.index("attach")
