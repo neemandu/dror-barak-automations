@@ -24,8 +24,10 @@ Two engines, one function:
 
 Both print with backgrounds, the CSS page size, and zero margins.
 
-The contract stays on the Drive path: it is mostly text, needs no browser, and
-keeping it there avoids making the signing flow depend on Chromium.
+The signed contract prints here too (:func:`src.sign_page.file_contract`), so the PDF
+is the document the client read. It prints in a background task after the client
+has already been answered, and falls back to Drive's converter if Chromium fails,
+so signing itself never depends on the browser.
 """
 
 from __future__ import annotations

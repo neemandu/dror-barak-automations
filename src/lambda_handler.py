@@ -349,6 +349,13 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
                            dry_run=bool(event.get("dry_run")))
         return {"ok": True, "task": event["task"], "result": result if isinstance(result, dict) else None}
 
+    if isinstance(event, dict) and event.get("check") == "contract_pdf":
+        # Proves this function prints a signed contract (Chromium layer, Heebo,
+        # the page footer) on sample details, touching nothing: {"check": "contract_pdf"}.
+        from . import sign_page
+
+        return sign_page.self_check()
+
     if CLAUDE_TASK_KEY in event:
         # Our own async invoke, not API Gateway: no path, no headers, no signature.
         # Only this function's role can invoke it, so there is nothing to verify.
@@ -437,8 +444,8 @@ def _sign_route(
     except Exception as exc:  # noqa: BLE001
         log.error("sign_failed", extra={"error": str(exc)})
         return _html(500, sign_page.error_page(
-            "אירעה שגיאה בשמירת ההסכם. לא בוצע חיוב ולא נשמרה חתימה - נסה/י שוב, "
-            "או פנה/י לדרור."
+            "אירעה שגיאה בשמירת ההסכם, והחתימה לא נשמרה. אפשר לנסות שוב בעוד רגע, "
+            "או לפנות לדרור."
         ))
 
 

@@ -128,7 +128,8 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
             return _redirect(f"{base}/login")
         return _html(200, dashboard._dashboard_page(dashboard._load(q), q, base))
 
-    if (route in ("/clients", "/documents") or route.startswith("/clients/")) and method == "GET":
+    if (route in ("/clients", "/documents", "/contracts") or route.startswith(("/clients/", "/contracts/"))) \
+            and method == "GET":
         if not valid_session(_cookie_value(event)):
             return _redirect(f"{base}/login")
         page = dashboard.client_screens(route, base, dry_run=config.get_bool("WEBHOOK_DRY_RUN"))

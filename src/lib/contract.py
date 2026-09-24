@@ -23,6 +23,8 @@ from . import config
 
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# A block shown only when its flag field is set: {{#has_campaigns}} ... {{/has_campaigns}}.
+_SECTION = re.compile(r"\{\{#(\w+)\}\}(.*?)\{\{/\1\}\}", re.DOTALL)
 
 # Dror's branding, lifted from his original document. Kept as real .png files
 # rather than pasted into the template as base64: git can diff and store binaries
@@ -34,7 +36,6 @@ _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # signed PDF must not depend on a URL that could rot.
 ASSET_FIELDS = {
     "asset_logo": "logo_header.png",
-    "asset_footer": "footer.png",
 }
 
 # Filled by the signing page, not from the CRM.
@@ -110,6 +111,11 @@ def placeholders_in(text: str) -> set[str]:
     return set(_PLACEHOLDER.findall(text))
 
 
+def _sections(text: str, fields: dict[str, str]) -> str:
+    """Keep a ``{{#flag}}`` block when ``fields[flag]`` is set, drop it otherwise."""
+    return _SECTION.sub(lambda m: m.group(2) if str(fields.get(m.group(1)) or "").strip() else "", text)
+
+
 def assets() -> dict[str, str]:
     """Dror's branding as data URIs, so the document stands alone."""
     import base64
@@ -139,6 +145,31 @@ def _shekels(value: Any) -> str:
     return f"{int(round(number)):,}"
 
 
+def _number(value: Any) -> float:
+    try:
+        return float(str(value if value not in (None, "") else 0).replace(",", "").strip())
+    except ValueError as exc:
+        raise ContractError(f"price {value!r} is not a number") from exc
+
+
+def prices(client: dict[str, Any]) -> dict[str, Any]:
+    """Which services the contract prices, and at what.
+
+    ClickUp can hold a price per service (``מחיר אסטרטגיה`` / ``מחיר קמפיינים``).
+    Without them there is only the one monthly price, and it goes to strategy,
+    the service every client takes; ``split`` says which case this is, so the
+    dashboard can say so before Dror sends it. A service with no price is not
+    offered: its lines leave the contract rather than read "0 ₪".
+    """
+    strategy, campaigns = client.get("price_strategy"), client.get("price_campaigns")
+    split = strategy not in (None, "") or campaigns not in (None, "")
+    if not split:
+        strategy, campaigns = client.get("monthly_price"), 0
+    s, c = _number(strategy), _number(campaigns)
+    return {"strategy": s, "campaigns": c, "total": s + c, "split": split,
+            "has_strategy": s > 0 or c <= 0, "has_campaigns": c > 0}
+
+
 def fields_from_client(
     client: dict[str, Any],
     *,
@@ -148,28 +179,16 @@ def fields_from_client(
 ) -> dict[str, str]:
     """Build the template's values from a CRM client record.
 
-    ``price_strategy`` / ``price_campaigns`` override the CRM's single
-    ``monthly_price``. The contract bills two line items separately, and ClickUp
-    currently holds one number — see docs/CLICKUP_SETUP.md.
+    ``price_strategy`` / ``price_campaigns`` override what the client record says
+    (see :func:`prices`).
     """
-    strategy = price_strategy if price_strategy is not None else client.get("price_strategy")
-    campaigns = price_campaigns if price_campaigns is not None else client.get("price_campaigns")
-
-    if strategy is None and campaigns is None:
-        # Fall back to the single CRM price rather than invent a split. Which line
-        # it belongs to is a real question, so it goes to strategy and campaigns
-        # reads zero — visible and wrong-looking rather than silently halved.
-        strategy = client.get("monthly_price")
-        campaigns = 0
-
-    strategy = strategy if strategy is not None else 0
-    campaigns = campaigns if campaigns is not None else 0
-
-    try:
-        total = float(str(strategy).replace(",", "")) + float(str(campaigns).replace(",", ""))
-    except ValueError as exc:
-        raise ContractError(f"cannot total {strategy!r} + {campaigns!r}") from exc
-
+    record = dict(client)
+    if price_strategy is not None:
+        record["price_strategy"] = price_strategy
+    if price_campaigns is not None:
+        record["price_campaigns"] = price_campaigns
+    p = prices(record)
+    both = p["has_strategy"] and p["has_campaigns"]
     return {
         **provider_fields(),
         "client_name": str(client.get("name") or ""),
@@ -178,9 +197,17 @@ def fields_from_client(
         "client_phone": str(client.get("phone") or ""),
         "client_email": str(client.get("email") or ""),
         "sign_date": sign_date or date.today().strftime("%d / %m / %Y"),
-        "price_strategy": _shekels(strategy),
-        "price_campaigns": _shekels(campaigns),
-        "price_total": _shekels(total),
+        "price_strategy": _shekels(p["strategy"]),
+        "price_campaigns": _shekels(p["campaigns"]),
+        "price_total": _shekels(p["total"]),
+        # Which price lines the contract shows, and their clause numbers.
+        "has_strategy": "1" if p["has_strategy"] else "",
+        "has_campaigns": "1" if p["has_campaigns"] else "",
+        "has_both": "1" if both else "",
+        "n_strategy": "10.1",
+        "n_campaigns": "10.2" if both else "10.1",
+        "n_total": "10.3",
+        "n_payment": "10.4" if both else "10.2",
     }
 
 
@@ -205,7 +232,7 @@ def render(
     is inserted verbatim; everything else is HTML-escaped, because a client name
     is data and must never be able to alter the contract's own text.
     """
-    text = template if template is not None else load_template()
+    text = _sections(template if template is not None else load_template(), fields)
     signatures = signatures or {}
     raw = {**assets(), **signatures}
 
@@ -231,3 +258,99 @@ def render(
     if leftover:  # belt and braces: nothing template-shaped may survive
         raise ContractError(f"placeholders survived rendering: {sorted(leftover)}")
     return out
+
+
+# ------------------------------------------------------------------ styles
+
+# The contract's own look, shared by the signing page (screen) and the signed PDF
+# (print), so the PDF is the document the client read, not a plainer cousin of it.
+# Literal colours rather than the design system's tokens: the PDF has no tokens.
+CONTRACT_CSS = """
+.contract { color: #1d2939; }
+.contract .brand-banner { border-radius: 12px; margin: 0 0 28px; padding: 26px 30px; display: flex; align-items: center;
+  background: linear-gradient(100deg, #00e5d0 0%, #00a8f0 45%, #2f7de1 100%);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.contract .brand-logo { max-width: 240px; height: auto; display: block; }
+.contract h1 { font-size: 26px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 6px; }
+.contract h2 { font-size: 17px; font-weight: 700; margin: 30px 0 8px; }
+.contract h3 { font-size: 15px; font-weight: 700; margin: 18px 0 6px; }
+.contract p, .contract li { font-size: 14.5px; line-height: 1.85; }
+.contract hr { border: 0; border-top: 1px solid #e5e8ed; margin: 26px 0; }
+.contract .lead { color: #667085; font-size: 15.5px; }
+.contract .note { color: #667085; font-size: 13px; }
+.contract .filled { background: #fff4d6; padding: 1px 5px; border-radius: 5px; font-weight: 600; }
+.contract bdi[dir=ltr] { unicode-bidi: isolate; }
+.contract .parties { display: flex; gap: 32px; flex-wrap: wrap; }
+.contract .party { flex: 1; min-width: 220px; }
+.contract table.annex { width: 100%; border-collapse: separate; border-spacing: 0; margin: 14px 0; font-size: 13.5px;
+  border: 1px solid #e5e8ed; border-radius: 10px; overflow: hidden; }
+.contract table.annex th, .contract table.annex td { padding: 10px 12px; text-align: right; border-bottom: 1px solid #eef0f3; }
+.contract table.annex th { background: #f9fafb; font-weight: 600; color: #344054; }
+.contract table.annex tr:last-child td { border-bottom: 0; }
+.contract table.annex .total { font-weight: 700; background: #f9fafb; }
+.contract table.annex .num { white-space: nowrap; }
+.contract .signatures { display: flex; gap: 32px; flex-wrap: wrap; }
+.contract .sig { flex: 1; min-width: 240px; }
+.contract .sig-box { display: flex; align-items: flex-end; border-bottom: 1.5px solid #1d2939; height: 74px; margin: 6px 0; }
+.contract .sig-box img { display: block; max-height: 70px; max-width: 100%; }
+"""
+
+# Print only: A4 with room for the footer, the text a touch denser than on screen,
+# and nothing split that reads badly across a page break.
+_PRINT_CSS = """
+@page { size: A4; margin: 15mm 16mm 19mm;
+  @bottom-center { content: "{{footer}}   |   עמוד " counter(page) " מתוך " counter(pages);
+    direction: rtl; font-family: Heebo, 'DejaVu Sans', Arial, sans-serif; font-size: 8pt; color: #667085;
+    border-top: 0.5pt solid #e5e8ed; padding-top: 2.5mm; } }
+html, body { margin: 0; padding: 0; background: #fff; }
+body { font-family: Heebo, 'DejaVu Sans', Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.contract p, .contract li { font-size: 10.5pt; line-height: 1.7; }
+.contract h1 { font-size: 20pt; }
+.contract h2 { font-size: 13pt; margin: 20px 0 6px; break-after: avoid-page; }
+.contract h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid-page; }
+.contract hr { margin: 18px 0; }
+.contract table.annex { font-size: 9.5pt; }
+.contract p, .contract li, .contract table.annex tr, .contract .signatures, .contract .parties { break-inside: avoid; }
+.contract .agreement-start { break-before: page; }
+.contract hr:has(+ .agreement-start) { display: none; }
+.audit { break-inside: avoid; margin-top: 26px; padding: 14px 18px; border: 1px solid #e5e8ed; border-radius: 10px;
+  background: #f9fafb; color: #344054; font-size: 8.5pt; line-height: 1.6; }
+.audit h2 { margin: 0 0 8px; font-size: 10.5pt; color: #1d2939; }
+.audit table { border-collapse: collapse; width: 100%; }
+.audit th { text-align: right; font-weight: 600; padding: 2px 0 2px 14px; white-space: nowrap; vertical-align: top; width: 1%; }
+.audit td { padding: 2px 0; }
+.audit code { font-family: 'DejaVu Sans Mono', Menlo, monospace; font-size: 7.5pt; word-break: break-all; }
+.audit p { margin: 8px 0 0; color: #667085; }
+"""
+
+
+def _font_face() -> str:
+    """Heebo, embedded: the signing page's typeface, in a PDF that fetches nothing."""
+    import base64
+
+    path = template_path().parent / "assets" / "fonts" / "Heebo-Variable.ttf"
+    if not path.exists():
+        return ""
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return (f"@font-face {{ font-family: 'Heebo'; font-weight: 100 900; "
+            f"src: url(data:font/ttf;base64,{data}) format('truetype'); }}")
+
+
+def print_document(body: str, audit_html: str, *, client_name: str, fingerprint: str) -> str:
+    """The signed contract as a standalone page for the PDF printer.
+
+    ``body`` is exactly what the client saw and signed (its hash is the
+    fingerprint); the audit block follows it, and every page's footer carries
+    the client and the fingerprint's start, so a page cannot be swapped in from
+    another document unnoticed.
+    """
+    footer = "   |   ".join(x for x in (
+        config.get("PROVIDER_NAME") or "דרור ברק", f"הסכם התקשרות עם {client_name}",
+        f"טביעת אצבע {fingerprint[:12]}") if x)
+    footer = footer.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
+        f"<title>{html.escape(f'הסכם התקשרות - {client_name}')}</title>"
+        f"<style>{_font_face()}{CONTRACT_CSS}{_PRINT_CSS.replace('{{footer}}', footer)}</style>"
+        f"</head><body>{body}{audit_html}</body></html>"
+    )

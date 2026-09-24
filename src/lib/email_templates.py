@@ -91,6 +91,19 @@ TEMPLATES: dict[str, EmailTemplate] = {
         ),
         cta="לחתימה על ההסכם",
     ),
+    # The client's own signed copy, with the PDF attached. The signing page
+    # promises it; a Drive link would be to Dror's Drive, which they cannot open.
+    "signed_copy": EmailTemplate(
+        subject="ההסכם החתום שלך",
+        body=(
+            "היי {client_name},\n"
+            "\n"
+            "תודה, ההסכם נחתם ואנחנו יוצאים לדרך. מצרף כאן עותק חתום לשמירה אצלך.\n"
+            "\n"
+            "בקרוב יגיע ממני שאלון קצר, כדי שנוכל להתחיל לבנות את האסטרטגיה.\n"
+            "יש שאלות? אפשר פשוט להשיב למייל הזה."
+        ),
+    ),
     # Sent to Dror the moment a client signs: the most important event in the
     # funnel, which he otherwise learns only from a task comment or the next day's
     # digest. The signed PDF is attached.

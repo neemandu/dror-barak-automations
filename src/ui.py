@@ -988,7 +988,14 @@ JS = r"""
     document.querySelectorAll('[data-nav]').forEach(function (a) {
       var on = a.pathname === path; a.classList.toggle('is-active', on);
       if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    revealTab();
   }
+  // On a phone the top menu scrolls sideways; keep the current page's tab in view.
+  function revealTab() {
+    var t = document.querySelector('.tabs .tab[aria-current="page"]');
+    if (t && t.parentNode.scrollWidth > t.parentNode.clientWidth) t.scrollIntoView({block: 'nearest', inline: 'center'});
+  }
+  requestAnimationFrame(revealTab);
   function skeleton(link, kind) {
     kind = kind || (link ? link.getAttribute('data-skeleton') : 'list');
     function line(w, h, r) { return '<div class="skeleton" style="width:' + w + ';height:' + (h || 12) + 'px' + (r ? ';border-radius:' + r : '') + '"></div>'; }
@@ -1002,6 +1009,11 @@ JS = r"""
         return '<div class="sk-item"><div class="skeleton sk-sq" style="width:36px;height:36px"></div><div class="sk-col">' + line((40 + k * 5) + '%', 13) +
           line('30%', 10) + '</div>' + line('70px', 26, '8px') + '</div>'; }) + '</div><div class="card hide-sm" style="width:320px;padding:18px;display:grid;gap:12px">' +
       rep(5, function () { return '<div class="sk-row" style="justify-content:space-between">' + line('35%') + line('30%') + '</div>'; }) + '</div></div>';
+    if (kind === 'doc') return '<div style="margin:6px 0 18px">' + line('120px', 12) + '</div>' + head +
+      '<div class="sk-row" style="align-items:flex-start;gap:16px"><div class="card" style="flex:1;padding:36px 40px;display:grid;gap:12px">' +
+      '<div class="skeleton" style="height:96px;border-radius:12px"></div>' + line('55%', 22, '8px') + rep(9, function (k) {
+        return line((96 - k % 3 * 14) + '%', 11); }) + '</div><div class="card hide-sm" style="width:320px;padding:18px;display:grid;gap:12px">' +
+      rep(4, function () { return '<div class="sk-row" style="justify-content:space-between">' + line('45%') + line('20%') + '</div>'; }) + '</div></div>';
     if (kind === 'cards') return head + '<div class="sk-grid">' + rep(3, function () {
       return '<div class="card sk-card"><div class="sk-row"><div class="skeleton sk-sq"></div><div class="sk-col">' + line('70%', 14) +
         line('45%') + '</div></div>' + line('100%', 6, '99px') + '<div class="sk-row">' + line('84px', 30, '8px') + line('30px', 30, '8px') +
@@ -1021,7 +1033,7 @@ JS = r"""
     if (push) history.pushState({spa: 1}, '', u.href);
     var slow = setTimeout(function () {
       if (mine !== seq) return;
-      main.className = 'page skeleton-page'; main.innerHTML = skeleton(link, sub ? 'card' : '');
+      main.className = 'page skeleton-page'; main.innerHTML = skeleton(link, sub ? link.getAttribute('data-sub-skeleton') || 'card' : '');
       var t = main.querySelector('.page-title'); if (t) t.textContent = link ? link.textContent.trim() : '';
       window.scrollTo(0, 0); UI.progress.start();
     }, 60);
@@ -1135,22 +1147,26 @@ NAV = (("dashboard", "/dashboard", "פעילות", "activity"),
        ("leads", "/leads", "לידים", "user-plus"),
        ("clients", "/clients", "לקוחות", "users"),
        ("documents", "/documents", "מסמכים", "file"),
+       ("contracts", "/contracts", "חוזים", "pen"),
        ("questionnaires", "/admin/questionnaires", "שאלונים", "clipboard"),
        ("responses", "/admin/responses", "תשובות", "inbox"))
 
 
 #: The menu's groups, and the skeleton each screen shows while it loads.
-NAV_GROUPS = (("מעקב", ("dashboard", "leads")), ("לקוחות", ("clients", "documents")),
+NAV_GROUPS = (("מעקב", ("dashboard", "leads")), ("לקוחות", ("clients", "documents", "contracts")),
               ("שאלונים", ("questionnaires", "responses")))
 SKELETONS = {"questionnaires": "cards"}
 #: Pages under a menu item (a client's card under לקוחות): the item stays marked,
 #: and they switch instantly too, with their own skeleton.
-NAV_PREFIX = {"clients": "/clients/"}
+NAV_PREFIX = {"clients": "/clients/", "contracts": "/contracts/"}
+#: The skeleton of a page under a menu item: a client's card, a contract (a sheet of paper).
+SUB_SKELETONS = {"clients": "card", "contracts": "doc"}
 
 
 def _nav_attrs(base: str, key: str, path: str, active: str) -> str:
     current = ' aria-current="page"' if key == active else ""
-    prefix = f' data-nav-prefix="{base}{NAV_PREFIX[key]}"' if key in NAV_PREFIX else ""
+    prefix = (f' data-nav-prefix="{base}{NAV_PREFIX[key]}" data-sub-skeleton="{SUB_SKELETONS.get(key, "card")}"'
+              if key in NAV_PREFIX else "")
     return f'href="{base}{path}" data-nav data-skeleton="{SKELETONS.get(key, "list")}"{prefix}{current}'
 
 

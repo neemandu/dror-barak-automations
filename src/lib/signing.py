@@ -404,7 +404,19 @@ def audit_record(
     }
 
 
-def audit_html(record: dict[str, Any]) -> str:
+def local_time(iso: str, *, seconds: bool = False) -> str:
+    """``2026-09-24T09:36:22Z`` as ``24.09.2026, 12:36`` in Israel time."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    try:
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Jerusalem"))
+    except ValueError:
+        return str(iso)
+    return dt.strftime("%d.%m.%Y, %H:%M:%S" if seconds else "%d.%m.%Y, %H:%M")
+
+
+def audit_html(record: dict[str, Any], *, client_name: str = "") -> str:
     """The audit trail, rendered to sit inside the signed PDF itself.
 
     Kept in the document rather than only in a log: the PDF is what gets emailed,
@@ -416,17 +428,26 @@ def audit_html(record: dict[str, Any]) -> str:
     def esc(v: Any) -> str:
         return _html.escape(str(v))
 
+    def ltr(v: Any) -> str:  # ids, times, addresses: left to right inside the Hebrew
+        return f'<bdi dir="ltr">{esc(v)}</bdi>'
+
+    signed = str(record.get("signed_at") or "")
+    when = local_time(signed, seconds=True)
+    cid = ltr(record["client_id"])
+    rows = [
+        ("הלקוח", f"{esc(client_name)} (מזהה {cid})" if client_name else cid),
+        ("מועד החתימה", f"{ltr(when)} (שעון ישראל)" if when != signed else ltr(signed)),
+        ("מועד מדויק (UTC)", ltr(signed)),
+        ("כתובת IP", ltr(record["ip"]) if record.get("ip") else "לא נרשמה"),
+        ("דפדפן", ltr(record["user_agent"]) if record.get("user_agent") else "לא נרשם"),
+    ]
+    cells = "".join(f"<tr><th>{esc(k)}</th><td>{v}</td></tr>" for k, v in rows)
     return f"""
-<hr>
-<div class="audit" dir="rtl" style="font-size:11px;color:#555;line-height:1.6">
-  <p><strong>אישור חתימה אלקטרונית</strong></p>
-  <p>
-    מזהה לקוח: {esc(record['client_id'])}<br>
-    נחתם בתאריך (UTC): {esc(record['signed_at'])}<br>
-    כתובת IP של החותם: {esc(record['ip'] or 'לא נרשמה')}<br>
-    דפדפן: {esc(record['user_agent'] or 'לא נרשם')}<br>
-    טביעת אצבע של המסמך (SHA-256): <code>{esc(record['contract_sha256'])}</code>
-  </p>
-  <p>טביעת האצבע מזהה באופן חד־ערכי את נוסח ההסכם שהוצג לחותם במעמד החתימה.</p>
-</div>
+<section class="audit" dir="rtl">
+  <h2>אישור חתימה אלקטרונית</h2>
+  <table>{cells}
+    <tr><th>טביעת אצבע (SHA-256)</th><td><code dir="ltr">{esc(record['contract_sha256'])}</code></td></tr>
+  </table>
+  <p>טביעת האצבע מזהה באופן חד־ערכי את נוסח ההסכם שהוצג לחותם במעמד החתימה, כולל הפרטים והחתימה.</p>
+</section>
 """

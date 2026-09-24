@@ -28,12 +28,14 @@ log = get_logger("tasks", "dispatch")
 
 def _registry() -> dict[str, tuple[str, Callable[..., Any]]]:
     """name -> (Hebrew label for failure messages, callable). Imported lazily."""
+    from .. import sign_page
     from ..automations import campaign_summary, social_prep, strategy_bot
 
     return {
         "social_prep": ("דוח הכנה לרשתות", social_prep.run),
         "strategy_bot": ("בניית אסטרטגיה", strategy_bot.run),
         "campaign_summary": ("דוח קמפיין", campaign_summary.run),
+        "file_contract": ("תיוק ההסכם החתום", sign_page.file_contract),
     }
 
 

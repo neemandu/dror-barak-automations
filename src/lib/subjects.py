@@ -151,6 +151,8 @@ _AUTOMATION_RULES: dict[str, str] = {
     "clickup_to_claude": "clickup",
     "send_questionnaire": "whatsapp",
     "send_quote": "quotes",
+    "sign_contract": "quotes",
+    "file_contract": "quotes",
     "onboarding": "drive",
     # Both chase jobs log a bare `reminder_sent`, which no action rule matches.
     "sign_reminders": "quotes",

@@ -55,6 +55,10 @@ OPTIONAL_FIELDS = [
 ]
 
 
+def _or_none(value: Any) -> Any:
+    return value if value not in ("", None) else None
+
+
 def _fixture_client(client_id: str) -> dict[str, Any]:
     """A representative client used for dry-run/tests."""
     return {
@@ -188,6 +192,8 @@ class CrmClient(BaseClient):
             "status": crm_fields.canonical_status(status_raw) or status_raw,
             "sub_status": crm_fields.canonical_sub_status(sub_raw) or sub_raw,
             "monthly_price": price if price != "" else None,
+            "price_strategy": _or_none(field_value("price_strategy")),
+            "price_campaigns": _or_none(field_value("price_campaigns")),
             "service_type": str(field_value("service_type") or ""),
             # Drive is one field in ClickUp; automations ask for either a path or
             # a URL, so serve both from it and let the caller pick.

@@ -45,6 +45,14 @@ def reminders_handler(event: dict[str, Any] | None = None, context: Any = None) 
 
             Automation("reminders").log_action(
                 f"{key}_job_failed", "error", detail=str(exc))
+    # A signature whose background filing never finished (Drive down, a crash):
+    # the signature is stored, so file it now rather than leave it unfiled.
+    try:
+        from . import sign_page
+
+        out["refiled_contracts"] = sign_page.refile_unfiled(dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001
+        out["refiled_contracts"] = {"error": str(exc)}
     return out
 
 

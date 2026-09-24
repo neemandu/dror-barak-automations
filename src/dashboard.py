@@ -472,10 +472,19 @@ def _load_leads() -> list[dict[str, Any]]:
 
 
 def client_screens(path: str, base: str, *, dry_run: bool = False) -> Optional[bytes]:
-    """/clients, /clients/<id>, /documents (see :mod:`src.clients_pages`); None when not found."""
+    """/clients, /clients/<id>, /documents (see :mod:`src.clients_pages`), /contracts and
+    /contracts/<id> (:mod:`src.contracts_pages`); None when not found."""
     from urllib.parse import unquote
 
+    from . import contracts_pages
+
     entries = _load_leads()
+    if path == "/contracts":
+        return contracts_pages.contracts_page(entries, base, dry_run=dry_run).encode("utf-8")
+    if path.startswith("/contracts/"):
+        client_id = unquote(path[len("/contracts/"):]).strip("/")
+        page = contracts_pages.contract_page(entries, base, client_id, dry_run=dry_run) if client_id else None
+        return page.encode("utf-8") if page else None
     if path == "/documents":
         return clients_pages.documents_page(entries, base, dry_run=dry_run).encode("utf-8")
     if path == "/clients":
@@ -577,7 +586,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._redirect("/login")
             q = {k: v[0] for k, v in parse_qs(route.query).items() if v and v[0]}
             return self._send(200, _dashboard_page(_load(q), q))
-        if route.path in ("/clients", "/documents") or route.path.startswith("/clients/"):
+        if route.path in ("/clients", "/documents", "/contracts") or route.path.startswith(("/clients/", "/contracts/")):
             if not self._authed():
                 return self._redirect("/login")
             page = client_screens(route.path, "", dry_run=DRY_RUN)

@@ -106,7 +106,7 @@ selects clients by it; a client left on `ליד` silently never gets a report.
 | Field name | Type | Used by |
 |---|---|---|
 | `טלפון` | Phone | Google Contacts, every WhatsApp message |
-| `מחיר חודשי` | Number | The quote / contract (`send_quote` refuses without it) |
+| `מחיר חודשי` | Number | The quote / contract (`send_quote` refuses without any price) |
 | `סטטוס משני` | **Dropdown** | Triggers onboarding (on `חתם`) |
 
 `סטטוס משני` options, exactly these five:
@@ -126,6 +126,8 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 | Field name | Type | Used by |
 |---|---|---|
 | `מייל` / `אימייל` | Email | The quote, the strategy questionnaire and every reminder — in practice required |
+| `מחיר אסטרטגיה` | Currency | The contract's strategy line (clause 10.1 and the annex) |
+| `מחיר קמפיינים` | Currency | The contract's campaigns line; with both, a combined total too |
 | `סוג שירות` | Text | Strategy bot, campaign report |
 | `תיקיית Drive` / `נתיב לגוגל דרייב` | **URL** | Onboarding writes the client's folder here |
 | `חוזה חתום` | **URL** | The signed contract link |
@@ -133,6 +135,12 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 | `סטטוס Morning` | Text | Historical — Morning is out of scope; nothing writes it |
 | `מזהה Morning` / `מזהה מורנינג` | Text | Historical, same |
 | `חשבון מודעות Meta` | Text | The client's Meta ad account (`act_…`) for the monthly campaign report |
+
+> **`מחיר אסטרטגיה` / `מחיר קמפיינים`** price each service on its own line of the
+> contract. A service without a price is left out of the contract (no "0 ₪" line).
+> Without either field, `מחיר חודשי` is the strategy line alone. ClickUp's API cannot
+> create fields, so these two are added by hand; the dashboard's **חוזים** screen
+> says whether they were found.
 
 > **`חשבון מודעות Meta`** holds the ad account id, `act_` prefix or bare digits
 > (the code adds the prefix). A client without it is skipped from the monthly

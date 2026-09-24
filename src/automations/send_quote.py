@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..lib import contract, signing
+from ..lib import contract, contract_store, idempotency, signing
 from ..lib.clients.crm import SUB_QUOTE_SENT, CrmClient
 from ..lib.logging_setup import get_logger
 from .base import Automation, build_arg_parser, run_cli
@@ -41,7 +41,7 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     # A client who opens it and finds "סך של  ₪" has been made to look at a
     # broken document, and the price is Dror's to know, not theirs to fill in.
     fields = contract.fields_from_client(client)
-    if not str(fields.get("price_strategy") or "").strip("0, "):
+    if contract.prices(client)["total"] <= 0:
         auto.log_action("no_price", "error", client_id=client_id,
                         detail="מחיר חודשי is not set on the ClickUp task")
         raise ValueError(
@@ -60,6 +60,10 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     # them at 2 and 4 days. Signing clears this record.
     if not dry_run:
         signing.mark_pending(client_id)
+        # A new quote is a new contract: an earlier signature no longer answers for
+        # the link, and the one-signature guard opens for this one.
+        contract_store.supersede(client_id)
+        idempotency.release(idempotency.guard("signed_contract", client_id))
     crm.update_fields(client_id, sub_status=SUB_QUOTE_SENT)
     crm.append_automation_log(
         client_id,

@@ -318,6 +318,13 @@ Resources:
       # (strategy, social analysis with web research, a campaign report; see
       # src/lib/tasks.py) and a משימות task done by the Claude agent.
       Timeout: 900
+      # The signed contract is printed by headless Chromium, as the campaign report
+      # is (see CampaignReportFunction for the memory and /tmp notes), in the
+      # background filing task. Without the layer it falls back to Drive's converter.
+      Layers: !If [HasChromiumLayer, [!Ref ChromiumLayerArn], !Ref AWS::NoValue]
+      Environment:
+        Variables:
+          CHROMIUM_PACK_DIR: /opt/chromium
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
@@ -617,6 +624,19 @@ Resources:
           Properties:
             ApiId: !Ref DashboardApi
             Path: /clients/{id}
+            Method: GET
+        # Every client's contract, and one client's (a preview, or the signed document).
+        Contracts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /contracts
+            Method: GET
+        ContractPage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /contracts/{id}
             Method: GET
         Documents:
           Type: HttpApi

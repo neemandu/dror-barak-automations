@@ -36,6 +36,16 @@ ALIASES: dict[str, list[str]] = {
         # document, so an ex-VAT amount is the correct thing to send it.
         "מחיר חודשי ללא מעמ", 'מחיר חודשי ללא מע"מ', "מחיר ללא מעמ",
     ],
+    # The contract prices each service on its own line. Optional: without them the
+    # monthly price above is the strategy line (see contract.prices).
+    "price_strategy": [
+        "strategy price", "מחיר אסטרטגיה", "מחיר אסטרטגיה ללא מעמ", 'מחיר אסטרטגיה ללא מע"מ',
+        "מחיר ליווי", "מחיר ליווי ואסטרטגיה",
+    ],
+    "price_campaigns": [
+        "campaigns price", "campaign price", "מחיר קמפיינים", "מחיר קמפיינים ללא מעמ",
+        'מחיר קמפיינים ללא מע"מ', "מחיר ניהול קמפיינים",
+    ],
     "service_type": ["service type", "service", "סוג שירות"],
     "drive_folder": [
         "drive", "drive folder", "נתיב תיקיית drive", "תיקיית drive", "דרייב",
@@ -57,7 +67,7 @@ ALIASES: dict[str, list[str]] = {
     ],
 }
 
-NUMERIC_FIELDS = {"monthly_price"}
+NUMERIC_FIELDS = {"monthly_price", "price_strategy", "price_campaigns"}
 
 # ClickUp field types that hold a number. 'currency' is what a price field
 # naturally becomes in the UI, and it returns a plain number.

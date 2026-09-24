@@ -527,6 +527,8 @@ def client_page(entries: list[dict[str, Any]], base: str, client_id: str, *, dry
     active = status == crm_fields.STATUS_ACTIVE
     facts = (fact("סוג שירות", client.get("service_type"))
              + fact("מחיר חודשי", f"{price} ₪" if price not in (None, "") else "")
+             + fact("מחיר אסטרטגיה", f"{client['price_strategy']} ₪" if client.get("price_strategy") not in (None, "") else "")
+             + fact("מחיר קמפיינים", f"{client['price_campaigns']} ₪" if client.get("price_campaigns") not in (None, "") else "")
              + fact("מייל", email, missing="חסר" if active else "")
              + fact("טלפון", subjects.phone_display(phone))
              + fact("חשבון מודעות Meta", client.get("meta_ad_account"),
@@ -538,7 +540,9 @@ def client_page(entries: list[dict[str, Any]], base: str, client_id: str, *, dry
     details = (f'<section class="card reveal" style="--i:3"><div class="card-head"><h2 class="card-title">פרטים</h2></div>'
                f'<dl class="facts">{facts or "<div><dt>אין עדיין פרטים</dt><dd></dd></div>"}</dl></section>')
 
+    from .contracts_pages import CSS as CONTRACT_CSS, client_card_section
+
     body = (hero + _stepper(client, answered)
             + f'<div class="cc-grid"><div class="cc-main">{docs_card}{activity}</div>'
-              f'<aside class="cc-side">{questionnaire}{details}</aside></div>')
-    return ui.app_page(base, "clients", f"{name} · לקוחות", body, script=COPY_JS, css=CSS, spa=True)
+              f'<aside class="cc-side">{client_card_section(client, entries, base)}{questionnaire}{details}</aside></div>')
+    return ui.app_page(base, "clients", f"{name} · לקוחות", body, script=COPY_JS, css=CSS + CONTRACT_CSS, spa=True)

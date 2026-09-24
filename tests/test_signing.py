@@ -202,19 +202,170 @@ def test_the_page_asks_for_what_clickup_lacks():
         assert label in page
 
 
+FORM = {"client_business_id": ["514111111"], "client_address": ["הרצל 1"],
+        "client_email": ["a@b.co"], "client_phone": ["0501234567"]}
+
+
+def _form():
+    return {**FORM, "signature": [data_url(make_png())]}
+
+
 def test_signing_twice_files_one_contract(monkeypatch):
     from src import sign_page
 
     calls = []
-    monkeypatch.setattr(sign_page, "_finalise",
-                        lambda *a, **k: calls.append(1) or {"link": "x"})
+    monkeypatch.setattr(sign_page, "file_contract", lambda *a, **k: calls.append(1) or {"link": "x"})
     token = signing.make_token("c1")
-    form = {"client_business_id": ["514111111"], "client_address": ["הרצל 1"],
-            "client_email": ["a@b.co"], "client_phone": ["0501234567"],
-            "signature": [data_url(make_png())]}
-    sign_page.handle_post(token, form, dry_run=True)
-    sign_page.handle_post(token, form, dry_run=True)
+    sign_page.handle_post(token, _form(), dry_run=True)
+    sign_page.handle_post(token, _form(), dry_run=True)
     assert len(calls) == 1, "a double submit must not file two signed contracts"
+
+
+def test_signing_answers_at_once_and_promises_the_copy_by_email(monkeypatch):
+    from src import sign_page
+    from src.lib import contract_store
+
+    monkeypatch.setattr(sign_page, "file_contract", lambda *a, **k: {"queued": True})
+    page = sign_page.handle_post(signing.make_token("c1"), _form(), ip="1.2.3.4", dry_run=True)
+    assert "ההסכם נחתם בהצלחה" in page and "a@b.co" in page
+    rec = contract_store.get_signed("c1")
+    assert rec["status"] == contract_store.RECEIVED
+    assert rec["fields"]["client_business_id"] == "514111111"
+    # What is kept is exactly what was hashed: the document with the signature in it.
+    import hashlib
+    assert hashlib.sha256(rec["body"].encode()).hexdigest() == rec["audit"]["contract_sha256"]
+    assert 'alt="חתימת הלקוח"' in rec["body"] and rec["audit"]["ip"] == "1.2.3.4"
+    # Opening the link again does not offer a second signature.
+    again = sign_page.handle_get(signing.make_token("c1"), dry_run=True)
+    assert "ההסכם כבר נחתם" in again and "<canvas" not in again
+
+
+def test_a_new_quote_can_be_signed_after_an_old_signature(monkeypatch):
+    from src import sign_page
+    from src.lib import contract_store, idempotency
+
+    monkeypatch.setattr(sign_page, "file_contract", lambda *a, **k: {})
+    sign_page.handle_post(signing.make_token("c1"), _form(), dry_run=True)
+    # What send_quote does when Dror sends a new quote:
+    contract_store.supersede("c1")
+    idempotency.release(idempotency.guard("signed_contract", "c1"))
+    assert "<canvas" in sign_page.handle_get(signing.make_token("c1"), dry_run=True)
+    sign_page.handle_post(signing.make_token("c1"), _form(), dry_run=True)
+    assert contract_store.get_signed("c1")["status"] == contract_store.RECEIVED
+
+
+def test_drors_own_signature_is_in_his_box(monkeypatch):
+    from src import sign_page
+    from src.lib import contract_store
+
+    contract_store.set_provider_signature(make_png())
+    page = sign_page.handle_get(signing.make_token("c1"), dry_run=True)
+    assert 'alt="חתימת נותן השירות"' in page
+
+
+class _Crm:
+    """ClickUp, recording what the filing did to the task."""
+
+    def __init__(self, calls):
+        self.calls = calls
+
+    def get_client(self, cid):
+        return {"id": cid, "name": "מכללת אלפא", "first_name": "אבי", "email": ""}
+
+    def attach_file(self, *a):
+        self.calls.append("attach")
+        return {"ok": True}
+
+    def update_fields(self, cid, **f):
+        self.calls.append(("status", f))
+
+    def append_automation_log(self, cid, text):
+        self.calls.append("comment")
+
+
+def _sign_only(monkeypatch, client_id):
+    """The client signs; the background filing is left for the test to run."""
+    from src import sign_page
+
+    real = sign_page.file_contract
+    monkeypatch.setattr(sign_page, "file_contract", lambda *a, **k: {})
+    sign_page.handle_post(signing.make_token(client_id), _form(), dry_run=True)
+    monkeypatch.setattr(sign_page, "file_contract", real)
+
+
+def _filing_fakes(monkeypatch, calls, *, chromium_fails=False):
+    from src import sign_page
+    from src.lib import client_folder, emails, pdf, pdf_chromium
+
+    def render(doc):
+        if chromium_fails:
+            raise pdf_chromium.ChromiumError("no layer")
+        calls.append("chromium")
+        return b"%PDF-chromium"
+
+    monkeypatch.setattr(sign_page, "CrmClient", lambda dry_run=False: _Crm(calls))
+    monkeypatch.setattr(pdf_chromium, "render", render)
+    monkeypatch.setattr(pdf, "html_to_pdf", lambda doc, name="": calls.append("drive-pdf") or b"%PDF-drive")
+    monkeypatch.setattr(client_folder, "ensure", lambda crm, c, dry_run=False: {"id": "folder1"})
+    monkeypatch.setattr(pdf, "upload_pdf", lambda b, name, parent: calls.append(("upload", name)) or
+                        {"webViewLink": "https://drive/x"})
+    monkeypatch.setattr(emails, "send_template", lambda name, to, **kw: calls.append(("mail", name, to)))
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+
+
+def test_filing_stores_attaches_advances_and_sends_both_copies(monkeypatch):
+    from src import sign_page
+    from src.lib import contract_store, run_log
+
+    calls = []
+    _sign_only(monkeypatch, "c1")
+    _filing_fakes(monkeypatch, calls)
+    out = sign_page.file_contract("c1")
+    assert out["link"] == "https://drive/x" and out["copy_sent_to"] == "a@b.co"
+    upload = next(c for c in calls if isinstance(c, tuple) and c[0] == "upload")
+    assert upload[1] == "הסכם חתום - מכללת דוגמה.pdf"
+    assert calls.index("chromium") < calls.index(upload)
+    # `חתם` starts onboarding, so it moves only after the PDF is stored.
+    assert calls.index(("status", {"sub_status": "signed"})) > calls.index("attach")
+    assert ("mail", "signed_notification", "dror@example.com") in calls
+    assert ("mail", "signed_copy", "a@b.co") in calls
+    assert contract_store.get_signed("c1")["status"] == contract_store.FILED
+    signed = [e for e in run_log.read_all() if e.get("action") == "signed"]
+    assert signed and signed[-1]["url"] == "https://drive/x" and signed[-1]["client_id"] == "c1"
+    # Running it again changes nothing.
+    calls.clear()
+    assert sign_page.file_contract("c1")["already"] and not calls
+
+
+def test_a_failed_filing_is_retried_without_a_second_upload(monkeypatch):
+    from src import sign_page
+    from src.lib import contract_store
+
+    calls = []
+    _sign_only(monkeypatch, "c1")
+    _filing_fakes(monkeypatch, calls)
+    monkeypatch.setattr(_Crm, "attach_file", lambda self, *a: (_ for _ in ()).throw(RuntimeError("ClickUp down")))
+    with pytest.raises(RuntimeError):
+        sign_page.file_contract("c1")
+    assert contract_store.get_signed("c1")["status"] == contract_store.RECEIVED
+    monkeypatch.setattr(_Crm, "attach_file", lambda self, *a: {"ok": True})
+    rec = contract_store.get_signed("c1")
+    contract_store.update_signed("c1", received_at="2026-01-01T00:00:00Z")
+    calls.clear()
+    assert sign_page.refile_unfiled() == ["c1"]
+    assert not [c for c in calls if isinstance(c, tuple) and c[0] == "upload"], "the PDF is already in Drive"
+    assert contract_store.get_signed("c1")["status"] == contract_store.FILED
+    assert rec["link"] == "https://drive/x"
+
+
+def test_without_chromium_the_contract_is_still_filed_via_drive(monkeypatch):
+    from src import sign_page
+
+    calls = []
+    _sign_only(monkeypatch, "c1")
+    _filing_fakes(monkeypatch, calls, chromium_fails=True)
+    assert sign_page.file_contract("c1")["link"]
+    assert "drive-pdf" in calls
 
 
 def test_the_form_posts_relative_so_it_survives_the_stage_prefix():

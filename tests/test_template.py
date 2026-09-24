@@ -72,6 +72,15 @@ def test_every_dashboard_page_has_a_route():
     doc = yaml.load(TEMPLATE.read_text(encoding="utf-8"), Loader=_CfnLoader)
     events = doc["Resources"]["DashboardFunction"]["Properties"]["Events"]
     paths = {e["Properties"]["Path"] for e in events.values()}
-    for page in ("/", "/dashboard", "/leads", "/clients", "/clients/{id}", "/documents", "/login", "/logout",
+    for page in ("/", "/dashboard", "/leads", "/clients", "/clients/{id}", "/documents", "/contracts",
+                 "/contracts/{id}", "/login", "/logout",
                  "/admin", "/admin/{proxy+}"):
         assert page in paths, page
+
+
+def test_the_webhook_function_can_print_the_signed_contract():
+    """The signed PDF prints in the webhook Lambda's background task, with Chromium."""
+    doc = yaml.load(TEMPLATE.read_text(encoding="utf-8"), Loader=_CfnLoader)
+    props = doc["Resources"]["WebhookFunction"]["Properties"]
+    assert "Layers" in props
+    assert props["Environment"]["Variables"]["CHROMIUM_PACK_DIR"] == "/opt/chromium"

@@ -27,13 +27,15 @@ def test_template_is_readable_and_has_the_expected_placeholders():
         "client_name", "client_business_id", "client_address", "client_phone",
         "client_email", "sign_date", "price_strategy", "price_campaigns",
         "price_total", "provider_signature", "client_signature",
+        # Clause 10's numbers follow which price lines are shown.
+        "n_strategy", "n_campaigns", "n_total", "n_payment",
         # Dror's own side, including his bank account: these come from .env, not
         # from the template, because this repo is public.
         "provider_name", "provider_business_id", "provider_address",
         "provider_phone", "provider_email", "provider_bank",
         "provider_bank_branch", "provider_bank_account",
         # Dror's branding, inlined from templates/assets/ at render time.
-        "asset_logo", "asset_footer",
+        "asset_logo",
     }
 
 
@@ -45,7 +47,6 @@ def test_drors_branding_is_inlined_so_the_document_stands_alone():
     """
     a = contract.assets()
     assert a["asset_logo"].startswith("data:image/png;base64,")
-    assert a["asset_footer"].startswith("data:image/png;base64,")
 
     out = contract.render(
         contract.fields_from_client(CLIENT, price_strategy=4900, price_campaigns=0),
@@ -58,9 +59,8 @@ def test_drors_branding_is_inlined_so_the_document_stands_alone():
 def test_a_missing_logo_does_not_stop_a_contract(monkeypatch):
     # Branding is cosmetic; the clauses are what matter. A contract that will not
     # send because a PNG moved would be a bad trade.
-    monkeypatch.setattr(contract, "ASSET_FIELDS", {"asset_logo": "nope.png",
-                                                   "asset_footer": "nope.png"})
-    assert contract.assets() == {"asset_logo": "", "asset_footer": ""}
+    monkeypatch.setattr(contract, "ASSET_FIELDS", {"asset_logo": "nope.png"})
+    assert contract.assets() == {"asset_logo": ""}
     out = contract.render(
         contract.fields_from_client(CLIENT, price_strategy=4900, price_campaigns=0),
         signatures={"provider_signature": "", "client_signature": ""},
@@ -166,13 +166,59 @@ def test_signatures_are_inserted_as_markup():
     assert 'src="data:image/png;base64,BBB"' in out
 
 
+def _render(f):
+    return contract.render(f, signatures={"provider_signature": "", "client_signature": ""})
+
+
 def test_single_crm_price_does_not_get_silently_split():
     # ClickUp holds one number; the contract bills two lines. Guessing a split
-    # would put a number in front of a client that nobody agreed.
+    # would put a number in front of a client that nobody agreed, so it is the
+    # strategy line, and the campaigns line leaves the contract rather than read 0 ₪.
     f = contract.fields_from_client(CLIENT)
-    assert f["price_strategy"] == "4,900"
-    assert f["price_campaigns"] == "0"
-    assert f["price_total"] == "4,900"
+    assert f["price_strategy"] == "4,900" and f["price_total"] == "4,900"
+    out = _render(f)
+    assert "ניהול קמפיינים ופרסום ממומן" not in out
+    assert "סך של <span class=\"filled\">0</span>" not in out
+    assert "10.1 אסטרטגיה" in out and "10.2 תשלום" in out
+    assert "בכפוף לבחירת שני השירותים" not in out  # no combined total for one service
+    assert not contract.prices(CLIENT)["split"]
+
+
+def test_per_service_prices_from_clickup_price_each_line():
+    both = {**CLIENT, "price_strategy": 3000, "price_campaigns": "1,500"}
+    p = contract.prices(both)
+    assert p["split"] and p["total"] == 4500
+    out = _render(contract.fields_from_client(both))
+    for line in ("10.1 אסטרטגיה", "10.2 ניהול קמפיינים", "10.3 סך התמורה", "10.4 תשלום"):
+        assert line in out
+    assert out.count("4,500") == 2
+
+
+def test_a_campaigns_only_client_gets_a_campaigns_only_contract():
+    only = {**CLIENT, "price_strategy": None, "price_campaigns": 2000}
+    out = _render(contract.fields_from_client(only))
+    assert "10.1 ניהול קמפיינים" in out and "10.2 תשלום" in out
+    assert "אסטרטגיה, תוכנית פעולה, ליווי ופיתוח עסקי</h3>" not in out
+
+
+def test_numbers_read_left_to_right_inside_the_hebrew():
+    # "+972..." in a right-to-left line shows its plus sign at the wrong end.
+    out = _render(contract.fields_from_client(CLIENT))
+    assert '<bdi class="filled" dir="ltr" data-bind="client_phone">+972501111111</bdi>' in out
+
+
+def test_the_print_document_is_the_contract_plus_its_certificate():
+    from src.lib import signing
+
+    body = _render(contract.fields_from_client(CLIENT))
+    audit = signing.audit_record("c1", body, ip="1.2.3.4", signed_at="2026-09-24T09:36:22Z")
+    doc = contract.print_document(body, signing.audit_html(audit, client_name="מכללת אלפא"),
+                                  client_name="מכללת אלפא", fingerprint=audit["contract_sha256"])
+    assert body in doc
+    assert "@font-face" in doc and "counter(pages)" in doc
+    assert audit["contract_sha256"][:12] in doc  # on every page's footer
+    assert '<bdi dir="ltr">24.09.2026, 12:36:22</bdi> (שעון ישראל)' in doc
+    assert 'מכללת אלפא (מזהה <bdi dir="ltr">c1</bdi>)' in doc
 
 
 def test_bad_prices_are_rejected():

@@ -834,6 +834,12 @@ def api(method: str, parts: list[str], body: dict[str, Any], *, dry_run: bool = 
         if len(parts) == 3 and parts[0] == "questionnaires" and parts[2] == "delete":
             questionnaire_store.delete_definition(parts[1])
             return _json(200, {"ok": True})
+        if parts == ["signature"] and method == "POST":
+            from . import contracts_pages
+
+            status, out = contracts_pages.save_signature(body)
+            log.info("provider_signature_saved" if status == 200 else "provider_signature_rejected")
+            return _json(status, out)
         if parts == ["links"] and method == "POST":
             client_id = str(body.get("client_id") or "").strip()
             qid = str(body.get("questionnaire_id") or "") or questionnaire_store.default_id()

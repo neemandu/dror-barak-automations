@@ -115,9 +115,11 @@ def test_instantly_navigated_pages_keep_their_listeners_to_main():
 
     from src import dashboard, questionnaire_admin
 
-    from src import clients_pages
+    from src import clients_pages, contracts_pages
 
     pages = [dashboard._leads_page([], ""), dashboard._dashboard_page([], {}, ""),
+             contracts_pages.contracts_page([], "", dry_run=True).encode(),
+             contracts_pages.contract_page([], "", "42", dry_run=True).encode(),
              clients_pages.documents_page([], "", dry_run=True).encode(), clients_pages.clients_page([], "", dry_run=True).encode(),
              clients_pages.client_page([], "", "42", dry_run=True).encode()]
     for route in ("/admin/questionnaires", "/admin/responses"):

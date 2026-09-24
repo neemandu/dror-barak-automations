@@ -5,18 +5,24 @@ Replaces Fillout. Two routes:
   GET  /sign?t=<token>   render the contract with a signature pad
   POST /sign?t=<token>   capture the signature, produce the PDF, file it
 
-On signing:
-  1. render the contract with the client's details and their drawn signature
-  2. append the audit trail (time, IP, document hash) into the document itself
-  3. convert to PDF via Drive
-  4. store it in the client's Drive folder
-  5. attach it to the `חוזה חתום` field on the ClickUp task
-  6. move the client's secondary status to `חתם`, which is what triggers onboarding
+On signing, while the client waits (a second or two):
+  1. render the contract with the client's details, their drawn signature and
+     Dror's (set once in the dashboard), and hash exactly that (the audit record)
+  2. store it all (:mod:`src.lib.contract_store`) and answer "signed"
 
-The page also collects the details the contract needs but ClickUp does not hold —
+Then in the background (:func:`file_contract`, a task on the same Lambda):
+  3. print the signed contract to PDF in headless Chromium, the same look the
+     client read, with the audit trail as its last section (Drive's converter if
+     Chromium fails)
+  4. store it in the client's Drive folder and attach it to `חוזה חתום` on ClickUp
+  5. move the client's secondary status to `חתם`, which is what triggers onboarding
+  6. email Dror, and email the client their signed copy
+A filing that fails is logged and commented on the task, and the daily reminder
+job files it again (:func:`refile_unfiled`): the signature itself is already safe.
+
+The page also collects the details the contract needs but ClickUp does not hold:
 ת.ז/ח.פ, address, email. The client knows their own company number better than
-Dror does, and a contract cannot be enforced without it. Those are written back to
-ClickUp so they are not asked for twice.
+Dror does, and a contract cannot be enforced without it.
 
 The page is public by necessity: the client has no account. The token in the URL
 is the credential — see src/lib/signing.py.
@@ -30,7 +36,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs
 
 from . import ui
-from .lib import client_folder, config, contract, idempotency, pdf, signing
+from .lib import client_folder, config, contract, contract_store, idempotency, pdf, signing
 from .lib.clients.crm import CrmClient
 from .lib.logging_setup import get_logger
 
@@ -82,30 +88,8 @@ html.public body { background: #eef1f5; }
 .flow-step.is-done .n svg { display: block; }
 .paper { background: #fff; border-radius: 16px; padding: 44px 52px; margin-bottom: 18px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 18px 40px -22px rgba(16, 24, 40, .25); }
-.brand-banner { border-radius: 12px; margin: 0 0 28px; padding: 26px 30px; background: var(--brand-grad); display: flex; align-items: center; }
-.brand-logo { max-width: 240px; height: auto; display: block; }
-.brand-footer { margin-top: 34px; text-align: center; }
-.brand-footer img { max-width: 100%; height: auto; }
-.contract { color: #1d2939; }
-.contract h1 { font-size: 26px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 6px; }
-.contract h2 { font-size: 17px; font-weight: 700; margin: 30px 0 8px; }
-.contract h3 { font-size: 15px; font-weight: 700; margin: 18px 0 6px; }
-.contract p, .contract li { font-size: 14.5px; line-height: 1.85; }
-.contract hr { border: 0; border-top: 1px solid var(--border); margin: 26px 0; }
-.contract .lead { color: var(--fg-muted); font-size: 15.5px; }
-.filled { background: #fff4d6; padding: 1px 5px; border-radius: 5px; font-weight: 600; transition: background var(--d3); }
-.filled.pulse { animation: flash .9s var(--ease); }
-.parties { display: flex; gap: 32px; flex-wrap: wrap; }
-.party { flex: 1; min-width: 220px; }
-table.annex { width: 100%; border-collapse: separate; border-spacing: 0; margin: 14px 0; font-size: 13.5px; border: 1px solid var(--border);
-  border-radius: 10px; overflow: hidden; }
-table.annex th, table.annex td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--border-soft); }
-table.annex th { background: var(--surface-2); font-weight: 600; color: var(--fg-2); }
-table.annex tr:last-child td { border-bottom: 0; }
-table.annex .total { font-weight: 700; background: var(--surface-2); }
-.signatures { display: flex; gap: 32px; flex-wrap: wrap; }
-.sig { flex: 1; min-width: 240px; }
-.sig-box { border-bottom: 1.5px solid #1d2939; height: 70px; margin: 6px 0; }
+.contract .filled { transition: background var(--d3); }
+.contract .filled.pulse { animation: flash .9s var(--ease); }
 .panel { padding: 24px; margin-bottom: 16px; }
 .panel h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 18px; font-weight: 700; }
 .panel h2 .n { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--fg); color: #fff; font-size: 13px; }
@@ -139,7 +123,8 @@ table.annex .total { font-weight: 700; background: var(--surface-2); }
 .center { text-align: center; }
 .done-wrap { max-width: 560px; margin: 8vh auto 0; padding: 40px 30px; text-align: center; }
 .done-wrap h1 { margin: 20px 0 8px; font-size: 26px; font-weight: 800; }
-.done-wrap p { margin: 0 auto; color: var(--fg-muted); max-width: 400px; }
+.done-wrap p { margin: 0 auto; color: var(--fg-muted); max-width: 420px; }
+.done-wrap .next { margin-top: 10px; color: var(--fg); font-weight: 600; }
 .check-anim { width: 88px; height: 88px; margin: 0 auto; }
 .check-anim circle { fill: var(--success-soft); stroke: var(--success); stroke-width: 3; stroke-dasharray: 252; stroke-dashoffset: 252;
   animation: draw .7s var(--ease) forwards; }
@@ -164,7 +149,7 @@ def _page(title: str, body: str, *, script: str = "") -> str:
     bar = (f'<header class="sbar"><div class="sbar-in">{ui.BRAND_MARK}<span class="title">דרור ברק</span>'
            f'<span class="spacer"></span><span class="badge badge-ok lockbadge">{ui.icon("lock", 12)}'
            '<span>חתימה מאובטחת</span></span></div></header>')
-    return ui.document(title, bar + body, kind="public", css=PAGE_CSS, script=script)
+    return ui.document(title, bar + body, kind="public", css=contract.CONTRACT_CSS + PAGE_CSS, script=script)
 
 
 # SigningError messages are English because they are also what the logs say. The
@@ -197,14 +182,18 @@ def error_page(message: str) -> str:
       <p style="margin-top:10px;font-size:14px">אפשר לפנות לדרור ברק ונשלח קישור חדש.</p></div></main>""")
 
 
-def done_page(link: str = "") -> str:
-    extra = (f'<a class="btn btn-primary btn-lg" style="margin-top:24px" href="{_esc(link)}" target="_blank" rel="noopener">'
-             f'{ui.icon("download", 17)}<span>להורדת ההסכם החתום</span></a>' if link else "")
+def done_page(email: str = "", *, again: bool = False) -> str:
+    """After signing. The copy goes by email: a Drive link would be to Dror's
+    Drive, which the client cannot open."""
+    copy = (f'עותק חתום של ההסכם יישלח אליך בדקות הקרובות לכתובת <bdi dir="ltr">{_esc(email)}</bdi>.'
+            if email else "עותק חתום של ההסכם נשמר אצל דרור.")
+    head = "ההסכם כבר נחתם" if again else "ההסכם נחתם בהצלחה"
     check = ('<svg class="check-anim" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="40"/>'
              '<path d="M26 43l11 11 21-23"/></svg>')
-    return _page("ההסכם נחתם", f"""<main class="wrap"><div class="card done-wrap reveal">{check}
-        <h1>ההסכם נחתם בהצלחה</h1>
-        <p>עותק חתום נשמר ונשלח לדרור. תודה, ומתחילים לעבוד!</p>{extra}</div></main>""")
+    return _page(head, f"""<main class="wrap"><div class="card done-wrap reveal">{check}
+        <h1>{head}</h1>
+        <p>{copy}</p>
+        <p class="next">תודה, ומתחילים לעבוד!</p></div></main>""")
 
 
 def _form_html(fields: dict[str, str]) -> str:
@@ -289,9 +278,22 @@ SIGN_JS = r"""
   document.getElementById('jump').addEventListener('click', function () {
     document.getElementById('details').scrollIntoView({behavior: 'smooth', block: 'start'}); });
 
+  // The signature cropped to its ink, so it fills the box in the contract instead
+  // of shrinking inside the pad's empty margins.
+  function inked() {
+    var w = pad.width, h = pad.height, d = ctx.getImageData(0, 0, w, h).data, x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 8) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return pad.toDataURL('image/png');
+    var m = 14 * (window.devicePixelRatio || 1); x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m);
+    x1 = Math.min(w, x1 + m); y1 = Math.min(h, y1 + m);
+    var out = document.createElement('canvas'); out.width = x1 - x0; out.height = y1 - y0;
+    out.getContext('2d').drawImage(pad, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    return out.toDataURL('image/png');
+  }
   form.addEventListener('submit', function (e) {
     if (!drawn) { e.preventDefault(); wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); return; }
-    sig.value = pad.toDataURL('image/png');
+    sig.value = inked();
     go.classList.add('is-loading'); go.disabled = true;
   });
   update();
@@ -316,16 +318,8 @@ def render_sign_page(
     for key, label, _ in ASK_CLIENT:
         if not display.get(key):
             display[key] = "―――"
-    body = contract.render(
-        display, signatures={"provider_signature": "", "client_signature": ""}
-    )
-    # Tag the spans the form should live-update.
-    for key, _, _ in ASK_CLIENT:
-        body = body.replace(
-            f'<span class="filled">{html.escape(display[key])}</span>',
-            f'<span class="filled" data-bind="{key}">{html.escape(display[key])}</span>',
-            1,
-        )
+    body = contract.render(display, signatures={
+        "provider_signature": contract_store.provider_signature_img(), "client_signature": ""})
 
     err = (f'<div class="alert alert-danger shake" role="alert" style="margin-bottom:16px">{ui.icon("alert")}'
            f'<span>{_esc(client_message(error))}</span></div>' if error else "")
@@ -368,18 +362,31 @@ def render_sign_page(
 
 
 def _client_fields(client: dict[str, Any]) -> dict[str, str]:
-    return contract.fields_from_client(
-        client,
-        price_strategy=client.get("price_strategy"),
-        price_campaigns=client.get("price_campaigns"),
-    )
+    return contract.fields_from_client(client)
+
+
+def _already_signed(client_id: str) -> Optional[dict[str, Any]]:
+    """The client's signature on the contract currently offered, if they gave it.
+    ``send_quote`` marks an earlier one superseded, so a new quote can be signed."""
+    rec = contract_store.get_signed(client_id)
+    return rec if rec and rec.get("status") in (contract_store.RECEIVED, contract_store.FILED) else None
 
 
 def handle_get(token: str, dry_run: bool = False) -> str:
-    """Render the signing page for a token."""
+    """Render the signing page for a token (or "already signed" for a second visit)."""
     client_id = signing.resolve(token)
+    done = _already_signed(client_id)
+    if done:
+        return done_page(str((done.get("fields") or {}).get("client_email") or ""), again=True)
     client = CrmClient(dry_run=dry_run).get_client(client_id)
     return render_sign_page(token, _client_fields(client))
+
+
+def _signature_img(png: bytes) -> str:
+    import base64
+
+    return ('<img class="sig-img" alt="חתימת הלקוח" '
+            f'src="data:image/png;base64,{base64.b64encode(png).decode()}">')
 
 
 def handle_post(
@@ -390,10 +397,9 @@ def handle_post(
     user_agent: str = "",
     dry_run: bool = False,
 ) -> str:
-    """Capture a signature: render, convert, store, attach, advance the status."""
+    """Capture a signature and store it; filing the PDF happens in the background."""
     client_id = signing.resolve(token)
-    crm = CrmClient(dry_run=dry_run)
-    client = crm.get_client(client_id)
+    client = CrmClient(dry_run=dry_run).get_client(client_id)
 
     fields = _client_fields(client)
     # What the client typed wins: they know their own company number.
@@ -411,67 +417,98 @@ def handle_post(
     except signing.SigningError as exc:
         return render_sign_page(token, fields, error=str(exc))
 
-    # One signature per client. A double submit must not file two contracts.
+    # One signature per contract. A double submit must not file two.
     once = idempotency.guard("signed_contract", client_id)
     if not idempotency.claim(once):
         log.info("already_signed", extra={"client_id": client_id})
-        return done_page()
+        return done_page(fields.get("client_email", ""), again=True)
 
     try:
-        result = _finalise(crm, client_id, client, fields, signature_png,
-                           ip=ip, user_agent=user_agent, dry_run=dry_run)
+        # Hash what the client actually saw, both signatures and all.
+        body = contract.render(fields, signatures={
+            "provider_signature": contract_store.provider_signature_img(),
+            "client_signature": _signature_img(signature_png),
+        })
+        record = signing.audit_record(client_id, body, ip=ip, user_agent=user_agent)
+        contract_store.save_signed(client_id, client_name=str(client.get("name") or client_id),
+                                   fields=fields, body=body, audit=record)
     except Exception:
-        idempotency.release(once)  # let them try again
+        idempotency.release(once)  # nothing was kept: let them try again
         raise
-    return done_page(result.get("link", ""))
+    log.info("signature_received", extra={"client_id": client_id, "sha256": record["contract_sha256"]})
+
+    from .lib import tasks
+
+    try:
+        tasks.dispatch("file_contract", client_id=client_id, dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001 - the signature is stored; the daily job files it
+        log.error("file_contract_dispatch_failed", extra={"client_id": client_id, "error": str(exc)})
+    return done_page(fields.get("client_email", ""))
 
 
-def _finalise(
-    crm: CrmClient,
-    client_id: str,
-    client: dict[str, Any],
-    fields: dict[str, str],
-    signature_png: bytes,
-    *,
-    ip: str,
-    user_agent: str,
-    dry_run: bool,
-) -> dict[str, Any]:
-    import base64
+# ------------------------------------------------------------------ filing
 
-    sig_tag = ('<img alt="חתימת הלקוח" style="max-height:70px" '
-               f'src="data:image/png;base64,{base64.b64encode(signature_png).decode()}">')
-    body = contract.render(fields, signatures={
-        "provider_signature": "", "client_signature": sig_tag,
-    })
 
-    # Hash what the client actually saw, signature and all.
-    record = signing.audit_record(client_id, body, ip=ip, user_agent=user_agent)
-    document = (f'<html><head><meta charset="utf-8"></head><body dir="rtl">'
-                f'{body}{signing.audit_html(record)}</body></html>')
+def _pdf(document: str, name: str) -> tuple[bytes, str]:
+    """Chromium prints the contract as it looked; Drive's converter if it cannot."""
+    from .lib import pdf_chromium
 
-    # Drive keeps the readable Hebrew name; ClickUp is given an ASCII one, because
-    # it rejects non-ASCII filenames outright.
-    name = f"הסכם חתום - {client.get('name') or client_id}.pdf"
-    clickup_name = f"signed-contract-{client_id}.pdf"
+    try:
+        return pdf_chromium.render(document), "chromium"
+    except Exception as exc:  # noqa: BLE001 - a plainer PDF beats an unfiled contract
+        log.warning("contract_pdf_fallback", extra={"error": str(exc)})
+        return pdf.html_to_pdf(document, name=name), "drive"
+
+
+def signed_pdf(rec: dict[str, Any]) -> bytes:
+    """The PDF of a stored signature (the contract, then its audit certificate)."""
+    audit = rec["audit"]
+    name = str(rec.get("client_name") or rec["client_id"])
+    document = contract.print_document(
+        rec["body"], signing.audit_html(audit, client_name=name),
+        client_name=name, fingerprint=audit["contract_sha256"])
+    return _pdf(document, f"הסכם חתום - {name}")[0]
+
+
+def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """File a stored signature: PDF, Drive, ClickUp, status, emails, run-log.
+
+    Safe to run again after a failure: a PDF already in Drive is not uploaded twice.
+    """
+    from .automations.base import Automation
+
+    rec = contract_store.get_signed(client_id)
+    if not rec:
+        raise KeyError(f"no signature stored for {client_id}")
+    if rec.get("status") == contract_store.FILED:
+        return {"already": True, "link": rec.get("link", "")}
+    rec = contract_store.update_signed(client_id, attempts=int(rec.get("attempts") or 0) + 1)
+    auto = Automation("sign_contract", dry_run=dry_run)
+    fields, audit = rec.get("fields") or {}, rec["audit"]
+    name = str(rec.get("client_name") or client_id)
     if dry_run:
-        log.info("would_finalise", extra={"client_id": client_id, "name": name,
-                                          "sha256": record["contract_sha256"]})
-        return {"dry_run": True, "audit": record}
+        log.info("would_file", extra={"client_id": client_id, "sha256": audit["contract_sha256"]})
+        auto.log_action("signed", client_id=client_id, detail="dry run: the PDF was not filed")
+        contract_store.update_signed(client_id, status=contract_store.FILED, filed_at=contract_store._now())
+        return {"dry_run": True, "audit": audit}
 
-    pdf_bytes = pdf.html_to_pdf(document, name=name)
+    crm = CrmClient(dry_run=False)
+    client = crm.get_client(client_id)
+    pdf_bytes = signed_pdf(rec)
 
     # The contract belongs in the client's own folder. Signing happens before
-    # onboarding — signing is what sets `חתם`, and `חתם` is what triggers
-    # onboarding — so whoever arrives first creates it. This is idempotent, and
-    # onboarding will find the same folder rather than make a second one.
-    folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=dry_run)
-    stored = pdf.upload_pdf(pdf_bytes, name, folder["id"])
-    link = stored.get("webViewLink", "")
+    # onboarding (signing sets `חתם`, and `חתם` is what triggers onboarding), so
+    # whoever arrives first creates it. This is idempotent, and onboarding will
+    # find the same folder rather than make a second one.
+    link = str(rec.get("link") or "")
+    if not link:
+        folder = client_folder.ensure(crm, {**client, "id": client_id}, dry_run=False)
+        link = pdf.upload_pdf(pdf_bytes, f"הסכם חתום - {name}.pdf", folder["id"]).get("webViewLink", "")
+        contract_store.update_signed(client_id, link=link)
 
-    # Attach to ClickUp. `חוזה חתום` is an Attachment field, so the PDF itself
-    # lands on the task rather than a link that could rot.
-    attached = crm.attach_file(client_id, "signed_contract", pdf_bytes, clickup_name)
+    # `חוזה חתום` is an Attachment field, so the PDF itself lands on the task. ClickUp
+    # rejects non-ASCII filenames outright.
+    attached = crm.attach_file(client_id, "signed_contract", pdf_bytes, f"signed-contract-{client_id}.pdf")
 
     # Only now advance the status: `חתם` is what triggers onboarding, and it must
     # not fire for a contract we failed to store.
@@ -480,15 +517,64 @@ def _finalise(
         client_id,
         f"✍️ ההסכם נחתם על ידי הלקוח\n"
         f"מסמך: {link}\n"
-        f"טביעת אצבע: {record['contract_sha256'][:16]}…\n"
-        f"IP: {record['ip'] or 'לא נרשמה'}",
+        f"טביעת אצבע: {audit['contract_sha256'][:16]}…\n"
+        f"IP: {audit.get('ip') or 'לא נרשמה'}",
     )
-    # No more reminders — they signed.
-    signing.clear_pending(client_id)
-    _notify_dror(client, pdf_bytes, record)
-    log.info("signed", extra={"client_id": client_id, "link": link,
-                             "sha256": record["contract_sha256"]})
-    return {"link": link, "audit": record, "attached": bool(attached)}
+    signing.clear_pending(client_id)  # no more reminders: they signed
+    _notify_dror(client, pdf_bytes, audit)
+    copy_to = _send_client_copy(client, fields, pdf_bytes)
+    auto.log_action("signed", client_id=client_id, url=link,
+                    detail=f"עותק נשלח ללקוח ל-{copy_to}" if copy_to else "לא נשלח עותק ללקוח (אין מייל)")
+    contract_store.update_signed(client_id, status=contract_store.FILED, filed_at=contract_store._now(),
+                                 link=link, copy_sent_to=copy_to, error="")
+    log.info("signed", extra={"client_id": client_id, "link": link, "sha256": audit["contract_sha256"]})
+    return {"link": link, "attached": bool(attached), "copy_sent_to": copy_to}
+
+
+def refile_unfiled(*, dry_run: bool = False, older_than_s: int = 15 * 60) -> list[str]:
+    """File signatures whose background filing never finished (the daily job calls this)."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    done: list[str] = []
+    for rec in contract_store.list_signed():
+        if rec.get("status") != contract_store.RECEIVED:
+            continue
+        try:
+            age = (now - datetime.fromisoformat(str(rec.get("received_at")).replace("Z", "+00:00"))).total_seconds()
+        except ValueError:
+            age = older_than_s
+        if age < older_than_s:
+            continue  # its first filing may still be running
+        try:
+            file_contract(rec["client_id"], dry_run=dry_run)
+            done.append(rec["client_id"])
+        except Exception as exc:  # noqa: BLE001 - one bad record must not block the rest
+            contract_store.update_signed(rec["client_id"], error=str(exc)[:500])
+            log.error("refile_failed", extra={"client_id": rec["client_id"], "error": str(exc)})
+    return done
+
+
+def _send_client_copy(client: dict[str, Any], fields: dict[str, str], pdf_bytes: bytes) -> str:
+    """Email the client their signed copy. Returns the address, or "" if none was sent.
+
+    Never fails the filing: the contract is stored and Dror has it either way.
+    """
+    to = str(fields.get("client_email") or client.get("email") or "").strip()
+    if not to:
+        return ""
+    try:
+        from .lib import emails
+
+        emails.send_template(
+            "signed_copy", to,
+            client_name=client.get("first_name") or client.get("name") or "",
+            attachments=[emails.Attachment(filename="הסכם חתום - דרור ברק.pdf", content=pdf_bytes)],
+        )
+        return to
+    except Exception as exc:  # noqa: BLE001
+        log.warning("client_copy_failed", extra={"error": str(exc)})
+        return ""
 
 
 def _notify_dror(client: dict[str, Any], pdf_bytes: bytes, record: dict[str, Any]) -> None:
@@ -496,8 +582,8 @@ def _notify_dror(client: dict[str, Any], pdf_bytes: bytes, record: dict[str, Any
 
     A signed contract is the moment Dror most wants to know about, and a task
     comment he has to go looking for is not the same as it landing in his inbox.
-    But the contract is already stored and the status already set — a notification
-    that fails must not undo any of that.
+    But the contract is already stored and the status already set, so a
+    notification that fails must not undo any of that.
     """
     to = config.get("DROR_EMAIL")
     if not to:
@@ -509,10 +595,40 @@ def _notify_dror(client: dict[str, Any], pdf_bytes: bytes, record: dict[str, Any
         emails.send_template(
             "signed_notification", to,
             client_name=client.get("name") or client.get("id"),
-            signed_at=record["signed_at"],
+            signed_at=signing.local_time(record["signed_at"]),
             fingerprint=record["contract_sha256"][:16] + "…",
             attachments=[emails.Attachment(
                 filename="signed-contract.pdf", content=pdf_bytes)],
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("dror_notify_failed", extra={"error": str(exc)})
+
+
+def self_check() -> dict[str, Any]:
+    """Print a sample signed contract (made-up details, no signature image) and
+    report how it went; for proving a deploy. Stores and sends nothing."""
+    import time
+
+    from .lib import pdf_chromium
+
+    sample = {**contract.fields_from_client({"name": "לקוח לדוגמה", "business_id": "000000000",
+                                             "address": "כתובת לדוגמה", "phone": "050-0000000",
+                                             "email": "client@example.com", "price_strategy": 3000,
+                                             "price_campaigns": 1500}),
+              **{k: "לדוגמה" for k in contract.PROVIDER_FIELDS}}
+    body = contract.render(sample, signatures={"provider_signature": "", "client_signature": ""})
+    audit = signing.audit_record("check", body, ip="0.0.0.0", user_agent="self-check")
+    started = time.time()
+    try:
+        data = pdf_chromium.render(contract.print_document(
+            body, signing.audit_html(audit, client_name="לקוח לדוגמה"),
+            client_name="לקוח לדוגמה", fingerprint=audit["contract_sha256"]))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "engine": pdf_chromium.engine(), "error": str(exc)[:500],
+                "ms": int((time.time() - started) * 1000)}
+    import re
+
+    return {"ok": data[:4] == b"%PDF", "engine": pdf_chromium.engine(), "bytes": len(data),
+            "pages": len(re.findall(rb"/Type\s*/Page[^s]", data)), "fonts": sorted(set(
+                f.decode("latin-1") for f in re.findall(rb"/BaseFont\s*/([A-Za-z0-9+_-]+)", data))),
+            "ms": int((time.time() - started) * 1000)}
