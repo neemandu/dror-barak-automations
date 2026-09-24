@@ -604,9 +604,15 @@ def _notify_dror(client: dict[str, Any], pdf_bytes: bytes, record: dict[str, Any
         log.warning("dror_notify_failed", extra={"error": str(exc)})
 
 
-def self_check() -> dict[str, Any]:
+def self_check(*, return_pdf: bool = False) -> dict[str, Any]:
     """Print a sample signed contract (made-up details, no signature image) and
-    report how it went; for proving a deploy. Stores and sends nothing."""
+    report how it went; for proving a deploy. Stores and sends nothing.
+
+    Chromium embeds Heebo (a variable font) as Type 3 glyphs, which carry no font
+    name, so ``type3_fonts`` is how to tell it was used; ``return_pdf`` hands back
+    the PDF itself to look at."""
+    import base64
+    import re
     import time
 
     from .lib import pdf_chromium
@@ -626,9 +632,12 @@ def self_check() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "engine": pdf_chromium.engine(), "error": str(exc)[:500],
                 "ms": int((time.time() - started) * 1000)}
-    import re
-
-    return {"ok": data[:4] == b"%PDF", "engine": pdf_chromium.engine(), "bytes": len(data),
-            "pages": len(re.findall(rb"/Type\s*/Page[^s]", data)), "fonts": sorted(set(
-                f.decode("latin-1") for f in re.findall(rb"/BaseFont\s*/([A-Za-z0-9+_-]+)", data))),
-            "ms": int((time.time() - started) * 1000)}
+    out: dict[str, Any] = {
+        "ok": data[:4] == b"%PDF", "engine": pdf_chromium.engine(), "bytes": len(data),
+        "pages": len(re.findall(rb"/Type\s*/Page[^s]", data)),
+        "type3_fonts": len(re.findall(rb"/Subtype\s*/Type3", data)),
+        "named_fonts": sorted({f.decode("latin-1") for f in re.findall(rb"/BaseFont\s*/([A-Za-z0-9+_-]+)", data)}),
+        "ms": int((time.time() - started) * 1000)}
+    if return_pdf:
+        out["pdf"] = base64.b64encode(data).decode("ascii")
+    return out

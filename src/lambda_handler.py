@@ -351,10 +351,11 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
 
     if isinstance(event, dict) and event.get("check") == "contract_pdf":
         # Proves this function prints a signed contract (Chromium layer, Heebo,
-        # the page footer) on sample details, touching nothing: {"check": "contract_pdf"}.
+        # the page footer) on sample details, touching nothing: {"check": "contract_pdf"},
+        # with "return_pdf": true to get the PDF back.
         from . import sign_page
 
-        return sign_page.self_check()
+        return sign_page.self_check(return_pdf=bool(event.get("return_pdf")))
 
     if CLAUDE_TASK_KEY in event:
         # Our own async invoke, not API Gateway: no path, no headers, no signature.
