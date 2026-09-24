@@ -35,6 +35,8 @@ from . import config
 # whole engagement, short enough that the table doesn't grow forever. This is an
 # activity log, not the system of record — Drive and ClickUp hold the artefacts.
 TTL_DAYS = 400
+#: Longer ranges are read with one scan instead of a query per day.
+SCAN_OVER_DAYS = 31
 
 
 def record(
@@ -147,10 +149,24 @@ class _DynamoStore:
         self.table.put_item(Item=item)
 
     def read_since(self, since: datetime) -> list[dict[str, Any]]:
-        from boto3.dynamodb.conditions import Key
+        from boto3.dynamodb.conditions import Attr, Key
 
+        days = _days_from(since)
         out: list[dict[str, Any]] = []
-        for day in _days_from(since):
+        if len(days) > SCAN_OVER_DAYS:
+            # One query per day partition is right for "this week" and wrong for
+            # "everything": read_all asked 401 partitions in turn, which kept every
+            # dashboard page waiting seconds on AWS (47 s from a laptop). A scan of
+            # a table this size is one or two requests.
+            kwargs: dict[str, Any] = {"FilterExpression": Attr("ts").gte(since.astimezone(timezone.utc).isoformat()[:19])}
+            while True:
+                resp = self.table.scan(**kwargs)
+                out.extend(resp.get("Items", []))
+                if "LastEvaluatedKey" not in resp:
+                    break
+                kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+            days = []
+        for day in days:
             resp = self.table.query(KeyConditionExpression=Key("day").eq(day))
             out.extend(resp.get("Items", []))
             while "LastEvaluatedKey" in resp:

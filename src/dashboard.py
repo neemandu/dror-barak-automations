@@ -334,7 +334,7 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
   });
 })();"""
     body = head + f'<div class="stats">{stats}</div>' + filters + sections
-    return ui.app_page(base, "dashboard", "לוח בקרה · דרור ברק", body, script=script, css=CSS).encode("utf-8")
+    return ui.app_page(base, "dashboard", "לוח בקרה · דרור ברק", body, script=script, css=CSS, spa=True).encode("utf-8")
 
 
 LEADS_CSS = """
@@ -415,11 +415,13 @@ def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:
         search = f"{name} {l['phone']} {phone} {phone.replace('-', '')}".lower()
         last_ms = int(datetime.fromisoformat(str(l["last"]).replace("Z", "+00:00")).timestamp() * 1000) if l.get("last") else 0
         rows += (f'<tr data-last="{last_ms}" data-day="{_il_day(l.get("last"))}" data-lists="{_esc(" ".join(l["lists"]))}" data-q="{_esc(search)}">'
-                 f'<td><div class="lead-cell">{avatar}<div>{who}<div class="lead-phone"><bdi>{_esc(phone)}</bdi></div>'
+                 f'<td data-v="{_esc(name or "תתת")}"><div class="lead-cell">{avatar}<div>{who}<div class="lead-phone"><bdi>{_esc(phone)}</bdi></div>'
                  f'<div class="lead-sub show-sm">{_esc(" · ".join(_list_label(m) for m in l["lists"]))} · '
                  f'{ui.when(l.get("last"), "-")} · {"וואטסאפ נשלח" if ok else _esc(subjects.label_for(l))}</div></div></div></td>'
-                 f'<td class="hide-sm">{"".join(f"<span class=badge>{_esc(_list_label(m))}</span> " for m in l["lists"])}</td>'
-                 f'<td class="muted hide-sm">{ui.when(l.get("last"), "-")}</td><td class="hide-sm">{status} {again}</td>'
+                 f'<td class="hide-sm" data-v="{_esc(" ".join(_list_label(m) for m in l["lists"]))}">'
+                 f'{"".join(f"<span class=badge>{_esc(_list_label(m))}</span> " for m in l["lists"])}</td>'
+                 f'<td class="muted hide-sm" data-v="{last_ms}">{ui.when(l.get("last"), "-")}</td>'
+                 f'<td class="hide-sm" data-v="{"וואטסאפ נשלח" if ok else _esc(subjects.label_for(l))}">{status} {again}</td>'
                  f'<td><div class="lead-acts">'
                  f'<a class="btn btn-sm btn-icon" href="https://wa.me/{_esc(digits)}" target="_blank" rel="noopener" data-tip="פתיחה בוואטסאפ">{ui.icon("message", 15)}</a>'
                  f'<a class="btn btn-sm btn-icon" href="tel:{_esc(l["phone"])}" data-tip="חיוג">{ui.icon("phone", 15)}</a>'
@@ -427,16 +429,18 @@ def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:
                  f'</div></td></tr>')
     periods = "".join(f'<button type="button" data-days="{d}" class="{"is-active" if d == 0 else ""}">{label}</button>'
                       for d, label in ((0, "הכל"), (1, "היום"), (7, "7 ימים"), (30, "30 יום")))
-    head = ui.page_head("לידים", "מי שנרשם דרך Smoove וקיבל הודעת וואטסאפ דרך ManyChat. לצפייה בלבד.")
-    note = ('<div class="alert alert-info leads-note reveal">' + ui.icon("info") + '<span>הלידים האלה עדיין לא נכנסים '
-            'ל-ClickUp. האם ומתי להכניס אותם לשם זו החלטה של דרור.</span></div>')
+    head = ui.page_head("לידים", "מי שנרשם דרך Smoove וקיבל הודעת וואטסאפ. הם עדיין לא ב-ClickUp: "
+                        "האם ומתי להכניס אותם לשם זו החלטה של דרור.")
+    note = ""
     if rows:
         table = (f"""<div class="toolbar reveal" style="--i:4"><div class="segmented" id="period">{periods}</div>
           <select class="select" id="listf" data-picker="inline" aria-label="רשימה">{list_opts}</select>
           <label class="with-icon grow">{ui.icon("search", 16)}<input class="input" type="search" id="find" data-search
             placeholder="חיפוש לפי שם או טלפון" aria-label="חיפוש"><span class="kbd">/</span></label></div>
-          <div class="table-wrap reveal" style="--i:5"><table class="table"><thead><tr><th>ליד</th><th class="hide-sm">רשימה</th>
-          <th class="hide-sm">נרשם</th><th class="hide-sm">סטטוס</th><th></th></tr></thead><tbody>{rows}</tbody></table>
+          <div class="table-wrap reveal" style="--i:5"><table class="table" data-sortable><thead><tr><th data-sort>ליד</th>
+          <th class="hide-sm" data-sort>רשימה</th>
+          <th class="hide-sm" data-sort="num" data-first="descending" aria-sort="descending">נרשם</th>
+          <th class="hide-sm" data-sort>סטטוס</th><th></th></tr></thead><tbody>{rows}</tbody></table>
           <div id="none" style="display:none">{ui.empty("אין לידים שמתאימים", "נסה טווח זמן אחר או חיפוש אחר.", ico="search")}</div></div>""")
     else:
         table = '<div class="card">' + ui.empty(
@@ -456,11 +460,11 @@ if (per) per.addEventListener('click', function (e) { var b = e.target.closest('
   per.querySelectorAll('button').forEach(function (x) { x.classList.toggle('is-active', x === b); }); days = +b.dataset.days; apply(); });
 var lf = document.getElementById('listf'); if (lf) lf.addEventListener('change', function () { list = lf.value; apply(); });
 if (find) find.addEventListener('input', apply);
-document.addEventListener('click', function (e) { var b = e.target.closest('[data-copy]'); if (b) UI.copy(b.dataset.copy, b); });
+document.querySelector('main.page').addEventListener('click', function (e) { var b = e.target.closest('[data-copy]'); if (b) UI.copy(b.dataset.copy, b); });
 """
     script = f"document.body.dataset.today = {json.dumps(today)};" + script
     return ui.app_page(base, "leads", "לידים · דרור ברק", head + note + f'<div class="stats">{stats}</div>' + table,
-                       script=script, css=CSS + LEADS_CSS).encode("utf-8")
+                       script=script, css=CSS + LEADS_CSS, spa=True, fill=True).encode("utf-8")
 
 
 def _load_leads() -> list[dict[str, Any]]:

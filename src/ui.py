@@ -396,12 +396,71 @@ dialog.modal[open]::backdrop { animation: fade-in var(--d2) var(--ease); }
 .modal-foot { display: flex; gap: 8px; padding: 20px 24px 22px; }
 .modal-foot .btn { flex: 1; }
 
-/* ---- tooltips */
-[data-tip] { position: relative; }
-[data-tip]:hover::after, [data-tip]:focus-visible::after { content: attr(data-tip); position: absolute; z-index: 50;
-  bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%); padding: 5px 8px; border-radius: 7px;
-  background: #101828; color: #fff; font-size: 12px; font-weight: 500; line-height: 1.3; white-space: nowrap;
-  pointer-events: none; animation: tip-in var(--d2) var(--ease) .35s both; }
+/* ---- tooltips: one floating element on top of everything, never clipped */
+.tip { position: fixed; z-index: 120; padding: 5px 9px; border-radius: 7px; background: var(--toast-bg); color: var(--toast-fg);
+  font-size: 12px; font-weight: 500; line-height: 1.3; white-space: nowrap; pointer-events: none; box-shadow: var(--sh-md);
+  opacity: 0; transform: translateY(3px); transition: opacity .14s var(--ease), transform .14s var(--ease); }
+.tip.below { transform: translateY(-3px); }
+.tip.is-on { opacity: 1; transform: none; }
+
+/* ---- the side menu (desktop) */
+html.app { --sticky-top: 60px; }
+.shell { display: flex; min-height: 100vh; }
+.shell-main { flex: 1; min-width: 0; }
+.sidebar { position: sticky; top: 0; height: 100vh; width: 244px; flex: none; display: flex; flex-direction: column; gap: 22px;
+  padding: 18px 12px 14px; border-inline-end: 1px solid var(--border); overflow-y: auto;
+  background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+.side-brand { padding: 4px 8px 2px; }
+.side-group { display: flex; flex-direction: column; gap: 2px; }
+.side-title { padding: 0 10px 6px; font-size: 11.5px; font-weight: 600; color: var(--fg-subtle); }
+.side-link { position: relative; display: flex; align-items: center; gap: 11px; height: 38px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid transparent; color: var(--fg-muted); font-size: 14.5px; font-weight: 500; text-decoration: none !important;
+  transition: background var(--d1), color var(--d1), border-color var(--d1); }
+.side-link:hover { background: var(--surface-hover); color: var(--fg); }
+.side-link.is-active { background: var(--surface); border-color: var(--border); color: var(--fg); font-weight: 600; box-shadow: var(--sh-xs); }
+.side-link.is-active .icon { color: var(--brand); }
+.side-link.is-active::before { content: ""; position: absolute; inset-inline-start: -13px; top: 9px; bottom: 9px; width: 3px;
+  border-radius: 3px 0 0 3px; background: var(--brand); }
+.side-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+@media (min-width: 1024px) { .topbar { display: none; } html.app { --sticky-top: 0px; } }
+@media (max-width: 1023px) { .sidebar { display: none; } }
+
+/* ---- a list page that fits the screen: the table fills what is left and scrolls inside */
+.table th[data-sort] { cursor: pointer; user-select: none; transition: color var(--d1); }
+.table th[data-sort]:hover { color: var(--fg); }
+.table th[data-sort] .sort-ic { display: inline-flex; vertical-align: -3px; margin-inline-start: 3px; opacity: 0;
+  transition: opacity var(--d1), transform var(--d2) var(--ease); }
+.table th[data-sort]:hover .sort-ic { opacity: .45; }
+.table th[aria-sort="ascending"], .table th[aria-sort="descending"] { color: var(--fg); }
+.table th[aria-sort="ascending"] .sort-ic, .table th[aria-sort="descending"] .sort-ic { opacity: 1; color: var(--brand); }
+.table th[aria-sort="ascending"] .sort-ic { transform: rotate(180deg); }
+.table th[data-sort]:focus-visible { outline-offset: -2px; }
+@media (min-width: 1024px) and (min-height: 600px) {
+  .page-fill { height: 100vh; display: flex; flex-direction: column; padding-top: 24px; padding-bottom: 20px; }
+  .page-fill > * { flex: none; }
+  .page-fill .page-head { margin-bottom: 16px; }
+  .page-fill .stats { margin-bottom: 14px; }
+  .page-fill .stat { padding: 12px 16px; gap: 6px; }
+  .page-fill .stat-value { font-size: 24px; }
+  .page-fill > .table-wrap { flex: 1 1 auto; min-height: 200px; overflow: auto; }
+  .page-fill .table thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); border-bottom: 0; }
+}
+
+/* ---- instant navigation: a progress line and skeletons */
+.nav-progress { position: fixed; z-index: 200; top: 0; inset-inline: 0; height: 2.5px; pointer-events: none; opacity: 0;
+  background: var(--brand-grad); transform: scaleX(0); transform-origin: right; }
+.nav-progress.is-on { opacity: 1; animation: nav-progress 6s cubic-bezier(.08, .7, .2, 1) forwards; }
+.nav-progress.is-done { opacity: 0; transform: scaleX(1); transition: opacity .35s .12s, transform .18s; }
+@keyframes nav-progress { from { transform: scaleX(0); } to { transform: scaleX(.92); } }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+.sk-card { padding: 18px; display: grid; gap: 16px; }
+.sk-row { display: flex; align-items: center; gap: 10px; }
+.sk-col { flex: 1; display: grid; gap: 8px; min-width: 0; }
+.sk-sq { width: 40px; height: 40px; border-radius: 11px; flex: none; }
+.sk-av { width: 32px; height: 32px; border-radius: 50%; flex: none; }
+.sk-item { display: flex; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--border-soft); }
+.sk-item:last-child { border-bottom: 0; }
+.skeleton-page { animation: fade-in .18s var(--ease); }
 
 /* ---- picker: our own dropdown (icons, hints, groups, keyboard) */
 .picker { display: inline-flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 8px 0 10px;
@@ -801,28 +860,188 @@ JS = r"""
     });
   };
 
+  // What a freshly painted <main> needs (on load, and after an instant navigation).
+  UI.init = function (root) {
+    root = root || document;
+    root.querySelectorAll('[data-count]').forEach(countUp);
+    times(root);
+    root.querySelectorAll('select[data-picker]').forEach(function (sel) { UI.enhance(sel); });
+    root.querySelectorAll('form[data-busy]').forEach(function (f) {
+      f.addEventListener('submit', function () { UI.busy(f.querySelector('[type=submit]'), true); });
+    });
+    root.querySelectorAll('[data-autosubmit]').forEach(function (n) {
+      n.addEventListener('change', function () { n.form.requestSubmit ? n.form.requestSubmit() : n.form.submit(); });
+    });
+    root.querySelectorAll('table[data-sortable]').forEach(sortTable);
+  };
+
+  // Click a column's heading to sort by it (again to reverse). A cell's data-v is
+  // what it sorts by (a timestamp, a name); th data-sort="num" compares numbers.
+  function sortTable(table) {
+    var heads = Array.prototype.slice.call(table.querySelectorAll('th[data-sort]'));
+    heads.forEach(function (th) {
+      var col = Array.prototype.indexOf.call(th.parentNode.children, th);
+      th.tabIndex = 0; if (!th.hasAttribute('aria-sort')) th.setAttribute('aria-sort', 'none');
+      th.insertAdjacentHTML('beforeend', '<span class="sort-ic">' + UI.icon('arrow-down') + '</span>');
+      function value(tr) { var td = tr.cells[col]; var v = td ? (td.getAttribute('data-v') || td.textContent.trim()) : '';
+        return th.getAttribute('data-sort') === 'num' ? (parseFloat(v) || 0) : v; }
+      function run() {
+        var cur = th.getAttribute('aria-sort'), first = th.getAttribute('data-first') || 'ascending';
+        var dir = cur === 'none' ? first : cur === 'ascending' ? 'descending' : 'ascending';
+        heads.forEach(function (h) { h.setAttribute('aria-sort', 'none'); }); th.setAttribute('aria-sort', dir);
+        var body = table.tBodies[0], rows = Array.prototype.slice.call(body.rows), num = th.getAttribute('data-sort') === 'num';
+        rows.sort(function (a, b) { var x = value(a), y = value(b);
+          var c = num ? x - y : String(x).localeCompare(String(y), 'he', {numeric: true, sensitivity: 'base'});
+          return dir === 'ascending' ? c : -c; });
+        rows.forEach(function (r) { body.appendChild(r); });
+        var wrap = table.closest('.table-wrap'); if (wrap) wrap.scrollTop = 0;
+      }
+      th.addEventListener('click', run);
+      th.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(); } });
+    });
+  }
+
+  // ---- tooltips: floating, placed against the viewport, so no container clips them
+  var tip = null, tipFor = null, tipT;
+  function hideTip() { clearTimeout(tipT); tipFor = null; if (tip) tip.classList.remove('is-on'); }
+  function showTip(t) {
+    var text = t.getAttribute('data-tip'); if (!text) return;
+    if (!tip) { tip = el('div', 'tip'); tip.setAttribute('role', 'tooltip'); }
+    var host = t.closest('dialog') || document.body; if (tip.parentNode !== host) host.appendChild(tip);
+    tip.textContent = text; tip.classList.remove('is-on');
+    var r = t.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+    var top = r.top - h - 8, below = top < 6;
+    if (below) top = r.bottom + 8;
+    tip.style.top = top + 'px';
+    tip.style.left = Math.max(6, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 6)) + 'px';
+    tip.classList.toggle('below', below);
+    requestAnimationFrame(function () { if (tipFor === t) tip.classList.add('is-on'); });
+  }
+  document.addEventListener('mouseover', function (e) {
+    var t = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (t === tipFor) return; hideTip();
+    if (!t || document.body.classList.contains('is-sorting')) return;
+    tipFor = t; tipT = setTimeout(function () { if (tipFor === t && document.contains(t)) showTip(t); }, 380);
+  });
+  document.addEventListener('mouseout', function (e) { if (!e.relatedTarget) hideTip(); });
+  document.addEventListener('focusin', function (e) {
+    var t = e.target.closest && e.target.closest('[data-tip]');
+    if (t && t.matches(':focus-visible')) { tipFor = t; showTip(t); }
+  });
+  document.addEventListener('focusout', hideTip);
+  ['scroll', 'pointerdown', 'keydown'].forEach(function (n) { window.addEventListener(n, hideTip, true); });
+
+  // ---- a thin progress line for anything that takes a moment
+  var bar = null, barT;
+  UI.progress = {
+    start: function () { if (!bar) { bar = el('div', 'nav-progress'); document.body.appendChild(bar); }
+      clearTimeout(barT); bar.className = 'nav-progress'; void bar.offsetWidth; bar.className = 'nav-progress is-on'; },
+    done: function () { if (!bar) return; bar.className = 'nav-progress is-done'; barT = setTimeout(function () { bar.className = 'nav-progress'; }, 450); }
+  };
+
+  // ---- instant navigation between the main screens
+  // A menu click marks the new page at once, shows a skeleton of it if the page
+  // is not already here (hovering a menu item prefetches it), and swaps <main>
+  // when it arrives. Only between pages marked data-spa; the editor and one
+  // client's answers are ordinary loads, so their own guards keep working.
+  var cache = {}, seq = 0;
+  function sameOrigin(href) { try { var u = new URL(href, location.href); return u.origin === location.origin ? u : null; } catch (e) { return null; } }
+  function navLink(u) { return document.querySelector('[data-nav][href="' + u.pathname + '"]'); }
+  function spa() { return document.body.hasAttribute('data-spa'); }
+  function fetchPage(url) {
+    var hit = cache[url]; if (hit && Date.now() - hit.at < 20000) return hit.p;
+    var p = fetch(url, {credentials: 'same-origin', headers: {'X-Requested-With': 'nav'}}).then(function (r) {
+      if (!r.ok) throw new Error(String(r.status)); return r.text(); });
+    cache[url] = {at: Date.now(), p: p}; p.catch(function () { delete cache[url]; });
+    return p;
+  }
+  function markActive(path) {
+    document.querySelectorAll('[data-nav]').forEach(function (a) {
+      var on = a.pathname === path; a.classList.toggle('is-active', on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  }
+  function skeleton(link) {
+    var kind = link ? link.getAttribute('data-skeleton') : 'list';
+    function line(w, h, r) { return '<div class="skeleton" style="width:' + w + ';height:' + (h || 12) + 'px' + (r ? ';border-radius:' + r : '') + '"></div>'; }
+    function rep(n, f) { var o = ''; for (var k = 0; k < n; k++) o += f(k); return o; }
+    var head = '<div class="page-head"><div><h1 class="page-title"></h1><div style="margin-top:12px">' + line('320px', 12) + '</div></div></div>';
+    if (kind === 'cards') return head + '<div class="sk-grid">' + rep(3, function () {
+      return '<div class="card sk-card"><div class="sk-row"><div class="skeleton sk-sq"></div><div class="sk-col">' + line('70%', 14) +
+        line('45%') + '</div></div>' + line('100%', 6, '99px') + '<div class="sk-row">' + line('84px', 30, '8px') + line('30px', 30, '8px') +
+        line('30px', 30, '8px') + '</div></div>'; }) + '</div>';
+    return head + '<div class="stats">' + rep(4, function () {
+      return '<div class="card stat"><div class="sk-row" style="justify-content:space-between">' + line('40%') + line('30px', 30, '9px') +
+        '</div>' + line('34%', 28, '8px') + '</div>'; }) + '</div><div class="sk-row" style="margin-bottom:18px">' + line('200px', 38, '10px') +
+      line('100%', 38, '10px') + '</div><div class="card">' + rep(7, function (k) {
+        return '<div class="sk-item"><div class="skeleton sk-av"></div><div class="sk-col">' + line((46 - k % 3 * 7) + '%', 13) +
+          line((24 + k % 2 * 8) + '%', 10) + '</div>' + line('88px', 22, '99px') + '</div>'; }) + '</div>';
+  }
+  function go(u, push) {
+    var mine = ++seq, link = navLink(u), main = document.querySelector('main.page');
+    document.querySelectorAll('.picker-pop').forEach(function (n) { n.remove(); }); hideTip();
+    markActive(u.pathname);
+    if (push) history.pushState({spa: 1}, '', u.href);
+    var slow = setTimeout(function () {
+      if (mine !== seq) return;
+      main.className = 'page skeleton-page'; main.innerHTML = skeleton(link);
+      main.querySelector('.page-title').textContent = link ? link.textContent.trim() : '';
+      window.scrollTo(0, 0); UI.progress.start();
+    }, 60);
+    fetchPage(u.href).then(function (html) {
+      if (mine !== seq) return;
+      clearTimeout(slow); UI.progress.done();
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      if (!doc.body.hasAttribute('data-spa')) { location.href = u.href; return; }
+      document.title = doc.title;
+      var mine_css = document.querySelector('style[data-page-style]'), new_css = doc.querySelector('style[data-page-style]');
+      if (mine_css) mine_css.textContent = new_css ? new_css.textContent : '';
+      var fresh = document.importNode(doc.querySelector('main.page'), true);
+      document.querySelector('main.page').replaceWith(fresh);
+      window.scrollTo(0, 0);
+      UI.init(fresh);
+      var js = doc.querySelector('script[data-page-script]');
+      if (js) { var n = document.createElement('script'); n.textContent = js.textContent; document.body.appendChild(n); n.remove(); }
+      delete cache[u.href];  // shown once; the next visit gets fresh numbers
+    }).catch(function () { location.href = u.href; });
+  }
+  UI.go = function (href) { var u = sameOrigin(href); if (u && spa() && navLink(u)) go(u, true); else location.href = href; };
+
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('[data-count]').forEach(countUp);
-    times();
-    document.querySelectorAll('select[data-picker]').forEach(function (sel) { UI.enhance(sel); });
+    UI.init(document);
     // Whole rows are links; inner links and buttons keep their own click.
     document.addEventListener('click', function (e) {
       var row = e.target.closest('tr[data-href]');
       if (row && !e.target.closest('a,button,input,select,summary,details')) {
-        if (e.metaKey || e.ctrlKey) window.open(row.getAttribute('data-href')); else location.href = row.getAttribute('data-href');
+        if (e.metaKey || e.ctrlKey) window.open(row.getAttribute('data-href'));
+        else { UI.progress.start(); location.href = row.getAttribute('data-href'); }
       }
       document.querySelectorAll('details.menu[open]').forEach(function (m) { if (!m.contains(e.target)) m.open = false; });
     });
+    document.addEventListener('click', function (e) {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var a = e.target.closest('a[href]'); if (!a || a.target || a.hasAttribute('download')) return;
+      var u = sameOrigin(a.href); if (!u || a.getAttribute('href').charAt(0) === '#') return;
+      if (spa() && navLink(u)) { e.preventDefault(); if (u.href !== location.href) go(u, true); return; }
+      UI.progress.start();
+    });
+    document.addEventListener('submit', function (e) {
+      var f = e.target; if (e.defaultPrevented || !spa() || (f.getAttribute('method') || 'get').toLowerCase() !== 'get') return;
+      var u = sameOrigin(f.action); if (!u || !navLink(u)) return;
+      e.preventDefault(); u.search = new URLSearchParams(new FormData(f)).toString(); go(u, true);
+    });
+    window.addEventListener('popstate', function () {
+      var u = sameOrigin(location.href);
+      if (u && spa() && navLink(u)) go(u, false); else location.reload();
+    });
+    var hover;
+    ['mouseover', 'touchstart'].forEach(function (n) { document.addEventListener(n, function (e) {
+      var a = e.target.closest && e.target.closest('a[data-nav]'); if (!a || !spa()) return;
+      clearTimeout(hover); hover = setTimeout(function () { var u = sameOrigin(a.href); if (u && u.href !== location.href) fetchPage(u.href); }, 60);
+    }, {passive: true}); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') document.querySelectorAll('details.menu[open]').forEach(function (m) { m.open = false; });
       var s = document.querySelector('[data-search]');
       if (e.key === '/' && s && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); s.focus(); }
-    });
-    document.querySelectorAll('form[data-busy]').forEach(function (f) {
-      f.addEventListener('submit', function () { UI.busy(f.querySelector('[type=submit]'), true); });
-    });
-    document.querySelectorAll('[data-autosubmit]').forEach(function (n) {
-      n.addEventListener('change', function () { n.form.requestSubmit ? n.form.requestSubmit() : n.form.submit(); });
     });
   });
 })();
@@ -841,18 +1060,24 @@ def icons_json(names: tuple[str, ...] = ()) -> str:
 
 
 def document(title: str, body: str, *, kind: str = "app", css: str = "", script: str = "",
-             base: str = "", head: str = "") -> str:
-    """A whole page: fonts, tokens, components, the shared script, then ``body``."""
+             base: str = "", head: str = "", spa: str = "") -> str:
+    """A whole page: fonts, tokens, components, the shared script, then ``body``.
+
+    The page's own styles and script are marked (``data-page-style``,
+    ``data-page-script``) so an instant navigation can swap them; ``spa`` names a
+    page that takes part in that navigation.
+    """
     boot = f"window.BASE={json.dumps(base)};window.ICONS={icons_json()};"
+    body_attrs = f' data-spa data-page="{esc(spa)}"' if spa else ""
     return (
         f'<!doctype html><html lang="he" dir="rtl" class="{kind}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         '<meta name="robots" content="noindex,nofollow">'
         f'<meta name="theme-color" content="{"#f7f8fa" if kind == "app" else "#00a8f0"}">'
         f'<title>{esc(title)}</title><link rel="icon" href="{FAVICON}">{FONTS}'
-        f"<style>{CSS}{css}</style>{head}</head><body>{body}"
+        f"<style>{CSS}</style><style data-page-style>{css}</style>{head}</head><body{body_attrs}>{body}"
         f"<script>{boot}{JS}</script>"
-        + (f"<script>{script}</script>" if script else "")
+        + (f"<script data-page-script>{script}</script>" if script else "")
         + "</body></html>"
     )
 
@@ -868,11 +1093,21 @@ NAV = (("dashboard", "/dashboard", "פעילות", "activity"),
        ("responses", "/admin/responses", "תשובות", "inbox"))
 
 
+#: The menu's groups, and the skeleton each screen shows while it loads.
+NAV_GROUPS = (("מעקב", ("dashboard", "leads")), ("שאלונים", ("questionnaires", "responses")))
+SKELETONS = {"questionnaires": "cards"}
+
+
+def _nav_attrs(base: str, key: str, path: str, active: str) -> str:
+    current = ' aria-current="page"' if key == active else ""
+    return f'href="{base}{path}" data-nav data-skeleton="{SKELETONS.get(key, "list")}"{current}'
+
+
 def topbar(base: str, active: str) -> str:
+    """The narrow-screen menu (the side menu takes over from 1024 px)."""
     tabs = "".join(
-        f'<a class="tab{" is-active" if key == active else ""}" href="{base}{path}"'
-        f'{" aria-current=page" if key == active else ""}>{icon(ic, 15)}<span>{label}</span></a>'
-        for key, path, label, ic in NAV)
+        f'<a class="tab{" is-active" if key == active else ""}" {_nav_attrs(base, key, path, active)}>'
+        f'{icon(ic, 15)}<span>{label}</span></a>' for key, path, label, ic in NAV)
     return (f'<header class="topbar"><div class="topbar-in">'
             f'<a class="brand" href="{base}/dashboard">{BRAND_MARK}'
             f'<span class="brand-name">דרור ברק<small>אוטומציות</small></span></a>'
@@ -881,12 +1116,28 @@ def topbar(base: str, active: str) -> str:
             f'<span class="sr-only">יציאה</span></a></div></header>')
 
 
+def sidebar(base: str, active: str) -> str:
+    items = {key: (path, label, ic) for key, path, label, ic in NAV}
+    groups = "".join(
+        f'<div class="side-group"><div class="side-title">{title}</div>'
+        + "".join(f'<a class="side-link{" is-active" if k == active else ""}" {_nav_attrs(base, k, items[k][0], active)}>'
+                  f'{icon(items[k][2], 17)}<span>{items[k][1]}</span></a>' for k in keys)
+        + "</div>" for title, keys in NAV_GROUPS)
+    return (f'<aside class="sidebar"><a class="brand side-brand" href="{base}/dashboard">{BRAND_MARK}'
+            f'<span class="brand-name">דרור ברק<small>אוטומציות</small></span></a>'
+            f'<nav class="side-nav" aria-label="ניווט">{groups}</nav>'
+            f'<div class="side-foot"><a class="side-link" href="{base}/logout">{icon("logout", 17)}<span>יציאה</span></a></div></aside>')
+
+
 def app_page(base: str, active: str, title: str, body: str, *, script: str = "",
-             css: str = "", narrow: bool = False) -> str:
-    """Dror's screens: the top bar, then the page."""
-    return document(title, topbar(base, active)
-                    + f'<main class="page{" page-narrow" if narrow else ""}">{body}</main>',
-                    kind="app", css=css, script=script, base=base)
+             css: str = "", narrow: bool = False, spa: bool = False, fill: bool = False) -> str:
+    """Dror's screens: the side menu (the top bar on narrow screens), then the page.
+    ``spa`` pages switch between each other instantly (see the shared script);
+    ``fill`` fits a list page to the screen, its table scrolling inside."""
+    cls = "page" + (" page-narrow" if narrow else "") + (" page-fill" if fill else "")
+    return document(title, f'<div class="shell">{sidebar(base, active)}<div class="shell-main">{topbar(base, active)}'
+                    f'<main class="{cls}">{body}</main></div></div>',
+                    kind="app", css=css, script=script, base=base, spa=active if spa else "")
 
 
 def page_head(title: str, sub: str = "", actions: str = "", *, extra: str = "") -> str:

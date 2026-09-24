@@ -89,7 +89,7 @@ ADMIN_CSS = """
 .qcard-foot .spacer { flex: 1; }
 .qcard.is-leaving { animation: toast-out var(--d3) var(--ease) forwards; }
 /* editor */
-.ed-bar { position: sticky; top: 60px; z-index: 30; margin: -30px -20px 22px; padding: 12px 20px;
+.ed-bar { position: sticky; top: var(--sticky-top, 60px); z-index: 30; margin: -30px -20px 22px; padding: 12px 20px;
   background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--border); }
 .ed-bar-in { max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -178,7 +178,7 @@ ADMIN_CSS = """
 .timeline li:not(:last-child)::after { content: ""; position: absolute; right: 9px; top: 28px; bottom: -8px; width: 1.5px; background: var(--border); }
 .timeline time { color: var(--fg-muted); font-size: 13px; margin-inline-start: 6px; }
 @media (max-width: 720px) {
-  .ed-bar { top: 60px; margin: -22px -16px 18px; padding: 10px 16px; }
+  .ed-bar { margin: -22px -16px 18px; padding: 10px 16px; }
   .ed-grid2 { grid-template-columns: 1fr; }
   .ed-q-main { grid-template-columns: auto auto 1fr; }
   .ed-q-main .picker, .ed-q-main .switch { grid-column: 3; }
@@ -189,8 +189,10 @@ ADMIN_CSS = """
 """
 
 
-def _shell(base: str, active: str, title: str, body: str, *, script: str = "", narrow: bool = False) -> Response:
-    return Response(200, ui.app_page(base, active, title, body, script=script, css=ADMIN_CSS, narrow=narrow))
+def _shell(base: str, active: str, title: str, body: str, *, script: str = "", narrow: bool = False,
+           spa: bool = False, fill: bool = False) -> Response:
+    return Response(200, ui.app_page(base, active, title, body, script=script, css=ADMIN_CSS, narrow=narrow,
+                                     spa=spa, fill=fill))
 
 
 def _data_tag(element_id: str, data: Any) -> str:
@@ -220,6 +222,14 @@ function showLink(box, url, name) {
 
 
 # ------------------------------------------------------------------ pages
+
+
+def _ms(iso: Any) -> int:
+    """Epoch milliseconds, for sorting a table by a time (0 when there is none)."""
+    try:
+        return int(datetime.fromisoformat(str(iso).replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return 0
 
 
 def _counts(qid: str, responses: list[dict[str, Any]]) -> tuple[int, int]:
@@ -289,7 +299,7 @@ document.getElementById('newqform').addEventListener('submit', function (e) {
     else { UI.busy(b, false); UI.toast((d.errors || ['שגיאה']).join(' '), {kind: 'error'}); }
   });
 });
-document.addEventListener('click', function (e) {
+document.querySelector('main.page').addEventListener('click', function (e) {
   var b = e.target.closest('button'); if (!b) return;
   if (b.dataset.copy) { UI.busy(b, true); UI.api('/questionnaires', {copy_from: b.dataset.copy}).then(function (d) {
     if (d.id) location.href = BASE + '/admin/questionnaires/' + encodeURIComponent(d.id); else UI.busy(b, false); }); }
@@ -306,7 +316,7 @@ document.addEventListener('click', function (e) {
   });
 });
 """
-    return _shell(base, "questionnaires", "שאלונים", body, script=script)
+    return _shell(base, "questionnaires", "שאלונים", body, script=script, spa=True)
 
 
 EDITOR_JS = r"""
@@ -594,11 +604,13 @@ def page_responses(base: str, qid: str = "") -> Response:
         href = f'{base}/admin/responses/{quote(str(r.get("client_id")))}/{quote(str(r.get("questionnaire_id")))}'
         name = str(r.get("client_name") or r.get("client_id") or "")
         rows += (f'<tr data-href="{_esc(href)}" data-status="{"answered" if answered else "waiting"}" data-name="{_esc(name.lower())}">'
-                 f'<td><div class="person"><span class="avatar">{_esc(ui.initials(name))}</span>'
+                 f'<td data-v="{_esc(name)}"><div class="person"><span class="avatar">{_esc(ui.initials(name))}</span>'
                  f'<a class="cell-strong" href="{_esc(href)}">{_esc(name)}</a></div></td>'
-                 f'<td class="hide-sm">{_esc(r.get("questionnaire_title"))}</td><td>{status}</td>'
-                 f'<td class="muted hide-sm">{ui.when(r.get("sent_at"), "-")}</td>'
-                 f'<td class="muted">{ui.when(r.get("answered_at"), "-")}</td><td>{waiting}</td>'
+                 f'<td class="hide-sm">{_esc(r.get("questionnaire_title"))}</td>'
+                 f'<td data-v="{"מולא" if answered else "ממתין"}">{status}</td>'
+                 f'<td class="muted hide-sm" data-v="{_ms(r.get("sent_at"))}">{ui.when(r.get("sent_at"), "-")}</td>'
+                 f'<td class="muted" data-v="{_ms(r.get("answered_at"))}">{ui.when(r.get("answered_at"), "-")}</td>'
+                 f'<td data-v="{-1 if answered else (days or 0)}">{waiting}</td>'
                  f'<td style="width:1%">{ui.icon("chevron-left", 16, cls="row-go")}</td></tr>')
     export = (f'<a class="btn" href="{base}/admin/questionnaires/{quote(qid)}/export.csv">{ui.icon("download")}'
               '<span>ייצוא ל-Excel</span></a>' if qid else "")
@@ -616,8 +628,11 @@ def page_responses(base: str, qid: str = "") -> Response:
             <button data-f="waiting">ממתינים <span class="count">{waiting_n}</span></button></div>
             <label class="with-icon grow">{ui.icon("search", 16)}<input class="input" type="search" id="find" data-search
               placeholder="חיפוש לקוח" aria-label="חיפוש לקוח"><span class="kbd">/</span></label></div>
-            <div class="table-wrap reveal" style="--i:5"><table class="table"><thead><tr><th>לקוח</th><th class="hide-sm">שאלון</th>
-            <th>סטטוס</th><th class="hide-sm">נשלח</th><th>מולא</th><th>ממתין</th><th></th></tr></thead><tbody>{rows}</tbody></table>
+            <div class="table-wrap reveal" style="--i:5"><table class="table" data-sortable><thead><tr><th data-sort>לקוח</th>
+            <th class="hide-sm" data-sort>שאלון</th><th data-sort>סטטוס</th>
+            <th class="hide-sm" data-sort="num" data-first="descending" aria-sort="descending">נשלח</th>
+            <th data-sort="num" data-first="descending">מולא</th><th data-sort="num" data-first="descending">ממתין</th><th></th></tr></thead>
+            <tbody>{rows}</tbody></table>
             <div class="no-results" id="none">{ui.empty("אין תוצאות", "נסה חיפוש אחר או סינון אחר.", ico="search")}</div></div>""")
     else:
         table = '<div class="card">' + ui.empty(
@@ -678,7 +693,7 @@ document.getElementById('linkform').addEventListener('submit', function (e) {
 });
 """
     body = head + f'<div class="stats">{stats}</div>' + table + modal
-    return _shell(base, "responses", "תשובות לשאלונים", body, script=script)
+    return _shell(base, "responses", "תשובות לשאלונים", body, script=script, spa=True, fill=True)
 
 
 _EVENTS = {"answered": "הלקוח מילא את השאלון", "updated": "הלקוח עדכן את התשובות",

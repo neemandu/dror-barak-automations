@@ -105,3 +105,21 @@ def test_every_logged_action_has_a_hebrew_label():
                 if node.args[0].value not in subjects.ACTION_LABELS:
                     missing.add(f"{p.relative_to(ROOT)}: {node.args[0].value}")
     assert not missing, sorted(missing)
+
+
+def test_instantly_navigated_pages_keep_their_listeners_to_main():
+    """A page that takes part in instant navigation runs its script again on every
+    visit, and <main> is replaced; a listener on ``document`` would outlive the page
+    and fire on the next one (the questionnaire list's "copy" on the leads' phones)."""
+    import re as _re
+
+    from src import dashboard, questionnaire_admin
+
+    pages = [dashboard._leads_page([], ""), dashboard._dashboard_page([], {}, "")]
+    for route in ("/admin/questionnaires", "/admin/responses"):
+        pages.append(questionnaire_admin.handle("GET", route, {}, b"", {}, dry_run=True).body.encode())
+    for page in pages:
+        html = page.decode()
+        assert " data-spa " in html or " data-spa>" in html
+        script = _re.search(r"<script data-page-script>(.*?)</script>", html, _re.S)
+        assert not script or "document.addEventListener" not in script.group(1)

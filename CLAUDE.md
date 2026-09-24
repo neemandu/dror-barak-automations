@@ -176,7 +176,12 @@ avatars, and `UI.sortable`: drag to reorder with FLIP animation), Lucide icons, 
 micro-interactions (count-up, relative times, step transitions), all respecting
 `prefers-reduced-motion`. No native `<select>` on a page: mark it `data-picker` (`search`,
 `inline`) and `UI.enhance` upgrades it while the hidden select still submits the form.
-`ui.app_page` is Dror's shell, `ui.document(kind="public")` a client's. Use them rather
+`ui.app_page` is Dror's shell (a side menu from 1024 px, the top bar below), `ui.document(kind="public")` a
+client's. The main screens (`spa=True`: activity, leads, questionnaires, answers) switch **instantly**: the
+menu fetches the page (prefetched on hover), shows a skeleton meanwhile and swaps `<main>`; so a page
+script there must attach listeners to `main.page`, never `document` (a test checks). `fill=True` fits a list
+page to the screen with the table scrolling under a sticky header; `table[data-sortable]` + `th[data-sort]`
+sorts by a cell's `data-v`. Tooltips (`data-tip`) float above everything, so no container clips them. Use them rather
 than page-local styles, and check a change in a browser (light, dark, 390 px) before
 calling it done. Activity is shown with `subjects.label_for` (Hebrew), never the raw
 action name; `tests\test_house_style.py` fails on a logged action without a label.
