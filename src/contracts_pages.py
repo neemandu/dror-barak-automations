@@ -8,9 +8,12 @@
   is missing before pressing שלח הצעת מחיר in ClickUp; once signed, the document
   exactly as signed, with its audit record and the PDF.
 
-Nothing here sends a contract: sending stays a ClickUp button, Dror's decision.
-The one write is Dror's signature (``/admin/api/signature``), content like the
-questionnaire editor's. Sources: ClickUp (cached a minute), the run-log (sent,
+Sending: the contract page has the same "send" the ClickUp button has (it runs
+:func:`src.automations.send_quote.send`), after a confirmation that names who it
+goes to and at what price, and a second, louder one for a client who already
+signed; or it makes the link without emailing it, for Dror to send himself. Dror
+decided to have it here (2026-09-24); nothing else on the dashboard runs an
+automation. The other write is Dror's signature (``/admin/api/signature``). Sources: ClickUp (cached a minute), the run-log (sent,
 reminders, signed) and the contract store (signatures and their filing).
 """
 
@@ -35,6 +38,8 @@ STATES = {
     "none": ("טרם נשלח", "", 5),
 }
 FILING_GRACE_S = 15 * 60  # a filing still running is not yet a failed one
+#: States in which a client has signed something: a new send is a new contract.
+SIGNED_STATES = ("signed", "outside", "filing", "failed")
 
 CSS = """
 .ct-top { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; margin-bottom: 18px; }
@@ -76,7 +81,16 @@ CSS = """
 .small-facts dd { margin: 0; font-weight: 500; text-align: left; overflow-wrap: anywhere; }
 .how { padding: 4px 18px 16px; font-size: 13.5px; color: var(--fg-muted); line-height: 1.7; }
 .ct-card-body { padding: 14px 18px 16px; display: grid; gap: 10px; }
-@media (max-width: 1100px) { .ct-grid { grid-template-columns: minmax(0, 1fr); } .ct-side { position: static; } }
+.send-card .btn-block { width: 100%; justify-content: center; }
+.send-card .why-not { font-size: 13px; color: var(--warn-ink); display: flex; gap: 6px; align-items: flex-start; }
+.send-card .why-not .icon { margin-top: 2px; flex: none; }
+.linkbox { display: grid; gap: 10px; }
+.linkbox .copyrow { display: flex; gap: 8px; }
+.linkbox .input { font-family: var(--mono); font-size: 12.5px; direction: ltr; text-align: left; min-width: 0; }
+.linkbox .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.linkbox-ok { display: flex; align-items: center; gap: 8px; color: var(--success-ink); font-weight: 600; font-size: 14px; }
+/* one column: what to do (send, what is missing) before the contract, not after nine pages of it */
+@media (max-width: 1100px) { .ct-grid { grid-template-columns: minmax(0, 1fr); } .ct-side { position: static; order: -1; } }
 @media (max-width: 900px) { .ct-top { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) { .paper { padding: 24px 18px; border-radius: 14px; } }
 """
@@ -134,6 +148,49 @@ if (box) (function () {
   });
   mode(box.dataset.mode);
 })();
+"""
+
+
+SEND_JS = r"""
+var card = document.getElementById('send-card');
+if (card) card.addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-mode]'); if (!b || b.disabled) return;
+  var d = card.dataset, mode = b.dataset.mode, signed = d.signed === '1', box = document.getElementById('linkbox');
+  var what = mode === 'email'
+    ? 'יישלח מייל ל-' + d.email + ' עם קישור אישי לחתימה על החוזה שמוצג כאן (' + d.price + ').'
+    : 'ייווצר קישור אישי לחתימה על החוזה שמוצג כאן (' + d.price + '), ואותו שולחים ידנית, למשל בוואטסאפ.';
+  var text = (signed ? 'הלקוח כבר חתם על חוזה. זה יפתח חוזה חדש לחתימה, והחוזה החתום הקודם נשאר ב-Drive. ' : '') + what +
+    ' הסטטוס ב-ClickUp יעבור ל״נשלחה הצעת מחיר״, ואם הלקוח לא יחתום יישלחו תזכורות במייל.';
+  UI.confirm({title: (mode === 'email' ? 'לשלוח את החוזה ל' : 'ליצור קישור לחתימה עבור ') + d.name + '?', text: text,
+              ok: mode === 'email' ? 'שליחה' : 'יצירת קישור', icon: 'send', danger: signed}).then(function (yes) {
+    if (!yes) return; UI.busy(b, true);
+    UI.api('/contracts/' + encodeURIComponent(d.client) + '/send', {mode: mode, new_contract: signed}).then(function (r) {
+      UI.busy(b, false);
+      if (r._status !== 200) { UI.toast((r.errors || ['השליחה נכשלה'])[0], {kind: 'error'}); return; }
+      if (mode === 'email' && r.delivered) {
+        UI.done(b, 'נשלח'); UI.toast('החוזה נשלח ל-' + r.to);
+        setTimeout(function () { UI.go(location.pathname); }, 1400); return; }
+      if (mode === 'email') UI.toast('המייל לא יצא. הקישור מוכן, אפשר לשלוח אותו ידנית.', {kind: 'error'});
+      showLink(box, r.url, d);
+    });
+  });
+});
+function showLink(box, url, d) {
+  box.hidden = false; box.innerHTML =
+    '<div class="linkbox-ok">' + UI.icon('check-circle') + '<span>הקישור לחתימה מוכן</span></div>' +
+    '<div class="copyrow"><input class="input" readonly aria-label="קישור"><button type="button" class="btn" data-act="copy">' +
+    UI.icon('copy') + '<span>העתקה</span></button></div>' +
+    '<div class="acts"><a class="btn btn-sm" target="_blank" rel="noopener" data-act="open">' + UI.icon('external') +
+    '<span>פתיחה</span></a><a class="btn btn-sm" target="_blank" rel="noopener" data-act="wa">' + UI.icon('message') +
+    '<span>שליחה בוואטסאפ</span></a></div>';
+  var input = box.querySelector('input'); input.value = url;
+  input.addEventListener('focus', function () { input.select(); });
+  box.querySelector('[data-act=copy]').onclick = function () { UI.copy(url, this); };
+  box.querySelector('[data-act=open]').href = url;
+  var text = (d.first ? 'היי ' + d.first + ', ' : '') + 'ההסכם מוכן לחתימה דיגיטלית: ' + url;
+  box.querySelector('[data-act=wa]').href = 'https://wa.me/' + (d.phone || '') + '?text=' + encodeURIComponent(text);
+  box.classList.remove('is-new'); void box.offsetWidth; box.classList.add('is-new');
+}
 """
 
 
@@ -372,13 +429,56 @@ def preflight(client: dict[str, Any]) -> list[tuple[str, str, str]]:
     return rows
 
 
-def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, dry_run: bool = False) -> Optional[str]:
+def _price_line(client: dict[str, Any]) -> str:
+    try:
+        p = contract.prices(client)
+    except contract.ContractError:
+        return ""
+    parts = ([f'אסטרטגיה {p["strategy"]:,.0f} ₪'] if p["has_strategy"] and p["strategy"] > 0 else []) + \
+            ([f'קמפיינים {p["campaigns"]:,.0f} ₪'] if p["has_campaigns"] else [])
+    return " + ".join(parts) + " לחודש, לפני מע״מ"
+
+
+def _send_card(client: dict[str, Any], s: dict[str, Any], *, again: bool) -> str:
+    """Send the contract (the ClickUp button's action), or make the link to send by hand."""
+    cid = str(client.get("id") or "")
+    name = str(client.get("name") or cid)
+    email = str(client.get("email") or "").strip()
+    phone = "".join(ch for ch in str(client.get("phone") or "") if ch.isdigit())
+    if phone.startswith("0"):
+        phone = "972" + phone[1:]
+    blockers = [t for k, t, _x in preflight(client) if k == "err"]
+    why = ""
+    if blockers:
+        why = "אי אפשר לשלוח: " + ", ".join(blockers) + "."
+    elif not email:
+        why = "אין מייל ב-ClickUp, אז אפשר רק ליצור קישור ולשלוח אותו ידנית."
+    label = "שליחה חוזרת במייל" if s["state"] == "waiting" and not again else "שליחה במייל"
+    first = str(client.get("first_name") or name.split(" ")[0])
+    return (f'<section class="card send-card reveal" id="send-card" style="--i:2" data-client="{_esc(cid)}" '
+            f'data-name="{_esc(name)}" data-first="{_esc(first)}" data-email="{_esc(email)}" data-phone="{_esc(phone)}" '
+            f'data-price="{_esc(_price_line(client))}" data-signed="{"1" if again else ""}">'
+            f'<div class="card-head"><h2 class="card-title">{"חוזה חדש ללקוח" if again else "שליחה ללקוח"}</h2></div>'
+            f'<div class="ct-card-body">'
+            + (f'<div class="why-not">{ui.icon("alert", 14)}<span>{_esc(why)}</span></div>' if why else "")
+            + f'<button type="button" class="btn btn-primary btn-block" data-mode="email"'
+              f'{" disabled" if blockers or not email else ""}>{ui.icon("send", 15)}<span>{label}</span></button>'
+            + f'<button type="button" class="btn btn-block" data-mode="link"{" disabled" if blockers else ""}>'
+              f'{ui.icon("link", 15)}<span>יצירת קישור לשליחה ידנית</span></button>'
+            + '<p class="small muted" style="margin:0">כמו הכפתור ״שלח הצעת מחיר״ ב-ClickUp: הסטטוס עובר ל״נשלחה הצעת '
+              'מחיר״, ולקוח שלא חותם מקבל תזכורות אחרי יומיים ו-4 ימים.</p>'
+            + '<div class="linkbox" id="linkbox" hidden></div></div></section>')
+
+
+def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, dry_run: bool = False,
+                  new: bool = False) -> Optional[str]:
     client = clients_pages._find_client(client_id, dry_run)
     if not client:
         return None
     name = str(client.get("name") or client_id)
-    rec = _records().get(client_id)
-    s = state_for(client, entries, rec)
+    signed_rec = _records().get(client_id)
+    rec = None if new else signed_rec
+    s = state_for(client, entries, signed_rec)
     back = f'<a class="back" href="{base}/contracts">{ui.icon("arrow-right", 15)}<span>כל החוזים</span></a>'
     actions = (f'<a class="btn" href="{base}/clients/{quote(client_id)}">{ui.icon("users")}<span>כרטיס לקוח</span></a>'
                + (f'<a class="btn" href="{_esc(client["url"])}" target="_blank" rel="noopener">{ui.icon("clipboard")}<span>ב-ClickUp</span></a>'
@@ -398,8 +498,11 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
                'החתימה שמורה, והמערכת תנסה שוב אוטומטית מחר בבוקר.</span></div>' if s["state"] == "failed" else
                f'<div class="alert alert-info">{ui.icon("clock")}<span>החתימה התקבלה וה-PDF בהכנה. זה לוקח עד דקה.</span></div>'
                if s["state"] == "filing" else "")
+        again = (f'<a class="btn" href="{base}/contracts/{quote(client_id)}?new=1">{ui.icon("send", 15)}'
+                 '<span>שליחת חוזה חדש</span></a>' if s["state"] == "signed" else "")
         side = (f'<section class="card reveal" style="--i:2"><div class="card-head"><h2 class="card-title">החתימה</h2></div>'
-                f'<div class="ct-card-body">{err}<dl class="small-facts" style="padding:0">{facts_html}</dl>{pdf}</div></section>')
+                f'<div class="ct-card-body">{err}<dl class="small-facts" style="padding:0">{facts_html}</dl>'
+                f'<div class="sig-acts">{pdf}{again}</div></div></section>')
     else:
         body, problem = _preview_body(client)
         label = "תצוגה מקדימה: כך הלקוח יראה את החוזה"
@@ -408,9 +511,17 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
             rem = f', {s["reminders"]} תזכורות' if s["reminders"] else ""
             status = (f'<div class="alert alert-warn" style="margin:0 18px 12px">{ui.icon("hourglass")}<span>נשלח {_esc(signing.local_time(s["sent_at"]))}'
                       f'{rem}. ממתין לחתימה.</span></div>')
-        side = (f'<section class="card reveal" style="--i:2"><div class="card-head"><h2 class="card-title">לפני השליחה</h2></div>'
+        already = s["state"] in SIGNED_STATES
+        if already:
+            when = signing.local_time(s["signed_at"]) if s["signed_at"] else ""
+            to_signed = (f' <a href="{base}/contracts/{quote(client_id)}">לחוזה החתום</a>' if signed_rec else
+                         f' <a href="{_esc(s["link"])}" target="_blank" rel="noopener">לחוזה החתום</a>' if s["link"] else "")
+            status = (f'<div class="alert alert-warn" style="margin:0 18px 12px">{ui.icon("alert")}<span>הלקוח כבר חתם'
+                      f'{" " + _esc(when) if when else ""}. שליחה כאן היא חוזה חדש.{to_signed}</span></div>')
+        side = (_send_card(client, s, again=already)
+                + f'<section class="card reveal" style="--i:3"><div class="card-head"><h2 class="card-title">לפני השליחה</h2></div>'
                 f'{status}{_checks(preflight(client))}'
-                f'<div class="how">שולחים מהמשימה ב-ClickUp, בכפתור ״שלח הצעת מחיר״. אם משנים שם מחיר או מייל, '
+                f'<div class="how">אפשר לשלוח גם מהמשימה ב-ClickUp, בכפתור ״שלח הצעת מחיר״. אם משנים שם מחיר או מייל, '
                 f'החוזה כאן מתעדכן תוך דקה.</div></section>')
         if problem:
             body = ""
@@ -421,7 +532,7 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
              f'<div class="card">{ui.empty("אי אפשר להציג את החוזה", "יש לתקן את מה שמופיע בצד.", ico="file")}</div>')
     page = (back + head + f'<div class="ct-grid"><div>{paper}</div><aside class="ct-side">{side}</aside></div>')
     css = clients_pages.CSS + CSS + contract.CONTRACT_CSS + ".paper [data-ask] { background: #eef4ff; color: #3538cd; font-weight: 500; }"
-    return ui.app_page(base, "contracts", f"החוזה של {name} · חוזים", page, css=css, spa=True)
+    return ui.app_page(base, "contracts", f"החוזה של {name} · חוזים", page, css=css, script=SEND_JS, spa=True)
 
 
 # ------------------------------------------------------- on the client card
@@ -459,3 +570,41 @@ def save_signature(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         return 422, {"errors": ["החתימה ריקה או לא נקלטה. אפשר לנסות שוב."]}
     contract_store.set_provider_signature(png)
     return 200, {"ok": True}
+
+
+def send_contract(client_id: str, body: dict[str, Any], *, dry_run: bool = False) -> tuple[int, dict[str, Any]]:
+    """The contract page's send: ``{"mode": "email"|"link", "new_contract": bool}``.
+
+    Refuses what the ClickUp button would send broken (no price, no provider
+    details), an email to nobody, a new contract to a client who signed unless
+    the page said so, and a second press within a minute.
+    """
+    from .automations import send_quote
+    from .lib import idempotency
+
+    mode = "link" if body.get("mode") == "link" else "email"
+    client = clients_pages._find_client(client_id, dry_run)
+    if not client:
+        return 404, {"errors": ["הלקוח לא נמצא"]}
+    blockers = [t for k, t, _x in preflight(client) if k == "err"]
+    if blockers:
+        return 422, {"errors": ["אי אפשר לשלוח: " + ", ".join(blockers)]}
+    if mode == "email" and not str(client.get("email") or "").strip():
+        return 422, {"errors": ["אין מייל ב-ClickUp. אפשר ליצור קישור ולשלוח אותו ידנית."]}
+    # Decided exactly as the page decided what to show: the same state.
+    from . import dashboard
+
+    entries = dashboard._SAMPLE if dry_run else dashboard.run_log.read_all()
+    signed = state_for(client, entries, _records().get(client_id))["state"] in SIGNED_STATES
+    if signed and not body.get("new_contract"):
+        return 409, {"errors": ["הלקוח כבר חתם. חוזה חדש שולחים מ״שליחת חוזה חדש״ בדף החוזה."]}
+    once = f"dashboard_send:{client_id}"
+    if not idempotency.claim(once, ttl=60):
+        return 429, {"errors": ["החוזה נשלח לפני רגע. אפשר לשלוח שוב בעוד דקה."]}
+    try:
+        out = send_quote.send(client_id, dry_run=dry_run, email=mode == "email", source="מהדשבורד")
+    except Exception as exc:  # noqa: BLE001 - said on the page, logged by send_quote
+        idempotency.release(once)
+        return 502, {"errors": [f"השליחה נכשלה: {exc}"]}
+    clients_pages._CACHE.update(at=0.0, clients=None)  # the status on ClickUp just changed
+    return 200, {"ok": True, "url": out["url"], "to": out.get("to", ""), "delivered": bool(out.get("delivered"))}

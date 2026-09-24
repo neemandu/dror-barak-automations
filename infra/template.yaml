@@ -571,13 +571,15 @@ Resources:
       FunctionName: !Sub "dror-dashboard-${Stage}"
       CodeUri: ../
       Handler: src.dashboard_lambda.lambda_handler
-      Description: Read-only dashboard over the run-log, password-protected, session in a signed cookie.
+      Description: The dashboard over the run-log (and the contract send), password-protected, session in a signed cookie.
       Timeout: 30
       Environment:
         Variables:
           DASHBOARD_PASSWORD: !Ref DashboardPassword
       Policies:
-        - DynamoDBReadPolicy:
+        # Writes one kind of line: sending a contract from its page logs quote_sent,
+        # as the ClickUp button does.
+        - DynamoDBCrudPolicy:
             TableName: !Ref RunLogTable
         # The questionnaire editor writes definitions; "make a link" stores a
         # short link code (idempotency table) and records who was given what.

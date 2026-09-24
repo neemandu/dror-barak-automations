@@ -154,3 +154,92 @@ def test_the_routes_need_a_session_and_serve_the_screens(session):
         page = _get(path, session)
         assert page["statusCode"] == 200, path
         assert "data-spa" in page["body"] and 'aria-current="page"' in page["body"]
+
+
+# ------------------------------------------------------------ sending
+
+
+@pytest.fixture
+def alpha(monkeypatch):
+    monkeypatch.setattr(cp, "all_clients", lambda dry_run=False: [ALPHA])
+    return ALPHA
+
+
+def test_sending_from_the_page_is_the_clickup_buttons_send(alpha):
+    from src.lib import run_log
+
+    status, out = ct.send_contract("a1", {"mode": "email"}, dry_run=True)
+    assert status == 200 and out["delivered"] and out["url"].startswith("https://")
+    sent = [e for e in run_log.read_all() if e.get("action") == "quote_sent"]
+    assert sent and "מהדשבורד" in sent[-1]["detail"], "the log says where it was sent from"
+
+
+def test_a_second_press_within_a_minute_does_not_send_twice(alpha):
+    assert ct.send_contract("a1", {"mode": "email"}, dry_run=True)[0] == 200
+    status, out = ct.send_contract("a1", {"mode": "email"}, dry_run=True)
+    assert status == 429 and "לפני רגע" in out["errors"][0]
+
+
+def test_no_email_means_a_link_to_send_by_hand(monkeypatch):
+    monkeypatch.setattr(cp, "all_clients", lambda dry_run=False: [{**ALPHA, "email": ""}])
+    assert ct.send_contract("a1", {"mode": "email"}, dry_run=True)[0] == 422
+    status, out = ct.send_contract("a1", {"mode": "link"}, dry_run=True)
+    assert status == 200 and not out["delivered"] and out["url"]
+
+
+def test_nothing_goes_out_without_a_price(monkeypatch):
+    monkeypatch.setattr(cp, "all_clients", lambda dry_run=False: [{**ALPHA, "monthly_price": None}])
+    status, out = ct.send_contract("a1", {"mode": "link"}, dry_run=True)
+    assert status == 422 and "אין מחיר" in out["errors"][0]
+
+
+def test_a_signed_client_gets_a_new_contract_only_when_asked(alpha):
+    _signed_record(status=contract_store.FILED)
+    status, out = ct.send_contract("a1", {"mode": "email"}, dry_run=True)
+    assert status == 409 and "כבר חתם" in out["errors"][0]
+    assert ct.send_contract("a1", {"mode": "email", "new_contract": True}, dry_run=True)[0] == 200
+
+
+def test_the_page_offers_send_and_a_new_contract_after_signing(alpha):
+    html = ct.contract_page([], "/dev", "a1", dry_run=True)
+    assert 'id="send-card"' in html and "שליחה במייל" in html and "יצירת קישור לשליחה ידנית" in html
+    assert 'data-price="אסטרטגיה 4,900 ₪ לחודש, לפני מע״מ"' in html
+    _signed_record(status=contract_store.FILED)
+    signed = ct.contract_page([], "/dev", "a1", dry_run=True)
+    assert "/dev/contracts/a1?new=1" in signed and 'id="send-card"' not in signed
+    again = ct.contract_page([], "/dev", "a1", dry_run=True, new=True)
+    assert "חוזה חדש ללקוח" in again and 'data-signed="1"' in again and "הלקוח כבר חתם" in again
+
+
+def test_the_send_needs_the_dashboards_header(alpha):
+    import json
+
+    from src import questionnaire_admin as qa
+
+    def post(header):
+        return qa.handle("POST", "/admin/api/contracts/a1/send", {}, json.dumps({"mode": "email"}).encode(),
+                         {"x-requested-with": header}, dry_run=True)
+
+    assert post("").status == 403
+    assert post("dashboard").status == 200
+
+
+def test_a_client_signed_in_clickup_also_needs_the_new_contract_confirmation(monkeypatch):
+    monkeypatch.setattr(cp, "all_clients", lambda dry_run=False: [{**ALPHA, "sub_status": "in_work"}])
+    assert ct.send_contract("a1", {"mode": "link"}, dry_run=True)[0] == 409
+    html = ct.contract_page([], "/dev", "a1", dry_run=True)
+    assert 'data-signed="1"' in html and "שליחה כאן היא חוזה חדש" in html
+    assert ct.send_contract("a1", {"mode": "link", "new_contract": True}, dry_run=True)[0] == 200
+
+
+def test_the_send_route_decodes_the_client_id(monkeypatch):
+    import json
+    from urllib.parse import quote as q
+
+    from src import questionnaire_admin as qa
+
+    seen = []
+    monkeypatch.setattr(ct, "send_contract", lambda cid, body, dry_run=False: seen.append(cid) or (200, {}))
+    qa.handle("POST", f"/admin/api/contracts/{q('מכללת אלפא')}/send", {}, json.dumps({}).encode(),
+              {"x-requested-with": "dashboard"}, dry_run=True)
+    assert seen == ["מכללת אלפא"]

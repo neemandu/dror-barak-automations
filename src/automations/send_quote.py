@@ -32,7 +32,16 @@ NAME = "send_quote"
 _log = get_logger(NAME, "deliver")
 
 
-def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+def send(client_id: str, *, dry_run: bool = False, email: bool = True,
+         source: str = "מ-ClickUp") -> dict[str, Any]:
+    """Send a client their contract to sign.
+
+    The ClickUp button and the dashboard's send button both land here, so a quote
+    is the same thing whichever sent it. ``email=False`` makes the link without
+    emailing it (the dashboard's "copy the link", for Dror to send by WhatsApp);
+    everything else (status, reminders, the log) is the same, because the client
+    is being offered the contract either way.
+    """
     auto = Automation(NAME, dry_run=dry_run)
     crm = CrmClient(dry_run=dry_run)
     client = crm.get_client(client_id)
@@ -43,7 +52,7 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     fields = contract.fields_from_client(client)
     if contract.prices(client)["total"] <= 0:
         auto.log_action("no_price", "error", client_id=client_id,
-                        detail="מחיר חודשי is not set on the ClickUp task")
+                        detail="אין מחיר במשימה ב-ClickUp")
         raise ValueError(
             f"client {client_id} has no monthly price on the ClickUp task; "
             f"set מחיר חודשי before sending a quote"
@@ -55,7 +64,7 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     # the client knows their own ח.פ. Only note it here so it is not a surprise.
     asked_on_page = contract.missing_for(fields)
 
-    delivered = _deliver(crm, client, url, dry_run=dry_run)
+    delivered = _deliver(crm, client, url, dry_run=dry_run) if email else ""
     # Start the reminder clock. If the client doesn't sign, sign_reminders chases
     # them at 2 and 4 days. Signing clears this record.
     if not dry_run:
@@ -65,18 +74,18 @@ def send(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         contract_store.supersede(client_id)
         idempotency.release(idempotency.guard("signed_contract", client_id))
     crm.update_fields(client_id, sub_status=SUB_QUOTE_SENT)
+    how = (f"נשלח ב{delivered}" if delivered else
+           "הקישור נוצר בדשבורד, והשליחה ללקוח ידנית" if not email else
+           "לא נשלח אוטומטית, יש לשלוח את הקישור ללקוח ידנית")
     crm.append_automation_log(
         client_id,
-        "📄 הצעת מחיר נשלחה לחתימה\n"
-        f"קישור לחתימה: {url}\n"
-        + (f"נשלח ב־{delivered}" if delivered else
-           "לא נשלח אוטומטית - יש לשלוח את הקישור ללקוח ידנית"),
+        f"📄 הצעת מחיר נשלחה לחתימה ({source})\n"
+        f"קישור לחתימה: {url}\n{how}",
     )
-    auto.log_action("quote_sent", client_id=client_id, url=url,
-                    detail=f"delivered via {delivered}" if delivered
-                    else "link posted to the task; send it manually",
-                    asks_client_for=asked_on_page)
-    return {"url": url, "delivered": delivered, "asks_client_for": asked_on_page}
+    auto.log_action("quote_sent", client_id=client_id, url=url, detail=f"{how} ({source})",
+                    asks_client_for=asked_on_page, source=source)
+    return {"url": url, "delivered": delivered, "to": str(client.get("email") or "") if delivered else "",
+            "asks_client_for": asked_on_page}
 
 
 def _deliver(crm: CrmClient, client: dict[str, Any], url: str, *, dry_run: bool) -> str:

@@ -69,12 +69,15 @@ Consequences you must respect:
 - Dror's own daily digest therefore goes by **email**, not WhatsApp — it would
   otherwise need its own approved template and be billed every day.
 
-**The dashboard is read-only.** Nothing is triggered from it, deliberately: a
-misclick that fires onboarding would create a duplicate Drive folder. Adding triggers is a
-decision for Dror, not a refactor to slip in. The one write surface is the
-questionnaire admin (`/admin`, `src\questionnaire_admin.py`): it edits questionnaire
-*content*, mints client links, and stores Dror's own contract signature
-(`/admin/api/signature`) — it never sends anything or runs an automation.
+**The dashboard is read-only, with one deliberate exception.** Nothing else is triggered
+from it: a misclick that fires onboarding would create a duplicate Drive folder. Adding
+triggers is a decision for Dror, not a refactor to slip in. The exception, Dror's decision
+(2026-09-24): a contract page (`/contracts/<id>`) can **send that contract**, the same
+`send_quote` the ClickUp button runs, behind a confirmation naming the recipient and the
+price, a louder one for a client who already signed, and a one-minute guard against a
+double press; or make the link without emailing it. Writes otherwise go through the
+questionnaire admin (`/admin`, `src\questionnaire_admin.py`): questionnaire *content*,
+client links, and Dror's own contract signature (`/admin/api/signature`).
 
 **Questionnaire questions are data, not code.** They live in the questionnaire store
 (`src\lib\questionnaire_store.py`, DynamoDB `QuestionnaireTable`) and Dror edits them in
@@ -96,8 +99,9 @@ are wrapped by `email_templates.layout` (brand band, Dror's signature); document
 every page, footer with the page number). Drive's HTML import has no header or footer, and the
 Docs API is not enabled in the Google project.
 
-**`send_quote` is CLI/button-only, never automatic** — sending a client a
-contract is Dror's decision, not something a status change should trigger.
+**`send_quote` is only ever a person's click, never automatic**: the CLI, the ClickUp
+button, or the send on the dashboard's contract page. Sending a client a contract is
+Dror's decision, not something a status change should trigger.
 
 **Both statuses matter, and they answer different questions.** The *secondary*
 status drives the funnel; the **primary** status is what `list_active_clients`
@@ -116,7 +120,7 @@ logging, and a `--dry-run` mode.
 | 1 | **Lead → Google Contacts** | Webhook (ClickUp: new lead) | Save the lead's phone number to Google Contacts. |
 | 2 | **Send questionnaire** | Button (`שלח שאלון`) / CLI | Email the client the link to the default questionnaire (our own branded form, `src\questionnaire_page.py`) and restart the chase; records who was sent what. Onboarding (#5) sends it automatically after signing; the button re-sends a lost link; the admin can mint a link without sending anything. Nothing fires on `initial_meeting` — see History. |
 | 3 | **Social-media prep report** | Questionnaire submitted (background task) / Button (`בנה דוח רשתות`) | Claude **opens** each profile link the client gave (server-side web fetch/search) and writes what it actually saw — and says what it could not see. Google Doc in the client's `אסטרטגיה` folder. Reused by #8. |
-| 4 | **Send quote + capture signature** | Manual + our signing page | Send a quote with a signature link. The signing page stores the signature at once (`src\lib\contract_store.py`: the exact signed document, hashed) and answers; a background task (`sign_page.file_contract`) prints it in Chromium (same look, audit page last, Drive's converter as fallback), files it in Drive and on the ClickUp task, sets `חתם`, emails Dror and the client their copy, and logs `signed`; the daily reminder job re-files one that failed. Prices: `מחיר אסטרטגיה` / `מחיר קמפיינים` per line, else the monthly price as the strategy line; an unpriced service leaves the contract. Dror's own signature is drawn once in the dashboard. Prove the printing on a deploy with a `{"check": "contract_pdf"}` invoke of the webhook Lambda (sample details, stores and sends nothing; `"return_pdf": true` returns the PDF). |
+| 4 | **Send quote + capture signature** | Manual (ClickUp button, or the dashboard's contract page) + our signing page | Send a quote with a signature link. The signing page stores the signature at once (`src\lib\contract_store.py`: the exact signed document, hashed) and answers; a background task (`sign_page.file_contract`) prints it in Chromium (same look, audit page last, Drive's converter as fallback), files it in Drive and on the ClickUp task, sets `חתם`, emails Dror and the client their copy, and logs `signed`; the daily reminder job re-files one that failed. Prices: `מחיר אסטרטגיה` / `מחיר קמפיינים` per line, else the monthly price as the strategy line; an unpriced service leaves the contract. Dror's own signature is drawn once in the dashboard. Prove the printing on a deploy with a `{"check": "contract_pdf"}` invoke of the webhook Lambda (sample details, stores and sends nothing; `"return_pdf": true` returns the PDF). |
 | 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder + its standard subfolders, copy templates, email the strategy questionnaire (and chase it), send the WhatsApp welcome Flow when `MANYCHAT_FLOW_ONBOARDING` names an approved one (a logged skip until then), flag a missing Meta ad account, promote the client to `active`/`in_work`, and summarise on the task. |
 | 5b | **Questionnaire chase** | Scheduled (daily) | Nudges an onboarded client who hasn't filled the questionnaire, at 3 and 7 days, then tells Dror and stops. Runs in the same daily job as the signature reminders (`src\scheduled.py::reminders_handler`). |
 | ~~6~~ | ~~Monthly payment requests~~ | — | **Removed.** Dror invoices clients himself; the system does not touch Morning. |

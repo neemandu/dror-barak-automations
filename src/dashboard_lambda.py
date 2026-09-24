@@ -132,7 +132,7 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
             and method == "GET":
         if not valid_session(_cookie_value(event)):
             return _redirect(f"{base}/login")
-        page = dashboard.client_screens(route, base, dry_run=config.get_bool("WEBHOOK_DRY_RUN"))
+        page = dashboard.client_screens(route, base, dry_run=config.get_bool("WEBHOOK_DRY_RUN"), query=q)
         return _html(200, page) if page else _html(404, dashboard._not_found(base))
 
     if route == "/leads" and method == "GET":
