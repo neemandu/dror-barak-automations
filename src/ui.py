@@ -409,8 +409,8 @@ dialog.modal[open]::backdrop { animation: fade-in var(--d2) var(--ease); }
 
 /* ---- the side menu (desktop) */
 html.app { --sticky-top: 60px; }
-.shell { display: flex; min-height: 100vh; }
-.shell-main { flex: 1; min-width: 0; }
+.app-shell { display: flex; min-height: 100vh; }
+.app-main { flex: 1; min-width: 0; }
 .sidebar { position: sticky; top: 0; height: 100vh; width: 244px; flex: none; display: flex; flex-direction: column; gap: 22px;
   padding: 18px 12px 14px; border-inline-end: 1px solid var(--border); overflow-y: auto;
   background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
@@ -1186,7 +1186,7 @@ def app_page(base: str, active: str, title: str, body: str, *, script: str = "",
     ``spa`` pages switch between each other instantly (see the shared script);
     ``fill`` fits a list page to the screen, its table scrolling inside."""
     cls = "page" + (" page-narrow" if narrow else "") + (" page-fill" if fill else "")
-    return document(title, f'<div class="shell">{sidebar(base, active)}<div class="shell-main">{topbar(base, active)}'
+    return document(title, f'<div class="app-shell">{sidebar(base, active)}<div class="app-main">{topbar(base, active)}'
                     f'<main class="{cls}">{body}</main></div></div>',
                     kind="app", css=css, script=script, base=base, spa=active if spa else "")
 

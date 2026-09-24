@@ -127,3 +127,19 @@ def test_instantly_navigated_pages_keep_their_listeners_to_main():
         assert " data-spa " in html or " data-spa>" in html
         script = _re.search(r"<script data-page-script>(.*?)</script>", html, _re.S)
         assert not script or "document.addEventListener" not in script.group(1)
+
+
+def test_a_client_page_owns_its_layout_classes():
+    """The design system's styles load on every page; a class the app shell styles
+    (``.shell`` was one) would silently re-lay a client's questionnaire or signing page."""
+    from src import questionnaire_page, sign_page, ui
+
+    def classes(css):
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+        return {c for sel in re.findall(r"([^{}]+)\{", css) for c in re.findall(r"\.([A-Za-z][\w-]*)", sel)}
+
+    # the design system's own components and states, which a page tunes on purpose
+    adjusted = {"public", "btn", "btn-lg", "input", "badge", "icon", "ltr", "spacer", "is-done"}
+    shared = classes(ui.CSS) - adjusted
+    for page in (questionnaire_page, sign_page):
+        assert not classes(page.PAGE_CSS) & shared, f"{page.__name__}: {sorted(classes(page.PAGE_CSS) & shared)}"
