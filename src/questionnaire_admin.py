@@ -738,7 +738,7 @@ def page_response(base: str, client_id: str, qid: str) -> Response:
         <div class="resp-meta"><span>{ui.icon("clipboard", 14)}{_esc(r.get('questionnaire_title'))}</span>
           <span>{ui.icon("send", 14)}נשלח {ui.when(r.get('sent_at'), '-')}</span>
           <span>{ui.icon("check-circle", 14)}מולא {ui.when(r.get('answered_at'), '-')}</span></div></div>
-        <div class="page-actions">{doc}{copy_btn}<button class="btn btn-primary" id="mklink">{ui.icon("link")}<span>קישור חדש</span></button></div></div>
+        <div class="page-actions"><a class="btn" href="{base}/clients/{quote(client_id)}">{ui.icon("users")}<span>כרטיס לקוח</span></a>{doc}{copy_btn}<button class="btn btn-primary" id="mklink">{ui.icon("link")}<span>קישור חדש</span></button></div></div>
       <div class="card card-pad linkbox" id="linkbox" hidden style="margin-bottom:16px"></div>
       {answers_html}
       <section class="card reveal" style="margin-top:22px;--i:9"><div class="card-head"><h2 class="card-title">היסטוריה</h2></div>

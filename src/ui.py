@@ -336,7 +336,9 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-si
 
 /* ---- segmented control */
 .segmented { position: relative; display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-md);
-  background: var(--surface-active); }
+  background: var(--surface-active); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.segmented::-webkit-scrollbar { display: none; }
+.segmented > * { flex: none; }
 .segmented > a, .segmented > button { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 30px;
   padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--fg-muted); font-size: 13px; font-weight: 500;
   cursor: pointer; text-decoration: none !important; white-space: nowrap; transition: color var(--d2), background var(--d2), box-shadow var(--d2); }
@@ -966,7 +968,13 @@ JS = r"""
   // client's answers are ordinary loads, so their own guards keep working.
   var cache = {}, seq = 0;
   function sameOrigin(href) { try { var u = new URL(href, location.href); return u.origin === location.origin ? u : null; } catch (e) { return null; } }
-  function navLink(u) { return document.querySelector('[data-nav][href="' + u.pathname + '"]'); }
+  function navLink(u) {
+    var exact = document.querySelector('[data-nav][href="' + u.pathname + '"]'); if (exact) return exact;
+    var found = null;
+    document.querySelectorAll('[data-nav][data-nav-prefix]').forEach(function (a) {
+      if (!found && u.pathname.indexOf(a.getAttribute('data-nav-prefix')) === 0 && u.pathname.length > a.getAttribute('data-nav-prefix').length) found = a; });
+    return found;
+  }
   function spa() { return document.body.hasAttribute('data-spa'); }
   function fetchPage(url) {
     var hit = cache[url]; if (hit && Date.now() - hit.at < 20000) return hit.p;
@@ -975,16 +983,25 @@ JS = r"""
     cache[url] = {at: Date.now(), p: p}; p.catch(function () { delete cache[url]; });
     return p;
   }
-  function markActive(path) {
+  function markActive(link) {
+    var path = link ? link.pathname : '';
     document.querySelectorAll('[data-nav]').forEach(function (a) {
       var on = a.pathname === path; a.classList.toggle('is-active', on);
       if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   }
-  function skeleton(link) {
-    var kind = link ? link.getAttribute('data-skeleton') : 'list';
+  function skeleton(link, kind) {
+    kind = kind || (link ? link.getAttribute('data-skeleton') : 'list');
     function line(w, h, r) { return '<div class="skeleton" style="width:' + w + ';height:' + (h || 12) + 'px' + (r ? ';border-radius:' + r : '') + '"></div>'; }
     function rep(n, f) { var o = ''; for (var k = 0; k < n; k++) o += f(k); return o; }
     var head = '<div class="page-head"><div><h1 class="page-title"></h1><div style="margin-top:12px">' + line('320px', 12) + '</div></div></div>';
+    if (kind === 'card') return '<div class="sk-row" style="gap:18px;margin:26px 0 22px"><div class="skeleton" style="width:64px;height:64px;border-radius:50%"></div>' +
+      '<div class="sk-col">' + line('240px', 22, '8px') + line('180px', 12) + line('300px', 11) + '</div></div>' +
+      '<div class="card" style="padding:18px 20px;margin-bottom:18px"><div class="sk-row" style="justify-content:space-around">' +
+      rep(5, function () { return '<div class="skeleton" style="width:30px;height:30px;border-radius:50%"></div>'; }) + '</div></div>' +
+      '<div class="sk-row" style="align-items:flex-start;gap:16px"><div class="card" style="flex:1">' + rep(4, function (k) {
+        return '<div class="sk-item"><div class="skeleton sk-sq" style="width:36px;height:36px"></div><div class="sk-col">' + line((40 + k * 5) + '%', 13) +
+          line('30%', 10) + '</div>' + line('70px', 26, '8px') + '</div>'; }) + '</div><div class="card hide-sm" style="width:320px;padding:18px;display:grid;gap:12px">' +
+      rep(5, function () { return '<div class="sk-row" style="justify-content:space-between">' + line('35%') + line('30%') + '</div>'; }) + '</div></div>';
     if (kind === 'cards') return head + '<div class="sk-grid">' + rep(3, function () {
       return '<div class="card sk-card"><div class="sk-row"><div class="skeleton sk-sq"></div><div class="sk-col">' + line('70%', 14) +
         line('45%') + '</div></div>' + line('100%', 6, '99px') + '<div class="sk-row">' + line('84px', 30, '8px') + line('30px', 30, '8px') +
@@ -998,13 +1015,14 @@ JS = r"""
   }
   function go(u, push) {
     var mine = ++seq, link = navLink(u), main = document.querySelector('main.page');
+    var sub = link && link.pathname !== u.pathname;  // a page under the menu item: its own skeleton
     document.querySelectorAll('.picker-pop').forEach(function (n) { n.remove(); }); hideTip();
-    markActive(u.pathname);
+    markActive(link);
     if (push) history.pushState({spa: 1}, '', u.href);
     var slow = setTimeout(function () {
       if (mine !== seq) return;
-      main.className = 'page skeleton-page'; main.innerHTML = skeleton(link);
-      main.querySelector('.page-title').textContent = link ? link.textContent.trim() : '';
+      main.className = 'page skeleton-page'; main.innerHTML = skeleton(link, sub ? 'card' : '');
+      var t = main.querySelector('.page-title'); if (t) t.textContent = link ? link.textContent.trim() : '';
       window.scrollTo(0, 0); UI.progress.start();
     }, 60);
     fetchPage(u.href).then(function (html) {
@@ -1024,7 +1042,10 @@ JS = r"""
       delete cache[u.href];  // shown once; the next visit gets fresh numbers
     }).catch(function () { location.href = u.href; });
   }
-  UI.go = function (href) { var u = sameOrigin(href); if (u && spa() && navLink(u)) go(u, true); else location.href = href; };
+  UI.go = function (href) {
+    var u = sameOrigin(href);
+    if (u && spa() && navLink(u)) go(u, true); else { UI.progress.start(); location.href = href; }
+  };
 
   document.addEventListener('DOMContentLoaded', function () {
     UI.init(document);
@@ -1033,7 +1054,7 @@ JS = r"""
       var row = e.target.closest('tr[data-href]');
       if (row && !e.target.closest('a,button,input,select,summary,details')) {
         if (e.metaKey || e.ctrlKey) window.open(row.getAttribute('data-href'));
-        else { UI.progress.start(); location.href = row.getAttribute('data-href'); }
+        else UI.go(row.getAttribute('data-href'));
       }
       document.querySelectorAll('details.menu[open]').forEach(function (m) { if (!m.contains(e.target)) m.open = false; });
     });
@@ -1109,18 +1130,25 @@ BRAND_MARK = ('<span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="tr
 
 NAV = (("dashboard", "/dashboard", "פעילות", "activity"),
        ("leads", "/leads", "לידים", "user-plus"),
+       ("clients", "/clients", "לקוחות", "users"),
+       ("documents", "/documents", "מסמכים", "file"),
        ("questionnaires", "/admin/questionnaires", "שאלונים", "clipboard"),
        ("responses", "/admin/responses", "תשובות", "inbox"))
 
 
 #: The menu's groups, and the skeleton each screen shows while it loads.
-NAV_GROUPS = (("מעקב", ("dashboard", "leads")), ("שאלונים", ("questionnaires", "responses")))
+NAV_GROUPS = (("מעקב", ("dashboard", "leads")), ("לקוחות", ("clients", "documents")),
+              ("שאלונים", ("questionnaires", "responses")))
 SKELETONS = {"questionnaires": "cards"}
+#: Pages under a menu item (a client's card under לקוחות): the item stays marked,
+#: and they switch instantly too, with their own skeleton.
+NAV_PREFIX = {"clients": "/clients/"}
 
 
 def _nav_attrs(base: str, key: str, path: str, active: str) -> str:
     current = ' aria-current="page"' if key == active else ""
-    return f'href="{base}{path}" data-nav data-skeleton="{SKELETONS.get(key, "list")}"{current}'
+    prefix = f' data-nav-prefix="{base}{NAV_PREFIX[key]}"' if key in NAV_PREFIX else ""
+    return f'href="{base}{path}" data-nav data-skeleton="{SKELETONS.get(key, "list")}"{prefix}{current}'
 
 
 def topbar(base: str, active: str) -> str:

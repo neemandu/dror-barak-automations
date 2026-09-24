@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Optional
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import questionnaire_admin, ui
+from . import clients_pages, questionnaire_admin, ui
 from .lib import config, run_log, subjects, text_style
 
 SESSION_COOKIE = "dror_dash"
@@ -211,7 +211,7 @@ document.getElementById('reveal').addEventListener('click', function () {
     return ui.document("כניסה · לוח בקרה", body, kind="app", css=CSS, script=script, base=base).encode("utf-8")
 
 
-def _row(entry: dict[str, Any], i: int = 0) -> str:
+def _row(entry: dict[str, Any], i: int = 0, base: str = "") -> str:
     ico, cls, status_label = _STATUS.get(str(entry.get("status")), ("info", "skip", ""))
     title = f"<span>{_esc(subjects.label_for(entry))}</span>"
     if entry.get("dry_run"):
@@ -228,8 +228,8 @@ def _row(entry: dict[str, Any], i: int = 0) -> str:
     # The agent's entries carry a ClickUp task id, not a client: its name is the
     # detail line and the task is linked, so a chip would only show a code.
     if who and entry.get("automation") != "clickup_to_claude":
-        meta.append(f'<span class="chip" data-client="{_esc(who)}">{ui.icon("users", 12)}'
-                    f'<span>{_esc(who)}</span></span>')
+        meta.append(f'<a class="chip" href="{base}/clients/{quote(str(who))}" data-client="{_esc(who)}">{ui.icon("users", 12)}'
+                    f'<span>{_esc(who)}</span></a>')
     detail = entry.get("detail")
     # A detail that is just a URL is rendered as the link below, not as text.
     # Old entries predate the house style; show them in it.
@@ -290,13 +290,13 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
     # Failures first — being in the dark about breakages is the problem this solves.
     failed = subjects.failures(entries)
     if failed:
-        rows = "".join(_row(e) for e in failed[:20])
+        rows = "".join(_row(e, base=base) for e in failed[:20])
         sections += (f'<details class="card log-card is-alert reveal" open style="--i:5"><summary>'
                      f'<span class="subj-icon">{ui.icon("alert", 16)}</span><h2 class="card-title">דורש טיפול</h2>'
                      f'<span class="badge badge-err num">{len(failed)}</span>'
                      f'{ui.icon("chevron-down", 16, cls="chev")}</summary>{rows}</details>')
     for n, (subject, group) in enumerate(subjects.group_by_subject(entries)):
-        rows = "".join(_row(e) for e in sorted(group, key=lambda e: str(e.get("ts")), reverse=True))
+        rows = "".join(_row(e, base=base) for e in sorted(group, key=lambda e: str(e.get("ts")), reverse=True))
         sections += (f'<details class="card log-card reveal" open style="--i:{6 + n}"><summary>'
                      f'<span class="subj-icon">{ui.icon(_SUBJECT_ICONS.get(subject.key, "info"), 16)}</span>'
                      f'<h2 class="card-title">{_esc(subject.label)}</h2>'
@@ -471,6 +471,20 @@ def _load_leads() -> list[dict[str, Any]]:
     return _SAMPLE if DRY_RUN else run_log.read_all()
 
 
+def client_screens(path: str, base: str, *, dry_run: bool = False) -> Optional[bytes]:
+    """/clients, /clients/<id>, /documents (see :mod:`src.clients_pages`); None when not found."""
+    from urllib.parse import unquote
+
+    entries = _load_leads()
+    if path == "/documents":
+        return clients_pages.documents_page(entries, base, dry_run=dry_run).encode("utf-8")
+    if path == "/clients":
+        return clients_pages.clients_page(entries, base, dry_run=dry_run).encode("utf-8")
+    client_id = unquote(path[len("/clients/"):]).strip("/")
+    page = clients_pages.client_page(entries, base, client_id, dry_run=dry_run) if client_id else None
+    return page.encode("utf-8") if page else None
+
+
 def _not_found(base: str = "") -> bytes:
     return _page("לא נמצא", '<main class="page">' + ui.empty(
         "הדף לא נמצא", "ייתכן שהקישור ישן.", ico="search",
@@ -532,6 +546,18 @@ _SAMPLE: list[dict[str, Any]] = [
     {"ts": "2026-07-15T09:40:00Z", "automation": "smoove_to_manychat", "action": "flow_sent", "status": "ok",
      "client_id": "+972547654321", "msg": "1142673", "created": True,
      "detail": "ליד חדש, נשלחה הודעת וואטסאפ (רשימה 1142673)"},
+    {"ts": "2026-07-14T16:00:00Z", "automation": "strategy_bot", "action": "strategy_ready", "status": "ok",
+     "client_id": "מכללת אלפא", "url": "https://docs.google.com/document/d/strategy-v1",
+     "detail": "לפי שאלון מ-2026-07-12, 2 ערוצים נותחו"},
+    {"ts": "2026-07-15T16:30:00Z", "automation": "strategy_bot", "action": "strategy_ready", "status": "ok",
+     "client_id": "מכללת אלפא", "url": "https://docs.google.com/document/d/strategy-v2",
+     "detail": "לפי שאלון מ-2026-07-15, 2 ערוצים נותחו"},
+    {"ts": "2026-07-01T08:00:00Z", "automation": "campaign_summary", "action": "campaign_summary_ready", "status": "ok",
+     "client_id": "מכללת אלפא", "url": "https://drive.google.com/file/d/june-report/view",
+     "detail": "יוני 2026 · 6,335 ₪ · 105 לידים"},
+    {"ts": "2026-07-12T10:00:00Z", "automation": "questionnaire", "action": "questionnaire_answered", "status": "ok",
+     "client_id": "מכללת אלפא", "url": "https://docs.google.com/document/d/answers",
+     "detail": "שאלון הכנה לבניית אסטרטגיה"},
     {"ts": "2026-07-15T13:40:00Z", "automation": "social_prep", "action": "prep_report_ready",
      "status": "ok", "client_id": "מכללת בטא", "dry_run": True,
      "detail": "https://docs.google.com/document/d/xyz789"},
@@ -551,6 +577,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._redirect("/login")
             q = {k: v[0] for k, v in parse_qs(route.query).items() if v and v[0]}
             return self._send(200, _dashboard_page(_load(q), q))
+        if route.path in ("/clients", "/documents") or route.path.startswith("/clients/"):
+            if not self._authed():
+                return self._redirect("/login")
+            page = client_screens(route.path, "", dry_run=DRY_RUN)
+            return self._send(200, page) if page else self._send(404, _not_found())
         if route.path == "/leads":
             if not self._authed():
                 return self._redirect("/login")

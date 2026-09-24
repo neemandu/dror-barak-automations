@@ -72,5 +72,6 @@ def test_every_dashboard_page_has_a_route():
     doc = yaml.load(TEMPLATE.read_text(encoding="utf-8"), Loader=_CfnLoader)
     events = doc["Resources"]["DashboardFunction"]["Properties"]["Events"]
     paths = {e["Properties"]["Path"] for e in events.values()}
-    for page in ("/", "/dashboard", "/leads", "/login", "/logout", "/admin", "/admin/{proxy+}"):
+    for page in ("/", "/dashboard", "/leads", "/clients", "/clients/{id}", "/documents", "/login", "/logout",
+                 "/admin", "/admin/{proxy+}"):
         assert page in paths, page

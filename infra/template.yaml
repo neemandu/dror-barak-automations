@@ -605,6 +605,25 @@ Resources:
             ApiId: !Ref DashboardApi
             Path: /dashboard
             Method: GET
+        # Clients, one client's card, and every document (the לקוחות group).
+        Clients:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /clients
+            Method: GET
+        ClientCard:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /clients/{id}
+            Method: GET
+        Documents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /documents
+            Method: GET
         # The Smoove signups (לידים tab).
         Leads:
           Type: HttpApi

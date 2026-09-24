@@ -115,7 +115,11 @@ def test_instantly_navigated_pages_keep_their_listeners_to_main():
 
     from src import dashboard, questionnaire_admin
 
-    pages = [dashboard._leads_page([], ""), dashboard._dashboard_page([], {}, "")]
+    from src import clients_pages
+
+    pages = [dashboard._leads_page([], ""), dashboard._dashboard_page([], {}, ""),
+             clients_pages.documents_page([], "", dry_run=True).encode(), clients_pages.clients_page([], "", dry_run=True).encode(),
+             clients_pages.client_page([], "", "42", dry_run=True).encode()]
     for route in ("/admin/questionnaires", "/admin/responses"):
         pages.append(questionnaire_admin.handle("GET", route, {}, b"", {}, dry_run=True).body.encode())
     for page in pages:
