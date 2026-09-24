@@ -148,7 +148,7 @@ html.app, html.public {
     --success-ink: #47cd89; --success-soft: rgba(18, 183, 106, .12); --success-border: rgba(18, 183, 106, .3);
     --warn-ink: #fdb022; --warn-soft: rgba(247, 144, 9, .12); --warn-border: rgba(247, 144, 9, .3);
     --danger-ink: #f97066; --danger-soft: rgba(240, 68, 56, .12); --danger-border: rgba(240, 68, 56, .32);
-    --toast-bg: #f2f4f7; --toast-fg: #101828;
+    --toast-bg: #f2f4f7; --toast-fg: #101828; --tip-ok: #079455;
     --sh-xs: none; --sh-sm: 0 1px 2px rgba(0, 0, 0, .4); --sh-md: 0 4px 12px rgba(0, 0, 0, .4);
     --sh-lg: 0 12px 24px rgba(0, 0, 0, .45); --sh-xl: 0 24px 48px rgba(0, 0, 0, .55);
     color-scheme: dark;
@@ -402,6 +402,8 @@ dialog.modal[open]::backdrop { animation: fade-in var(--d2) var(--ease); }
   opacity: 0; transform: translateY(3px); transition: opacity .14s var(--ease), transform .14s var(--ease); }
 .tip.below { transform: translateY(-3px); }
 .tip.is-on { opacity: 1; transform: none; }
+.tip .icon { width: 13px; height: 13px; stroke-width: 3; vertical-align: -2px; margin-inline-end: 5px; color: var(--tip-ok, #47cd89); }
+.tip.is-success .icon { animation: pop .35s var(--spring); }
 
 /* ---- the side menu (desktop) */
 html.app { --sticky-top: 60px; }
@@ -598,7 +600,9 @@ JS = r"""
   };
   UI.copy = function (text, btn) {
     var p = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject();
-    p.then(function () { btn ? UI.done(btn, 'הועתק') : UI.toast('הועתק'); },
+    p.then(function () {
+      if (btn && btn.hasAttribute('data-tip')) UI.tipDone(btn, 'הועתק');
+      else if (btn) UI.done(btn, 'הועתק'); else UI.toast('הועתק'); },
            function () { UI.toast('לא הצלחתי להעתיק', {kind: 'error'}); });
   };
 
@@ -904,11 +908,15 @@ JS = r"""
   // ---- tooltips: floating, placed against the viewport, so no container clips them
   var tip = null, tipFor = null, tipT;
   function hideTip() { clearTimeout(tipT); tipFor = null; if (tip) tip.classList.remove('is-on'); }
-  function showTip(t) {
-    var text = t.getAttribute('data-tip'); if (!text) return;
-    if (!tip) { tip = el('div', 'tip'); tip.setAttribute('role', 'tooltip'); }
+  function showTip(t, done) {
+    var text = done || t.getAttribute('data-tip'); if (!text) return;
+    if (!tip) { tip = el('div', 'tip'); tip.setAttribute('role', 'tooltip'); tip.setAttribute('aria-live', 'polite'); }
     var host = t.closest('dialog') || document.body; if (tip.parentNode !== host) host.appendChild(tip);
-    tip.textContent = text; tip.classList.remove('is-on');
+    var was = tip.classList.contains('is-on') && tipFor === t;
+    tip.textContent = ''; tip.classList.toggle('is-success', !!done);
+    if (done) tip.innerHTML = UI.icon('check');
+    tip.appendChild(document.createTextNode(text));
+    if (!was) tip.classList.remove('is-on');
     var r = t.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
     var top = r.top - h - 8, below = top < 6;
     if (below) top = r.bottom + 8;
@@ -917,6 +925,16 @@ JS = r"""
     tip.classList.toggle('below', below);
     requestAnimationFrame(function () { if (tipFor === t) tip.classList.add('is-on'); });
   }
+  // After an action on a button with a tooltip (copy), the tooltip itself says it
+  // worked, "הועתק" with a green check, then goes back to what it was.
+  var doneT;
+  UI.tipDone = function (t, text) {
+    clearTimeout(tipT); clearTimeout(doneT); tipFor = t; showTip(t, text || 'בוצע');
+    doneT = setTimeout(function () {
+      if (tipFor !== t) return;
+      if (t.matches(':hover')) showTip(t); else hideTip();
+    }, 1500);
+  };
   document.addEventListener('mouseover', function (e) {
     var t = e.target.closest ? e.target.closest('[data-tip]') : null;
     if (t === tipFor) return; hideTip();
@@ -929,7 +947,9 @@ JS = r"""
     if (t && t.matches(':focus-visible')) { tipFor = t; showTip(t); }
   });
   document.addEventListener('focusout', hideTip);
-  ['scroll', 'pointerdown', 'keydown'].forEach(function (n) { window.addEventListener(n, hideTip, true); });
+  ['scroll', 'keydown'].forEach(function (n) { window.addEventListener(n, hideTip, true); });
+  window.addEventListener('pointerdown', function (e) {
+    if (!(tipFor && e.target.closest && e.target.closest('[data-tip]') === tipFor)) hideTip(); }, true);
 
   // ---- a thin progress line for anything that takes a moment
   var bar = null, barT;
