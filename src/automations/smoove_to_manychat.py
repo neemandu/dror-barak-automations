@@ -47,6 +47,27 @@ def flow_for(msg: str) -> str | None:
     return config.get(flow_env_key(msg))
 
 
+_FLOW_NAMES: dict[str, str] = {}
+
+
+def list_name_for(mc: ManyChatClient, flow_ns: str) -> str:
+    """The ManyChat Flow's name, which says what the Smoove list is. Best-effort:
+    a lookup that fails must not fail a lead whose message already went out."""
+    if flow_ns not in _FLOW_NAMES:
+        try:
+            _FLOW_NAMES.update(mc.flow_names())
+        except Exception:  # noqa: BLE001
+            return ""
+    return _FLOW_NAMES.get(flow_ns, "")
+
+
+def _manychat_name(mc: ManyChatClient, subscriber_id: str) -> str:
+    try:
+        return mc.subscriber_name(subscriber_id)
+    except Exception:  # noqa: BLE001 - the message is sent; a name is a nicety
+        return ""
+
+
 def run(
     first_name: str, cellphone: str, msg: str, *, dry_run: bool = False
 ) -> dict[str, Any]:
@@ -75,14 +96,17 @@ def run(
     subscriber_id, created = mc.ensure_subscriber(phone, first_name or "")
     mc.send_flow(subscriber_id, flow_ns)
 
+    # The name and the list are what the dashboard's לידים tab shows; the phone
+    # and a list number alone are how the first 140 leads appeared.
+    name = (first_name or "").strip() or _manychat_name(mc, subscriber_id)
+    list_name = list_name_for(mc, flow_ns)
     auto.log_action(
         "flow_sent",
         client_id=phone,
-        # The name is what the dashboard's לידים tab and the activity show; the
-        # phone alone is how the first 140 leads appeared: a column of numbers.
-        name=(first_name or "").strip(),
+        name=name,
+        list_name=list_name,
         detail=(f"{'ליד חדש' if created else 'ליד שכבר קיים ב-ManyChat'}, "
-                f"נשלחה הודעת וואטסאפ (רשימה {msg})"),
+                f"נשלחה הודעת וואטסאפ ({list_name or f'רשימה {msg}'})"),
         msg=msg,
         subscriber_id=subscriber_id,
         created=created,

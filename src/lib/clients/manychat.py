@@ -204,6 +204,35 @@ class ManyChatClient(BaseClient):
                 f"{phone}, or delete the contact and let it be recreated."
             ) from exc
 
+    def subscriber_name(self, subscriber_id: str) -> str:
+        """The contact's name in ManyChat, "" when it has none (``GET /fb/subscriber/getInfo``).
+
+        What Smoove sent when the contact was made, or the WhatsApp profile name.
+        """
+        if self.dry_run:
+            self._record("subscriber_name", subscriber_id=subscriber_id)
+            return ""
+        try:
+            resp = self._request("GET", f"{self.base_url}/fb/subscriber/getInfo",
+                                 headers=self._headers(), params={"subscriber_id": subscriber_id})
+        except HttpError as exc:
+            if exc.status in (400, 404):
+                return ""
+            raise
+        data = (resp.json() or {}).get("data") or {}
+        full = " ".join(x for x in (str(data.get("first_name") or "").strip(),
+                                    str(data.get("last_name") or "").strip()) if x)
+        return full or str(data.get("name") or "").strip()
+
+    def flow_names(self) -> dict[str, str]:
+        """Every Flow's name by its ``flow_ns`` (``GET /fb/page/getFlows``)."""
+        if self.dry_run:
+            self._record("flow_names")
+            return {}
+        resp = self._request("GET", f"{self.base_url}/fb/page/getFlows", headers=self._headers())
+        data = (resp.json() or {}).get("data") or {}
+        return {str(f["ns"]): str(f.get("name") or "").strip() for f in data.get("flows") or [] if f.get("ns")}
+
     def send_flow(self, subscriber_id: str, flow_ns: str) -> dict[str, Any]:
         """Trigger a Flow (a Meta-approved template) for a subscriber."""
         if self.dry_run:

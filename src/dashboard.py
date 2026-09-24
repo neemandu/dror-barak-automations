@@ -372,11 +372,17 @@ def leads_from(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             lead["name"] = str(e["name"]).strip()
         if e.get("msg") and str(e["msg"]) not in lead["lists"]:
             lead["lists"].append(str(e["msg"]))
+        if e.get("msg") and e.get("list_name"):
+            _LIST_NAMES[str(e["msg"])] = str(e["list_name"])
     return sorted(leads.values(), key=lambda l: str(l["last"]), reverse=True)
 
 
+#: A Smoove list's name (its ManyChat Flow's), as logged with its leads.
+_LIST_NAMES: dict[str, str] = {}
+
+
 def _list_label(msg: str) -> str:
-    return f"רשימה {msg}" if msg.isdigit() else msg
+    return _LIST_NAMES.get(msg) or (f"רשימה {msg}" if msg.isdigit() else msg)
 
 
 def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:

@@ -117,8 +117,15 @@ def handle(raw: str, token: str, dry_run: bool = False) -> dict[str, Any]:
 
 
 def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
-    """API Gateway HTTP API (payload v2) entrypoint."""
+    """API Gateway HTTP API (payload v2) entrypoint, and one maintenance task."""
     config.load_dotenv()
+
+    if isinstance(event, dict) and event.get("task") == "backfill_leads":
+        # A direct invoke, which only IAM can make: API Gateway events never carry
+        # a top-level "task". Runs here because this function holds the ManyChat key.
+        from .tools import backfill_leads
+
+        return backfill_leads.run(apply=bool(event.get("apply")))
 
     raw = event.get("body") or ""
     if event.get("isBase64Encoded"):

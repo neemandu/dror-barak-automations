@@ -315,3 +315,90 @@ def test_lambda_handler_accepts_query_token(monkeypatch):
         {"body": body, "headers": {}, "queryStringParameters": {"token": "s3cret"}}
     )
     assert resp["statusCode"] == 200
+
+
+# ------------------------------------------------ names from ManyChat (2026-09-24)
+
+
+@pytest.fixture
+def manychat_names(monkeypatch):
+    from src.lib.clients.manychat import ManyChatClient
+
+    smoove_to_manychat._FLOW_NAMES.clear()
+    monkeypatch.setattr(ManyChatClient, "subscriber_name", lambda self, sid: "יעל כהן")
+    monkeypatch.setattr(ManyChatClient, "flow_names", lambda self: {"content_webinar": "וובינר AI"})
+    monkeypatch.setenv("MANYCHAT_FLOW_889128", "content_webinar")
+    yield
+    smoove_to_manychat._FLOW_NAMES.clear()
+
+
+def test_a_lead_without_a_name_gets_the_one_manychat_has(read_log, manychat_names):
+    smoove_to_manychat.run("", "0501234567", "889128", dry_run=True)
+    sent = next(e for e in read_log() if e["action"] == "flow_sent")
+    assert sent["name"] == "יעל כהן" and sent["list_name"] == "וובינר AI"
+    assert "וובינר AI" in sent["detail"]
+
+
+def test_the_name_smoove_sends_wins(read_log, manychat_names):
+    smoove_to_manychat.run("דנה", "0501234567", "889128", dry_run=True)
+    assert next(e for e in read_log() if e["action"] == "flow_sent")["name"] == "דנה"
+
+
+class _Table:
+    def __init__(self, items):
+        self.items, self.updates = items, []
+
+    def scan(self, **kwargs):
+        return {"Items": [i for i in self.items if i.get("automation") == "smoove_to_manychat"]}
+
+    def update_item(self, **kwargs):
+        self.updates.append(kwargs)
+        item = next(i for i in self.items if i["ts_id"] == kwargs["Key"]["ts_id"])
+        for name, value in kwargs["ExpressionAttributeValues"].items():
+            item[kwargs["ExpressionAttributeNames"]["#" + name[1:]]] = value
+
+
+class _ManyChat:
+    def __init__(self):
+        self.lookups = 0
+
+    def flow_names(self):
+        return {"content_webinar": "וובינר AI"}
+
+    def subscriber_name(self, sid):
+        self.lookups += 1
+        return {"s1": "רון", "s2": ""}.get(sid, "")
+
+
+def test_the_backfill_reports_first_then_writes_and_is_idempotent(monkeypatch):
+    from src.tools import backfill_leads
+
+    monkeypatch.setenv("MANYCHAT_FLOW_889128", "content_webinar")
+    table = _Table([
+        {"day": "2026-08-01", "ts_id": "a", "automation": "smoove_to_manychat", "subscriber_id": "s1", "msg": "889128"},
+        {"day": "2026-08-02", "ts_id": "b", "automation": "smoove_to_manychat", "subscriber_id": "s1", "msg": "889128"},
+        {"day": "2026-08-03", "ts_id": "c", "automation": "smoove_to_manychat", "subscriber_id": "s2", "msg": "889128"},
+        {"day": "2026-09-24", "ts_id": "d", "automation": "smoove_to_manychat", "subscriber_id": "s3", "msg": "889128",
+         "name": "דנה", "list_name": "וובינר AI"},
+        {"day": "2026-08-03", "ts_id": "e", "automation": "onboarding"}])
+    mc = _ManyChat()
+    report = backfill_leads.run(table=table, mc=mc, pause=0)
+    assert report["applied"] is False and not table.updates
+    assert report["named_now"] == 2 and report["no_name_in_manychat"] == 1 and report["had_name"] == 1
+    assert report["lists"] == {"889128": "וובינר AI"} and mc.lookups == 2, "one lookup per contact"
+
+    backfill_leads.run(apply=True, table=table, mc=mc, pause=0)
+    assert [i.get("name") for i in table.items[:4]] == ["רון", "רון", None, "דנה"]
+    assert all(i.get("list_name") == "וובינר AI" for i in table.items[:4])
+    again = backfill_leads.run(apply=True, table=table, mc=_ManyChat(), pause=0)
+    assert again["updated"] == 0 and again["no_name_in_manychat"] == 1, "a second run changes nothing"
+
+
+def test_a_direct_invoke_runs_the_backfill(monkeypatch):
+    from src import smoove_handler
+    from src.tools import backfill_leads
+
+    seen = {}
+    monkeypatch.setattr(backfill_leads, "run", lambda apply=False: seen.setdefault("apply", apply) or {"ok": 1})
+    smoove_handler.lambda_handler({"task": "backfill_leads", "apply": True})
+    assert seen == {"apply": True}
