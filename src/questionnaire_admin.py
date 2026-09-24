@@ -109,8 +109,9 @@ ADMIN_CSS = """
 .inline-input.xl { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .inline-input.lg { font-size: 16px; font-weight: 600; }
 .inline-input.sm { font-size: 13.5px; color: var(--fg-muted); }
-.ed-section { margin-bottom: 16px; overflow: hidden; }
-.ed-section-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; }
+.ed-section { margin-bottom: 16px; }
+.ed-section-head { display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 12px 12px; }
+.ed-section-head .drag-handle { margin-top: 2px; }
 .ed-num { width: 28px; height: 28px; border-radius: 8px; flex: none; display: grid; place-items: center; margin-top: 4px;
   background: var(--fg); color: var(--bg); font-size: 13px; font-weight: 700; }
 .ed-section-titles { flex: 1; min-width: 0; display: grid; gap: 2px; }
@@ -122,12 +123,13 @@ ADMIN_CSS = """
 .ed-q { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 12px 14px;
   display: grid; gap: 10px; transition: border-color var(--d2), box-shadow var(--d2), background var(--d2); }
 .ed-q:focus-within { border-color: var(--border-strong); background: var(--surface); box-shadow: var(--sh-md); }
-.ed-q-main { display: grid; grid-template-columns: auto 1fr 170px auto; gap: 10px; align-items: center; }
+.ed-q-main { display: grid; grid-template-columns: auto auto 1fr 210px auto; gap: 8px 10px; align-items: center; }
+.ed-q-main .drag-handle { margin-inline-start: -6px; }
 .kind-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--surface);
   border: 1px solid var(--border); color: var(--fg-2); }
 .ed-q .select { height: 34px; font-size: 13.5px; }
-.ed-q-extra { display: grid; gap: 10px; padding-inline-start: 40px; }
-.ed-q-foot { display: flex; align-items: center; gap: 8px; padding-inline-start: 40px; }
+.ed-q-extra { display: grid; gap: 10px; padding-inline-start: 66px; }
+.ed-q-foot { display: flex; align-items: center; gap: 8px; padding-inline-start: 66px; }
 .ed-q-foot .spacer { flex: 1; }
 .ed-key { font-family: var(--mono); font-size: 11px; color: var(--fg-subtle); direction: ltr; }
 .ed-q .ed-tools { opacity: .55; transition: opacity var(--d2); }
@@ -178,8 +180,8 @@ ADMIN_CSS = """
 @media (max-width: 720px) {
   .ed-bar { top: 60px; margin: -22px -16px 18px; padding: 10px 16px; }
   .ed-grid2 { grid-template-columns: 1fr; }
-  .ed-q-main { grid-template-columns: auto 1fr; }
-  .ed-q-main .select, .ed-q-main .switch { grid-column: 2; }
+  .ed-q-main { grid-template-columns: auto auto 1fr; }
+  .ed-q-main .picker, .ed-q-main .switch { grid-column: 3; }
   .ed-q-extra, .ed-q-foot { padding-inline-start: 0; }
   .qgrid { grid-template-columns: 1fr; }
   .hide-sm { display: none; }
@@ -261,7 +263,8 @@ def page_list(base: str) -> Response:
             <details class="menu"><summary class="btn btn-ghost btn-sm btn-icon" aria-label="עוד">{ui.icon("more", 16)}</summary>
               <div class="menu-list">{menu}</div></details>
           </div></article>"""
-    options = "".join(f'<option value="{_esc(d["id"])}">{_esc(d.get("title"))}</option>' for d in defs)
+    options = "".join(f'<option value="{_esc(d["id"])}" data-icon="copy" data-hint="עותק של השאלון הזה">{_esc(d.get("title"))}</option>'
+                      for d in defs)
     body = (ui.page_head("שאלונים", 'השאלון המסומן "נשלח ללקוחות" יוצא אוטומטית אחרי חתימה. לקוח שכבר קיבל שאלון '
                          "ממשיך לראות את השאלון שקיבל.",
                          f'<button class="btn btn-primary" data-modal="newq">{ui.icon("plus")}<span>שאלון חדש</span></button>')
@@ -272,8 +275,8 @@ def page_list(base: str) -> Response:
               <p class="modal-text">תן לו שם. אפשר להתחיל מאפס או מעותק של שאלון קיים.</p>
               <div class="modal-fields"><label class="field"><span class="label">שם השאלון</span>
                 <input class="input" id="newtitle" autofocus placeholder="למשל: שאלון היכרות לפני פגישה" required></label>
-              <label class="field"><span class="label">להתחיל מ</span><select class="select" id="newfrom">
-                <option value="">שאלון ריק</option>{options}</select></label></div></div>
+              <label class="field"><span class="label">להתחיל מ</span><select class="select" id="newfrom" data-picker aria-label="להתחיל מ">
+                <option value="" data-icon="plus" data-hint="שלב אחד עם שאלה ראשונה">שאלון ריק</option>{options}</select></label></div></div>
               <div class="modal-foot"><button type="submit" class="btn btn-primary" id="create">{ui.icon("plus")}<span>יצירה</span></button>
               <button type="button" class="btn" data-close>ביטול</button></div></form></dialog>""")
     script = r"""
@@ -349,6 +352,7 @@ function iconBtn(icon, tip, fn, cls) {
   b.addEventListener('click', fn); return b;
 }
 function change() { setDirty(true); render(); }
+function grip(cls, label) { return h('button', {type: 'button', class: 'drag-handle ' + cls, 'aria-label': label, title: label, html: UI.icon('grip')}); }
 function snapshot() { return JSON.stringify(defn.sections); }
 function undoable(label, before) {
   UI.toast(label, {icon: 'trash', action: {label: 'ביטול', run: function () { defn.sections = JSON.parse(before); change(); UI.toast('שוחזר'); }}});
@@ -377,11 +381,10 @@ function optionsEditor(q) {
 
 function questionCard(section, si, q, qi) {
   var list = section.questions;
-  var type = h('select', {class: 'select', 'aria-label': 'סוג שאלה'}, Object.keys(meta.kinds).map(function (k) {
-    var o = h('option', {value: k, text: meta.kinds[k]}); if (k === q.kind) o.selected = true; return o; }));
-  type.onchange = function () { q.kind = type.value; if (q.kind !== 'url') q.role = '';
+  var type = UI.picker({value: q.kind, options: meta.kindOptions, label: 'סוג שאלה', onChange: function (v) {
+    q.kind = v; if (q.kind !== 'url') q.role = '';
     if ((q.kind === 'choice' || q.kind === 'multi') && !(q.options || []).filter(Boolean).length) q.options = ['אפשרות א', 'אפשרות ב'];
-    change(); };
+    change(); }});
   var req = h('label', {class: 'switch'}, [h('input', {type: 'checkbox', checked: q.required,
     onchange: function (e) { q.required = e.target.checked; setDirty(true); }}), 'חובה']);
   var label = input(q, 'label', 'inline-input lg', 'נוסח השאלה');
@@ -389,15 +392,14 @@ function questionCard(section, si, q, qi) {
   var extra = h('div', {class: 'ed-q-extra'}, [input(q, 'hint', 'inline-input sm', 'הסבר קטן מתחת לשאלה (לא חובה)')]);
   if (q.kind === 'choice' || q.kind === 'multi') extra.appendChild(optionsEditor(q));
   if (q.kind === 'scale') {
-    var sm = h('select', {class: 'select'}, [5, 7, 10].map(function (n) { var o = h('option', {value: n, text: '1 עד ' + n});
-      if (n === (q.scale_max || 10)) o.selected = true; return o; }));
-    sm.onchange = function () { q.scale_max = parseInt(sm.value, 10); setDirty(true); };
+    var sm = UI.picker({value: q.scale_max || 10, label: 'טווח הסולם', options: [5, 7, 10].map(function (n) {
+      return {value: n, label: '1 עד ' + n, icon: 'gauge', hint: n === 10 ? 'הנפוץ ביותר' : ''}; }),
+      onChange: function (v) { q.scale_max = parseInt(v, 10); setDirty(true); }});
     extra.appendChild(field('טווח הסולם', sm));
   }
   if (q.kind === 'url') {
-    var role = h('select', {class: 'select'}, Object.keys(meta.roles).map(function (k) {
-      var o = h('option', {value: k, text: k ? meta.roles[k] : 'לא משמש לניתוח'}); if (k === (q.role || '')) o.selected = true; return o; }));
-    role.onchange = function () { q.role = role.value; setDirty(true); };
+    var role = UI.picker({value: q.role || '', options: meta.roleOptions, label: 'סוג הקישור',
+      onChange: function (v) { q.role = v; setDirty(true); }});
     extra.appendChild(field('ה-AI ינתח את הקישור הזה בתור', role));
   }
   var tools = h('div', {class: 'ed-tools'}, [
@@ -413,7 +415,8 @@ function questionCard(section, si, q, qi) {
       undoable('השאלה נמחקה', before); }, 'btn-danger'),
   ]);
   return h('div', {class: 'ed-q', 'data-key': q.key}, [
-    h('div', {class: 'ed-q-main'}, [h('span', {class: 'kind-icon', html: UI.icon(meta.icons[q.kind] || 'type')}), label, type, req]),
+    h('div', {class: 'ed-q-main'}, [grip('q-grip', 'גרירה לשינוי מיקום השאלה'),
+      h('span', {class: 'kind-icon', html: UI.icon(meta.icons[q.kind] || 'type')}), label, type, req]),
     extra,
     h('div', {class: 'ed-q-foot'}, [h('span', {class: 'ed-key', text: q.key, title: 'המזהה הקבוע של השאלה'}), h('span', {class: 'spacer'}), tools]),
   ]);
@@ -431,6 +434,7 @@ function render() {
     var sec = h('section', {class: 'card ed-section' + (collapsed[s.id] ? ' is-collapsed' : ''), 'data-key': s.id});
     var collapse = iconBtn('chevron-down', collapsed[s.id] ? 'פתיחה' : 'כיווץ', function () { collapsed[s.id] = !collapsed[s.id]; render(); }, 'collapse');
     sec.appendChild(h('div', {class: 'ed-section-head'}, [
+      grip('sec-grip', 'גרירה לשינוי מיקום החלק'),
       h('span', {class: 'ed-num', text: String(si + 1)}),
       h('div', {class: 'ed-section-titles'}, [input(s, 'title', 'inline-input lg', 'כותרת החלק'),
                                              input(s, 'description', 'inline-input sm', 'תיאור קצר לחלק (לא חובה)')]),
@@ -494,7 +498,51 @@ document.addEventListener('keydown', function (e) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); if (dirty) save(); } });
 window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 render(); setDirty(false);
+
+// Drag a question (also into another section) or a whole section; the others slide.
+UI.sortable({root: root, item: '.ed-q', handle: '.q-grip', tail: '.add-row',
+  lists: function () { return Array.prototype.slice.call(root.querySelectorAll('.ed-section-body')).filter(function (l) { return l.offsetParent; }); },
+  onEnd: function (item, changed) {
+    if (!changed) return;
+    var byKey = {};
+    defn.sections.forEach(function (s) { s.questions.forEach(function (q) { byKey[q.key] = q; }); });
+    root.querySelectorAll('.ed-section').forEach(function (node) {
+      var s = defn.sections.filter(function (x) { return x.id === node.getAttribute('data-key'); })[0]; if (!s) return;
+      s.questions = Array.prototype.map.call(node.querySelectorAll('.ed-q'), function (n) { return byKey[n.getAttribute('data-key')]; });
+    });
+    moved = item.getAttribute('data-key'); change();
+  }});
+var before = null;
+UI.sortable({root: root, item: '.ed-section', handle: '.sec-grip', tail: '.add-row.big',
+  lists: function () { return [root]; },
+  // Whole sections are tall: fold them all while one is being dragged.
+  onStart: function () { before = JSON.stringify(collapsed); root.querySelectorAll('.ed-section').forEach(function (n) { n.classList.add('is-collapsed'); }); },
+  onEnd: function (item, changed) {
+    collapsed = JSON.parse(before || '{}');
+    if (!changed) { render(); return; }
+    var order = Array.prototype.map.call(root.querySelectorAll('.ed-section'), function (n) { return n.getAttribute('data-key'); });
+    defn.sections.sort(function (a, b) { return order.indexOf(a.id) - order.indexOf(b.id); });
+    moved = item.getAttribute('data-key'); change();
+  }});
 """
+
+
+#: The question-type picker: grouped, each with what it is for.
+_KIND_OPTIONS = [
+    {"value": k, "label": questionnaire.KINDS[k], "icon": ui.KIND_ICONS[k], "hint": hint, "group": group}
+    for group, items in (
+        ("טקסט חופשי", (("text", "שורה אחת, כמו שם או תחום"), ("textarea", "כמה שורות, לתשובה מפורטת"),
+                        ("number", "ערך מספרי, כמו תקציב"))),
+        ("בחירה", (("choice", "הלקוח בוחר אפשרות אחת"), ("multi", "אפשר לסמן כמה אפשרויות"),
+                   ("scale", "דירוג מספרי, למשל 1 עד 10"))),
+        ("פרטי קשר וקישורים", (("email", "כתובת מייל תקינה"), ("tel", "מספר טלפון"),
+                                ("url", "אתר או רשת חברתית: ה-AI יכול לנתח"))),
+    ) for k, hint in items]
+
+_ROLE_ICONS = {"": "ban", "instagram": "instagram", "tiktok": "music", "facebook": "facebook",
+               "youtube": "youtube", "linkedin": "linkedin", "website": "globe"}
+_ROLE_OPTIONS = [{"value": k, "label": "לא משמש לניתוח" if not k else v, "icon": _ROLE_ICONS.get(k, "link"),
+                  "hint": "" if k else "ה-AI לא ייכנס לקישור הזה"} for k, v in questionnaire.ROLES.items()]
 
 
 def page_editor(base: str, qid: str) -> Response:
@@ -518,7 +566,8 @@ def page_editor(base: str, qid: str) -> Response:
                if is_default else "")
             + '<div id="editor"></div>'
             + _data_tag("qdata", defn)
-            + _data_tag("qmeta", {"kinds": questionnaire.KINDS, "roles": questionnaire.ROLES, "icons": ui.KIND_ICONS}))
+            + _data_tag("qmeta", {"kinds": questionnaire.KINDS, "icons": ui.KIND_ICONS,
+                                  "kindOptions": _KIND_OPTIONS, "roleOptions": _ROLE_OPTIONS}))
     return _shell(base, "questionnaires", f"עריכה · {defn.get('title')}", body, script=EDITOR_JS, narrow=True)
 
 
@@ -528,10 +577,10 @@ def page_responses(base: str, qid: str = "") -> Response:
     answered_n = sum(1 for r in rows_data if r.get("status") == "answered")
     waiting_n = len(rows_data) - answered_n
     rate = round(100 * answered_n / len(rows_data)) if rows_data else 0
-    options = '<option value="">כל השאלונים</option>' + "".join(
-        f'<option value="{_esc(i)}"{" selected" if i == qid else ""}>{_esc(d.get("title"))}</option>'
+    options = '<option value="" data-icon="inbox">כל השאלונים</option>' + "".join(
+        f'<option value="{_esc(i)}" data-icon="clipboard"{" selected" if i == qid else ""}>{_esc(d.get("title"))}</option>'
         for i, d in defs.items())
-    q_options = "".join(f'<option value="{_esc(i)}"{" selected" if i == (qid or questionnaire_store.default_id()) else ""}>'
+    q_options = "".join(f'<option value="{_esc(i)}" data-icon="clipboard"{" selected" if i == (qid or questionnaire_store.default_id()) else ""}>'
                         f'{_esc(d.get("title"))}</option>' for i, d in defs.items())
     rows = ""
     for r in rows_data:
@@ -553,7 +602,7 @@ def page_responses(base: str, qid: str = "") -> Response:
                  f'<td style="width:1%">{ui.icon("chevron-left", 16, cls="row-go")}</td></tr>')
     export = (f'<a class="btn" href="{base}/admin/questionnaires/{quote(qid)}/export.csv">{ui.icon("download")}'
               '<span>ייצוא ל-Excel</span></a>' if qid else "")
-    actions = (f'<select class="select" id="filter" style="width:auto" aria-label="שאלון">{options}</select>{export}'
+    actions = (f'<select class="select" id="filter" data-picker="inline" aria-label="שאלון">{options}</select>{export}'
                f'<button class="btn btn-primary" data-modal="linkmodal">{ui.icon("link")}<span>קישור ללקוח</span></button>')
     head = ui.page_head("תשובות", "מי קיבל איזה שאלון, מי מילא ומי עדיין ממתין.", actions)
     stats = (ui.stat("נשלחו", len(rows_data), ico="send", tone="brand", i=0)
@@ -578,8 +627,9 @@ def page_responses(base: str, qid: str = "") -> Response:
       <div class="modal-icon">{ui.icon("link", 20)}</div><h2 class="modal-title">קישור לשאלון</h2>
       <p class="modal-text">קישור אישי ללקוח: לבדיקה, או כדי לשלוח בעצמך. שום דבר לא נשלח מכאן.</p>
       <div class="modal-fields" id="linkfields"><label class="field"><span class="label">לקוח</span>
-        <select class="select" id="client" required disabled><option value="">טוען לקוחות מ-ClickUp…</option></select></label>
-        <label class="field"><span class="label">שאלון</span><select class="select" id="lq">{q_options}</select></label></div>
+        <select class="select" id="client" required disabled data-picker="search" data-placeholder="טוען לקוחות מ-ClickUp…"
+          aria-label="לקוח"></select></label>
+        <label class="field"><span class="label">שאלון</span><select class="select" id="lq" data-picker aria-label="שאלון">{q_options}</select></label></div>
       <div class="linkbox" id="linkbox" hidden style="margin-top:18px"></div></div>
       <div class="modal-foot"><button type="submit" class="btn btn-primary" id="mklink">{ui.icon("link")}<span>יצירת קישור</span></button>
       <button type="button" class="btn" data-close>סגירה</button></div></form></dialog>"""
@@ -603,16 +653,22 @@ function loadClients() {
   if (loaded) return; loaded = true;
   UI.api('/clients').then(function (d) {
     var sel = document.getElementById('client'); sel.textContent = '';
-    sel.appendChild(new Option('בחר לקוח', ''));
-    (d.clients || []).forEach(function (c) { names[c.id] = c.name; sel.appendChild(new Option(c.name + (c.status ? ' · ' + c.status : ''), c.id)); });
-    sel.disabled = false; sel.focus();
+    (d.clients || []).forEach(function (c) {
+      names[c.id] = c.name; var op = new Option(c.name, c.id);
+      op.dataset.avatar = c.name.split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('');
+      var st = {active: 'לקוח פעיל', lead: 'ליד', paused: 'מושהה', finished: 'הסתיים'}[String(c.status).toLowerCase()] || c.status;
+      if (st) op.dataset.hint = st; sel.appendChild(op); });
+    sel.value = ''; sel.disabled = false;
+    sel.setAttribute('data-placeholder', 'בחירת לקוח');
+    var pk = sel._picker; if (pk) { pk.remove(); sel._picker = null; } pk = UI.enhance(sel); pk.focus();
     if (d.error) UI.toast(d.error, {kind: 'error'});
   });
 }
 document.querySelectorAll('[data-modal=linkmodal]').forEach(function (b) { b.addEventListener('click', loadClients); });
 document.getElementById('linkform').addEventListener('submit', function (e) {
   e.preventDefault(); var b = document.getElementById('mklink'), cid = document.getElementById('client').value;
-  if (!cid) { var s = document.getElementById('client'); s.classList.add('shake'); setTimeout(function () { s.classList.remove('shake'); }, 450); return; }
+  if (!cid) { var s = document.getElementById('client')._picker || document.getElementById('client'); s.classList.add('shake');
+    setTimeout(function () { s.classList.remove('shake'); }, 450); s.click(); return; }
   UI.busy(b, true);
   UI.api('/links', {client_id: cid, questionnaire_id: document.getElementById('lq').value}).then(function (d) {
     UI.busy(b, false);
@@ -729,8 +785,10 @@ def export_csv(qid: str) -> Response:
 
 
 def _clients(dry_run: bool) -> list[dict[str, str]]:
-    if dry_run:
-        return [{"id": "42", "name": "מכללת דוגמה", "status": "active"}]
+    if dry_run:  # the sample clients of the dry-run dashboard, and the tests' client 42
+        return [{"id": "42", "name": "מכללת דוגמה", "status": "active"},
+                {"id": "מכללת אלפא", "name": "מכללת אלפא", "status": "active"},
+                {"id": "מכללת בטא", "name": "מכללת בטא", "status": "lead"}]
     from .lib.clients.crm import CrmClient
 
     clients = CrmClient()._all_clients()

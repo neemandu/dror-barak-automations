@@ -70,6 +70,13 @@ _ICON_PATHS: dict[str, str] = {
     "folder": '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
     "calendar": '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
     "grip": '<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>',
+    "instagram": '<rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><path d="M17.5 6.5h.01"/>',
+    "facebook": '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>',
+    "youtube": '<path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/>',
+    "linkedin": '<path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/>',
+    "globe": '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+    "music": '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    "ban": '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
     # question kinds
     "type": '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
     "align": '<path d="M21 6H3"/><path d="M15 12H3"/><path d="M17 18H3"/>',
@@ -286,12 +293,13 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-si
 .brand small { display: block; font-weight: 500; font-size: 11.5px; color: var(--fg-muted); margin-top: -2px; }
 .tabs { position: relative; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
-.tab { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px;
-  border-radius: var(--r-md); color: var(--fg-muted); font-size: 14px; font-weight: 500; white-space: nowrap;
-  text-decoration: none !important; transition: color var(--d2); }
-.tab:hover, .tab.is-active { color: var(--fg); }
-.tab-glider { position: absolute; z-index: 0; top: 0; left: 0; height: 34px; border-radius: var(--r-md); background: var(--surface-active);
-  transition: transform var(--d3) var(--ease), width var(--d3) var(--ease), opacity var(--d2); pointer-events: none; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px;
+  border: 1px solid transparent; border-radius: var(--r-md); color: var(--fg-muted); font-size: 14px; font-weight: 500;
+  white-space: nowrap; text-decoration: none !important; transition: color var(--d1), background var(--d1); }
+.tab:hover { color: var(--fg); background: color-mix(in srgb, var(--surface-active) 60%, transparent); }
+.tab.is-active { color: var(--fg); font-weight: 600; background: var(--surface); border-color: var(--border);
+  box-shadow: var(--sh-xs); }
+.tab.is-active .icon { color: var(--brand); }
 .topbar .spacer { flex: 1; }
 .page { max-width: 1180px; margin: 0 auto; padding: 30px 20px 96px; }
 .page-narrow { max-width: 880px; }
@@ -393,6 +401,60 @@ dialog.modal[open]::backdrop { animation: fade-in var(--d2) var(--ease); }
   background: #101828; color: #fff; font-size: 12px; font-weight: 500; line-height: 1.3; white-space: nowrap;
   pointer-events: none; animation: tip-in var(--d2) var(--ease) .35s both; }
 
+/* ---- picker: our own dropdown (icons, hints, groups, keyboard) */
+.picker { display: inline-flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 8px 0 10px;
+  border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface); color: var(--fg); font-size: 14px;
+  text-align: start; cursor: pointer; box-shadow: var(--sh-xs);
+  transition: border-color var(--d1), box-shadow var(--d2) var(--ease), background var(--d1); }
+.picker:hover { border-color: var(--border-strong); }
+.picker.is-open, .picker:focus-visible { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px var(--ring-soft); }
+.picker-ic { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+  background: var(--surface-active); color: var(--fg-2); }
+.picker-ic .icon { width: 13px; height: 13px; }
+.picker-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.picker > .icon { color: var(--fg-subtle); transition: transform var(--d2) var(--ease); }
+.picker.is-open > .icon { transform: rotate(180deg); }
+.picker-pop { position: fixed; z-index: 95; max-height: min(400px, 64vh); overflow: auto; padding: 6px; outline: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--sh-xl);
+  animation: pop-down .2s var(--ease); overscroll-behavior: contain; }
+.picker-pop.from-bottom { animation-name: pop-up; }
+.picker-pop.is-leaving { animation: pop-out .14s var(--ease) forwards; pointer-events: none; }
+.picker-group { padding: 9px 10px 4px; font-size: 11.5px; font-weight: 600; color: var(--fg-subtle); }
+.picker-group:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 11px; }
+.picker-opt { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; cursor: pointer;
+  color: var(--fg-2); transition: background var(--d1), color var(--d1); }
+.picker-opt.is-active { background: var(--surface-hover); color: var(--fg); }
+.picker-opt.is-selected { background: var(--brand-soft); color: var(--brand-ink); }
+.picker-opt-ic { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--fg-2);
+  transition: background var(--d2), color var(--d2), border-color var(--d2), transform var(--d2) var(--spring); }
+.picker-opt.is-active .picker-opt-ic { transform: scale(1.06); }
+.picker-opt.is-selected .picker-opt-ic { background: var(--brand); border-color: var(--brand); color: #fff; }
+.picker-opt-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.picker-opt-txt b { font-size: 14px; font-weight: 500; }
+.picker-opt-txt small { font-size: 12px; color: var(--fg-muted); }
+.picker-inline { width: auto; min-width: 180px; max-width: 280px; }
+.picker:disabled { opacity: .6; cursor: default; }
+.picker-label.is-placeholder { color: var(--fg-subtle); font-weight: 400; }
+.picker-ic.is-avatar, .picker-opt-ic.is-avatar { border: 0; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700;
+  background: linear-gradient(135deg, #00c2e0, #2f7de1); }
+.picker-opt-ic.is-avatar { font-size: 12.5px; }
+.picker-opt.is-selected .picker-opt-ic.is-avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--brand); }
+.picker-search { position: sticky; top: -6px; z-index: 1; display: flex; align-items: center; gap: 8px; margin: -6px -6px 6px;
+  padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--fg-subtle); }
+.picker-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg); font: inherit; font-size: 14px; }
+.picker-empty { padding: 18px 10px; text-align: center; color: var(--fg-muted); font-size: 13.5px; }
+.picker-check { color: var(--brand); opacity: 0; transform: scale(.5); transition: opacity var(--d2), transform var(--d3) var(--spring); }
+.picker-opt.is-selected .picker-check { opacity: 1; transform: none; }
+
+/* ---- drag to reorder */
+.drag-handle { flex: none; display: grid; place-items: center; width: 24px; height: 32px; padding: 0; border: 0; border-radius: 7px;
+  background: none; color: var(--fg-subtle); cursor: grab; touch-action: none; transition: background var(--d1), color var(--d1); }
+.drag-handle:hover { background: var(--surface-active); color: var(--fg-2); }
+.is-dragging { position: relative; z-index: 20; border-color: var(--brand) !important; box-shadow: var(--sh-xl) !important;
+  background: var(--surface) !important; }
+body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+
 /* ---- motion */
 .reveal { animation: rise .42s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
 .flash { animation: flash 1s var(--ease); }
@@ -402,6 +464,9 @@ dialog.modal[open]::backdrop { animation: fade-in var(--d2) var(--ease); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes pop-down { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes pop-up { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes pop-out { to { opacity: 0; transform: scale(.98); } }
 @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes tip-in { from { opacity: 0; transform: translate(-50%, 3px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(14px) scale(.95); } to { opacity: 1; transform: none; } }
@@ -539,24 +604,203 @@ JS = r"""
   }
   UI.times = times;
 
-  // The tab indicator glides to the hovered tab and back to the active one.
-  function glider() {
-    var tabs = document.querySelector('.tabs'); if (!tabs) return;
-    var g = el('span', 'tab-glider'); tabs.prepend(g);
-    var active = tabs.querySelector('.tab.is-active');
-    function to(t, instant) { if (!t) { g.style.opacity = 0; return; } if (instant) g.style.transition = 'none';
-      g.style.opacity = 1; g.style.width = t.offsetWidth + 'px';
-      g.style.transform = 'translateX(' + (t.offsetLeft) + 'px)';
-      if (instant) { g.offsetWidth; g.style.transition = ''; } }
-    to(active, true);
-    tabs.addEventListener('mouseover', function (e) { var t = e.target.closest('.tab'); if (t) to(t); });
-    tabs.addEventListener('mouseleave', function () { to(active); });
-    window.addEventListener('resize', function () { to(active, true); });
-  }
+  // A select that looks like the product: icons, a hint per option, groups,
+  // the keyboard (arrows, Home/End, Enter, Escape, type to jump), and motion.
+  // o = {value, options: [{value, label, icon, avatar, hint, group}], onChange, label,
+  //      search, placeholder}. picker.setOptions(list, value) swaps the list.
+  UI.picker = function (o) {
+    var btn = el('button', 'picker'); btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'listbox'); btn.setAttribute('aria-expanded', 'false');
+    if (o.label) btn.setAttribute('aria-label', o.label);
+    var value = o.value, pop = null, active = -1, typed = '', typedAt = 0;
+    function find(v) { return o.options.filter(function (x) { return String(x.value) === String(v); })[0]; }
+    function lead(x, cls) {
+      if (x && x.avatar) return '<span class="' + cls + ' is-avatar">' + x.avatar.replace(/[<>&]/g, '') + '</span>';
+      return x && x.icon ? '<span class="' + cls + '">' + UI.icon(x.icon) + '</span>' : '';
+    }
+    function paint() {
+      var c = find(value) || (o.placeholder ? null : o.options[0]);
+      btn.innerHTML = lead(c, 'picker-ic') + '<span class="picker-label"></span>' + UI.icon('chevron-down');
+      var lab = btn.querySelector('.picker-label'); lab.textContent = c ? c.label : (o.placeholder || '');
+      lab.classList.toggle('is-placeholder', !c);
+    }
+    function opts() { return pop ? Array.prototype.slice.call(pop.querySelectorAll('.picker-opt:not([hidden])')) : []; }
+    function setActive(i) {
+      var list = opts(); if (!list.length) return; active = (i + list.length) % list.length;
+      list.forEach(function (n, k) { n.classList.toggle('is-active', k === active); });
+      list[active].scrollIntoView({block: 'nearest'}); pop.setAttribute('aria-activedescendant', list[active].id);
+    }
+    function place() {
+      if (!pop) return;
+      var r = btn.getBoundingClientRect(), w = Math.max(r.width, 270), h = pop.offsetHeight;
+      var below = innerHeight - r.bottom, up = below < h + 12 && r.top > below;
+      pop.style.width = w + 'px'; pop.style.top = Math.max(8, up ? r.top - h - 6 : r.bottom + 6) + 'px';
+      pop.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+      pop.classList.toggle('from-bottom', up);
+    }
+    function outside(e) { if (pop && !pop.contains(e.target) && !btn.contains(e.target)) close(false); }
+    function close(focus) {
+      if (!pop) return; var p = pop; pop = null;
+      btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('is-open');
+      p.classList.add('is-leaving'); setTimeout(function () { p.remove(); }, 150);
+      window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place);
+      document.removeEventListener('pointerdown', outside, true);
+      if (focus) btn.focus();
+    }
+    function choose(v) { var changed = String(v) !== String(value); value = find(v).value; paint(); close(true);
+      if (changed && o.onChange) o.onChange(value); }
+    function filter(q) {
+      q = q.trim().toLowerCase(); var any = false;
+      pop.querySelectorAll('.picker-opt').forEach(function (n) {
+        var hit = !q || n.textContent.toLowerCase().indexOf(q) >= 0; n.hidden = !hit; any = any || hit; });
+      pop.querySelectorAll('.picker-group').forEach(function (g) {
+        var n = g.nextElementSibling, show = false;
+        while (n && !n.classList.contains('picker-group')) { if (n.classList.contains('picker-opt') && !n.hidden) show = true; n = n.nextElementSibling; }
+        g.hidden = !show; });
+      pop.querySelector('.picker-empty').hidden = any; setActive(0);
+    }
+    function open() {
+      if (pop || btn.disabled) return;
+      pop = el('div', 'picker-pop'); pop.setAttribute('role', 'listbox'); pop.tabIndex = -1;
+      var group = null, uid = 'pk' + Math.random().toString(36).slice(2, 7), search = null;
+      if (o.search) {
+        var box = el('div', 'picker-search'); box.innerHTML = UI.icon('search');
+        search = el('input'); search.type = 'text'; search.placeholder = o.searchPlaceholder || 'חיפוש';
+        search.setAttribute('aria-label', 'חיפוש'); box.appendChild(search); pop.appendChild(box);
+        search.addEventListener('input', function () { filter(search.value); });
+      }
+      o.options.forEach(function (x, k) {
+        if (x.group && x.group !== group) { group = x.group; pop.appendChild(el('div', 'picker-group', group)); }
+        var sel = String(x.value) === String(value);
+        var it = el('div', 'picker-opt' + (sel ? ' is-selected' : '')); it.id = uid + k; it.dataset.value = String(x.value);
+        it.setAttribute('role', 'option'); it.setAttribute('aria-selected', sel ? 'true' : 'false');
+        it.innerHTML = lead(x, 'picker-opt-ic') +
+          '<span class="picker-opt-txt"><b></b>' + (x.hint ? '<small></small>' : '') + '</span><span class="picker-check">' + UI.icon('check') + '</span>';
+        it.querySelector('b').textContent = x.label; if (x.hint) it.querySelector('small').textContent = x.hint;
+        it.addEventListener('click', function () { choose(x.value); });
+        it.addEventListener('pointermove', function () { var i = opts().indexOf(it); if (i !== active) setActive(i); });
+        pop.appendChild(it);
+      });
+      var none = el('div', 'picker-empty', 'לא נמצאו תוצאות'); none.hidden = true; pop.appendChild(none);
+      // Inside a modal the list must live in the dialog: everything outside it is inert.
+      (btn.closest('dialog') || document.body).appendChild(pop); btn.setAttribute('aria-expanded', 'true'); btn.classList.add('is-open'); place();
+      var at = opts().map(function (n) { return n.dataset.value; }).indexOf(String(value)); setActive(at < 0 ? 0 : at);
+      (search || pop).focus({preventScroll: true});
+      pop.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(active + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
+        else if (e.key === 'Home') { e.preventDefault(); setActive(0); }
+        else if (e.key === 'End') { e.preventDefault(); setActive(opts().length - 1); }
+        else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); var n = opts()[active]; if (n) choose(n.dataset.value); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+        else if (e.key === 'Tab') close(false);
+        else if (e.key.length === 1 && !search) {
+          var now = Date.now(); typed = (now - typedAt > 700 ? '' : typed) + e.key; typedAt = now;
+          var list = opts(); for (var k = 0; k < list.length; k++) { if (list[k].querySelector('b').textContent.indexOf(typed) === 0) { setActive(k); break; } }
+        }
+      });
+      window.addEventListener('scroll', place, true); window.addEventListener('resize', place);
+      document.addEventListener('pointerdown', outside, true);
+    }
+    btn.addEventListener('click', function () { pop ? close(true) : open(); });
+    btn.addEventListener('keydown', function (e) { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); } });
+    btn.setOptions = function (list, v) { o.options = list; if (v !== undefined) value = v; paint(); if (pop) { close(false); open(); } };
+    paint();
+    return btn;
+  };
+
+  // Upgrade a native <select> in place: it stays (hidden) as what the form submits
+  // and what other scripts listen to; the picker is what people see and use.
+  // <option data-icon data-hint data-avatar>, <optgroup label> become groups;
+  // data-picker="search" adds the search box, "inline" keeps it content-sized.
+  UI.enhance = function (sel) {
+    if (sel._picker) return sel._picker;
+    function read() {
+      return Array.prototype.map.call(sel.options, function (op) {
+        return {value: op.value, label: op.textContent, icon: op.dataset.icon || '', hint: op.dataset.hint || '',
+                avatar: op.dataset.avatar || '', group: op.parentNode.tagName === 'OPTGROUP' ? op.parentNode.label : ''}; });
+    }
+    var mode = sel.getAttribute('data-picker') || '';
+    var pk = UI.picker({value: sel.value, options: read(), label: sel.getAttribute('aria-label') || '',
+      search: mode.indexOf('search') >= 0, placeholder: sel.getAttribute('data-placeholder') || '',
+      onChange: function (v) { sel.value = v; sel.dispatchEvent(new Event('change', {bubbles: true})); }});
+    if (mode.indexOf('inline') >= 0) pk.classList.add('picker-inline');
+    pk.id = sel.id ? sel.id + '-picker' : ''; pk.disabled = sel.disabled;
+    sel.hidden = true; sel.insertAdjacentElement('afterend', pk);
+    pk.refresh = function () { pk.setOptions(read(), sel.value); pk.disabled = sel.disabled; };
+    sel._picker = pk;
+    return pk;
+  };
+
+  // Drag to reorder. The dragged card follows the pointer; every card it passes
+  // slides into its new place (FLIP: measure, move in the DOM, animate the
+  // difference). Items may move between lists (a question into another section).
+  // o = {root, item, handle, lists: () => [elements], tail (selector kept last in a list),
+  //      onStart(item), onEnd(item, changed)}
+  UI.sortable = function (o) {
+    var drag = null;
+    function all() { return Array.prototype.slice.call(o.root.querySelectorAll(o.item)); }
+    function follow() {
+      var it = drag.item, layoutTop = it.getBoundingClientRect().top - drag.ty;
+      drag.ty = drag.y - drag.grab - layoutTop; it.style.transform = 'translateY(' + drag.ty + 'px)';
+    }
+    function reorder() {
+      var y = drag.y, list = null, best = Infinity;
+      o.lists().forEach(function (l) { var r = l.getBoundingClientRect();
+        var d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0; if (d < best) { best = d; list = l; } });
+      if (!list) return;
+      var kids = Array.prototype.filter.call(list.children, function (n) { return n !== drag.item && n.matches(o.item); });
+      var before = null;
+      for (var k = 0; k < kids.length; k++) { var r = kids[k].getBoundingClientRect(); if (y < r.top + r.height / 2) { before = kids[k]; break; } }
+      if (!before && o.tail) before = Array.prototype.filter.call(list.children, function (n) { return n.matches(o.tail); })[0] || null;
+      if (drag.item.parentNode === list && drag.item.nextElementSibling === before) return;
+      var others = all().filter(function (n) { return n !== drag.item; });
+      var first = others.map(function (n) { return n.getBoundingClientRect().top; });
+      list.insertBefore(drag.item, before);
+      others.forEach(function (n) { n.style.transition = 'none'; n.style.transform = ''; });
+      var shifts = others.map(function (n, k) { return first[k] - n.getBoundingClientRect().top; });
+      others.forEach(function (n, k) { if (shifts[k]) n.style.transform = 'translateY(' + shifts[k] + 'px)'; });
+      document.body.offsetHeight;
+      others.forEach(function (n, k) { if (!shifts[k]) return;
+        n.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'; n.style.transform = '';
+        n.addEventListener('transitionend', function () { n.style.transition = ''; }, {once: true}); });
+      follow();
+    }
+    function tick() {
+      if (!drag) return;
+      var top = o.edge || 130, v = 0;
+      if (drag.y < top) v = -Math.min(16, (top - drag.y) / 5); else if (drag.y > innerHeight - 70) v = Math.min(16, (drag.y - innerHeight + 70) / 5);
+      if (v) { window.scrollBy(0, v); follow(); reorder(); }
+      requestAnimationFrame(tick);
+    }
+    function move(e) { if (!drag) return; drag.y = e.clientY; follow(); reorder(); }
+    function end() {
+      if (!drag) return; var d = drag; drag = null;
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      var it = d.item; it.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)'; it.style.transform = '';
+      setTimeout(function () {
+        it.classList.remove('is-dragging'); it.style.transition = ''; document.body.classList.remove('is-sorting');
+        if (o.onEnd) o.onEnd(it, it.parentNode !== d.parent || it.nextElementSibling !== d.next);
+      }, 230);
+    }
+    o.root.addEventListener('pointerdown', function (e) {
+      var h = e.target.closest(o.handle); if (!h || e.button > 0) return;
+      var item = h.closest(o.item); if (!item || !o.root.contains(item)) return;
+      e.preventDefault();
+      if (o.onStart) o.onStart(item);
+      drag = {item: item, handle: h, y: e.clientY, ty: 0, parent: item.parentNode, next: item.nextElementSibling};
+      drag.grab = e.clientY - item.getBoundingClientRect().top;
+      // On the window, not the handle: moving the card in the DOM drops a pointer capture.
+      item.classList.add('is-dragging'); document.body.classList.add('is-sorting');
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+      requestAnimationFrame(tick);
+    });
+  };
 
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-count]').forEach(countUp);
-    times(); glider();
+    times();
+    document.querySelectorAll('select[data-picker]').forEach(function (sel) { UI.enhance(sel); });
     // Whole rows are links; inner links and buttons keep their own click.
     document.addEventListener('click', function (e) {
       var row = e.target.closest('tr[data-href]');

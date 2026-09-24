@@ -158,6 +158,7 @@ CSS = """
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
 .filters .with-icon { flex: 1 1 260px; }
 .filters .select { width: auto; min-width: 150px; }
+.filters .picker-inline { min-width: 200px; }
 .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; position: relative; overflow: hidden; }
 .login-wrap::before, .login-wrap::after { content: ""; position: absolute; width: 520px; height: 520px; border-radius: 50%;
   filter: blur(90px); opacity: .22; pointer-events: none; }
@@ -176,7 +177,7 @@ CSS = """
 .login-foot { margin-top: 18px; text-align: center; font-size: 12.5px; color: var(--fg-subtle); display: flex;
   align-items: center; justify-content: center; gap: 6px; }
 @media (max-width: 720px) { .log-row { grid-template-columns: auto 1fr; } .log-time { grid-column: 2; margin-top: 0; }
-  .filters .select { flex: 1 1 40%; min-width: 0; } .filters .btn[type=submit] { display: none; } }
+  .filters .select, .filters .picker-inline { flex: 1 1 40%; min-width: 0; max-width: none; } .filters .btn[type=submit] { display: none; } }
 """
 
 
@@ -255,21 +256,24 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
              + ui.stat("שגיאות", counts["error"], ico="x-circle", tone="err", i=2, hot=counts["error"] > 0)
              + ui.stat("דילוגים", counts["skipped"], ico="minus-circle", tone="warn", i=3))
 
-    subject_opts = '<option value="">כל הנושאים</option>' + "".join(
-        f'<option value="{s.key}"{" selected" if q.get("subject") == s.key else ""}>{_esc(s.label)}</option>'
-        for s in subjects.SUBJECTS.values())
+    subject_opts = '<option value="" data-icon="activity">כל הנושאים</option>' + "".join(
+        f'<option value="{s.key}" data-icon="{_SUBJECT_ICONS.get(s.key, "info")}"{" selected" if q.get("subject") == s.key else ""}>'
+        f'{_esc(s.label)}</option>' for s in subjects.SUBJECTS.values())
     # Every known client, not just those in the current filter — otherwise picking
     # one client would remove every other option and strand you there.
-    all_entries = _SAMPLE if DRY_RUN else run_log.read_all()
-    client_opts = '<option value="">כל הלקוחות</option>' + "".join(
-        f'<option value="{_esc(c)}" data-client="{_esc(c)}"{" selected" if q.get("client") == c else ""}>{_esc(c)}</option>'
+    # The agent's entries name ClickUp tasks, not clients: they are not filter options.
+    all_entries = [e for e in (_SAMPLE if DRY_RUN else run_log.read_all())
+                   if e.get("automation") != "clickup_to_claude"]
+    client_opts = '<option value="" data-icon="users">כל הלקוחות</option>' + "".join(
+        f'<option value="{_esc(c)}" data-client="{_esc(c)}" data-avatar="{_esc(ui.initials(c))}"'
+        f'{" selected" if q.get("client") == c else ""}>{_esc(c)}</option>'
         for c in subjects.client_ids(all_entries))
     filters = f"""<form class="filters reveal" method="get" action="{base}/dashboard" style="--i:4">
       <input type="hidden" name="days" value="{_esc(days)}">
       <label class="with-icon">{ui.icon("search", 16)}<input class="input" type="search" name="q" data-search
         placeholder="חיפוש בפעילות" value="{_esc(q.get('q', ''))}" aria-label="חיפוש"><span class="kbd">/</span></label>
-      <select class="select" name="subject" data-autosubmit aria-label="נושא">{subject_opts}</select>
-      <select class="select" name="client" data-autosubmit aria-label="לקוח">{client_opts}</select>
+      <select class="select" name="subject" data-autosubmit data-picker="inline" aria-label="נושא">{subject_opts}</select>
+      <select class="select" name="client" id="clientsel" data-autosubmit data-picker="search inline" aria-label="לקוח">{client_opts}</select>
       <button type="submit" class="btn">סינון</button>
     </form>"""
 
@@ -298,11 +302,18 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
     script = r"""
 // Client ids are ClickUp task ids; show names once ClickUp answers (cached for the tab).
 (function () {
+  function initials(name) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join(''); }
   function apply(map) {
     document.querySelectorAll('[data-client]').forEach(function (n) {
-      var name = map[n.getAttribute('data-client')]; if (!name) return;
-      var t = n.tagName === 'OPTION' ? n : n.querySelector('span'); if (t) t.textContent = name;
+      var name = map[n.getAttribute('data-client')];
+      if (n.tagName === 'OPTION') {
+        // Not a client ClickUp knows (a deleted one, a test task): out of the list.
+        if (!name) { if (!n.selected) n.remove(); return; }
+        n.textContent = name; n.dataset.avatar = initials(name); return;
+      }
+      if (name) { var t = n.querySelector('span'); if (t) t.textContent = name; }
     });
+    var sel = document.getElementById('clientsel'); if (sel && sel._picker) sel._picker.refresh();
   }
   var cached = null; try { cached = JSON.parse(sessionStorage.getItem('clients') || 'null'); } catch (e) {}
   if (cached && Date.now() - cached.at < 600000) { apply(cached.map); return; }

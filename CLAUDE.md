@@ -171,8 +171,11 @@ from `.env` only, run instructions per automation in `README.md`.
 **Every page is built from `src\ui.py`.** The design system: tokens (light/dark for
 Dror's screens, always light for clients'), components (buttons with loading and
 success states, fields, switch, badges, tables, cards, modal, toasts with undo, menus,
-tooltips, empty states), Lucide icons, and the micro-interactions (count-up, relative
-times, the gliding tab, step transitions), all respecting `prefers-reduced-motion`.
+tooltips, empty states, `UI.picker`: our dropdown with icons, hints, groups, search and
+avatars, and `UI.sortable`: drag to reorder with FLIP animation), Lucide icons, and the
+micro-interactions (count-up, relative times, step transitions), all respecting
+`prefers-reduced-motion`. No native `<select>` on a page: mark it `data-picker` (`search`,
+`inline`) and `UI.enhance` upgrades it while the hidden select still submits the form.
 `ui.app_page` is Dror's shell, `ui.document(kind="public")` a client's. Use them rather
 than page-local styles, and check a change in a browser (light, dark, 390 px) before
 calling it done. Activity is shown with `subjects.label_for` (Hebrew), never the raw
