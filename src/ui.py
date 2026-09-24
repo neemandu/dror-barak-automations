@@ -1076,8 +1076,11 @@ JS = r"""
     });
     var hover;
     ['mouseover', 'touchstart'].forEach(function (n) { document.addEventListener(n, function (e) {
-      var a = e.target.closest && e.target.closest('a[data-nav]'); if (!a || !spa()) return;
-      clearTimeout(hover); hover = setTimeout(function () { var u = sameOrigin(a.href); if (u && u.href !== location.href) fetchPage(u.href); }, 60);
+      // Menu items, and any link or row leading to an instant page (a client's card).
+      var a = e.target.closest && e.target.closest('a[href], tr[data-href]'); if (!a || !spa()) return;
+      var u = sameOrigin(a.tagName === 'TR' ? a.getAttribute('data-href') : a.href);
+      if (!u || u.href === location.href || !navLink(u)) return;
+      clearTimeout(hover); hover = setTimeout(function () { fetchPage(u.href); }, 80);
     }, {passive: true}); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') document.querySelectorAll('details.menu[open]').forEach(function (m) { m.open = false; });
