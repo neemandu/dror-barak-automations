@@ -31,7 +31,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import questionnaire_admin, ui
-from .lib import config, run_log, subjects
+from .lib import config, run_log, subjects, text_style
 
 SESSION_COOKIE = "dror_dash"
 SESSION_TTL_SECONDS = 12 * 60 * 60
@@ -120,7 +120,7 @@ _STATUS = {
 }
 
 #: Lucide icons for the subjects (the emoji in ``subjects`` stay for the email).
-_SUBJECT_ICONS = {"clickup": "clipboard", "quotes": "pen", "morning": "file", "meta": "gauge",
+_SUBJECT_ICONS = {"leads": "user-plus", "clickup": "clipboard", "quotes": "pen", "morning": "file", "meta": "gauge",
                   "whatsapp": "message", "drive": "folder", "ai": "sparkles", "system": "activity",
                   "other": "info"}
 
@@ -217,6 +217,13 @@ def _row(entry: dict[str, Any], i: int = 0) -> str:
         title += '<span class="badge badge-outline">הרצת ניסיון</span>'
     meta = []
     who = entry.get("client_id") or ""
+    if subjects.is_lead(entry):
+        name = str(entry.get("name") or "").strip()
+        phone = subjects.phone_display(who)
+        meta.append(f'<span class="badge badge-brand">{ui.icon("user-plus", 12)}<span>ליד</span></span>'
+                    + (f'<span class="chip"><span>{_esc(name)}</span></span>' if name else "")
+                    + (f'<span class="chip num"><bdi>{_esc(phone)}</bdi></span>' if phone else ""))
+        who = ""
     # The agent's entries carry a ClickUp task id, not a client: its name is the
     # detail line and the task is linked, so a chip would only show a code.
     if who and entry.get("automation") != "clickup_to_claude":
@@ -224,7 +231,8 @@ def _row(entry: dict[str, Any], i: int = 0) -> str:
                     f'<span>{_esc(who)}</span></span>')
     detail = entry.get("detail")
     # A detail that is just a URL is rendered as the link below, not as text.
-    detail_html = (f'<div class="log-detail"><bdi>{_esc(detail)}</bdi></div>'
+    # Old entries predate the house style; show them in it.
+    detail_html = (f'<div class="log-detail"><bdi>{_esc(text_style.humanize(str(detail)))}</bdi></div>'
                    if detail and not str(detail).startswith("http") else "")
     links = "".join(
         f'<a class="btn btn-sm" href="{_esc(url)}" target="_blank" rel="noopener noreferrer">'
@@ -263,7 +271,7 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
     # one client would remove every other option and strand you there.
     # The agent's entries name ClickUp tasks, not clients: they are not filter options.
     all_entries = [e for e in (_SAMPLE if DRY_RUN else run_log.read_all())
-                   if e.get("automation") != "clickup_to_claude"]
+                   if e.get("automation") != "clickup_to_claude" and not subjects.is_lead(e)]
     client_opts = '<option value="" data-icon="users">כל הלקוחות</option>' + "".join(
         f'<option value="{_esc(c)}" data-client="{_esc(c)}" data-avatar="{_esc(ui.initials(c))}"'
         f'{" selected" if q.get("client") == c else ""}>{_esc(c)}</option>'
@@ -328,6 +336,127 @@ def _dashboard_page(entries: list[dict[str, Any]], q: dict[str, str], base: str 
     return ui.app_page(base, "dashboard", "לוח בקרה · דרור ברק", body, script=script, css=CSS).encode("utf-8")
 
 
+LEADS_CSS = """
+.lead-cell { display: flex; align-items: center; gap: 10px; }
+.lead-av { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #fff;
+  font-size: 12.5px; font-weight: 700; background: linear-gradient(135deg, #00c2e0, #2f7de1); }
+.lead-av.anon { background: var(--surface-active); color: var(--fg-subtle); }
+.lead-name { font-weight: 600; color: var(--fg); }
+.lead-name.anon { color: var(--fg-muted); font-weight: 500; }
+.lead-phone { font-size: 12.5px; color: var(--fg-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lead-sub { margin-top: 2px; font-size: 12px; color: var(--fg-subtle); }
+.lead-acts { display: flex; gap: 4px; justify-content: flex-end; }
+.leads-note { margin: -8px 0 18px; }
+"""
+
+
+def _il_day(ts: Any) -> str:
+    local = ui.local_time(ts)
+    return local[:10] if local else ""
+
+
+def leads_from(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per person (phone) from the Smoove entries, newest first."""
+    leads: dict[str, dict[str, Any]] = {}
+    for e in sorted((e for e in entries if subjects.is_lead(e)), key=lambda e: str(e.get("ts"))):
+        phone = str(e.get("client_id") or "")
+        if not phone:
+            continue
+        lead = leads.setdefault(phone, {"phone": phone, "name": "", "lists": [], "first": e.get("ts"),
+                                        "count": 0, "sent": 0})
+        lead["count"] += 1
+        lead["last"], lead["status"], lead["action"] = e.get("ts"), e.get("status"), e.get("action")
+        lead["sent"] += e.get("action") == "flow_sent" and e.get("status") == "ok"
+        if e.get("name"):
+            lead["name"] = str(e["name"]).strip()
+        if e.get("msg") and str(e["msg"]) not in lead["lists"]:
+            lead["lists"].append(str(e["msg"]))
+    return sorted(leads.values(), key=lambda l: str(l["last"]), reverse=True)
+
+
+def _list_label(msg: str) -> str:
+    return f"רשימה {msg}" if msg.isdigit() else msg
+
+
+def _leads_page(entries: list[dict[str, Any]], base: str = "") -> bytes:
+    leads = leads_from(entries)
+    today = _il_day(datetime.now(timezone.utc).isoformat())
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    new_today = sum(1 for l in leads if _il_day(l["first"]) == today)
+    new_week = sum(1 for l in leads if str(l["first"]) >= week_ago)
+    sent = sum(l["sent"] for l in leads)
+    stats = (ui.stat("נרשמו היום", new_today, ico="user-plus", tone="brand", i=0)
+             + ui.stat("7 ימים אחרונים", new_week, ico="calendar", i=1)
+             + ui.stat("סה״כ לידים", len(leads), ico="users", i=2)
+             + ui.stat("הודעות וואטסאפ שנשלחו", sent, ico="message", tone="ok", i=3))
+    lists = sorted({m for l in leads for m in l["lists"]})
+    list_opts = '<option value="" data-icon="inbox">כל הרשימות</option>' + "".join(
+        f'<option value="{_esc(m)}" data-icon="send">{_esc(_list_label(m))}</option>' for m in lists)
+    rows = ""
+    for l in leads:
+        name, phone = l["name"], subjects.phone_display(l["phone"])
+        digits = l["phone"].lstrip("+")
+        ok = l.get("action") == "flow_sent" and l.get("status") == "ok"
+        status = ('<span class="badge badge-ok badge-dot">וואטסאפ נשלח</span>' if ok else
+                  f'<span class="badge badge-warn badge-dot">{_esc(subjects.label_for(l))}</span>')
+        again = f'<span class="badge badge-outline num">{l["count"]} הרשמות</span>' if l["count"] > 1 else ""
+        avatar = (f'<span class="lead-av">{_esc(ui.initials(name))}</span>' if name
+                  else f'<span class="lead-av anon">{ui.icon("user-plus", 15)}</span>')
+        who = (f'<div class="lead-name">{_esc(name)}</div>' if name else '<div class="lead-name anon">ללא שם</div>')
+        search = f"{name} {l['phone']} {phone} {phone.replace('-', '')}".lower()
+        last_ms = int(datetime.fromisoformat(str(l["last"]).replace("Z", "+00:00")).timestamp() * 1000) if l.get("last") else 0
+        rows += (f'<tr data-last="{last_ms}" data-lists="{_esc(" ".join(l["lists"]))}" data-q="{_esc(search)}">'
+                 f'<td><div class="lead-cell">{avatar}<div>{who}<div class="lead-phone"><bdi>{_esc(phone)}</bdi></div>'
+                 f'<div class="lead-sub show-sm">{_esc(" · ".join(_list_label(m) for m in l["lists"]))} · '
+                 f'{ui.when(l.get("last"), "-")} · {"וואטסאפ נשלח" if ok else _esc(subjects.label_for(l))}</div></div></div></td>'
+                 f'<td class="hide-sm">{"".join(f"<span class=badge>{_esc(_list_label(m))}</span> " for m in l["lists"])}</td>'
+                 f'<td class="muted hide-sm">{ui.when(l.get("last"), "-")}</td><td class="hide-sm">{status} {again}</td>'
+                 f'<td><div class="lead-acts">'
+                 f'<a class="btn btn-sm btn-icon" href="https://wa.me/{_esc(digits)}" target="_blank" rel="noopener" data-tip="פתיחה בוואטסאפ">{ui.icon("message", 15)}</a>'
+                 f'<a class="btn btn-sm btn-icon" href="tel:{_esc(l["phone"])}" data-tip="חיוג">{ui.icon("phone", 15)}</a>'
+                 f'<button class="btn btn-sm btn-icon" type="button" data-copy="{_esc(phone)}" data-tip="העתקת המספר">{ui.icon("copy", 15)}</button>'
+                 f'</div></td></tr>')
+    periods = "".join(f'<button type="button" data-days="{d}" class="{"is-active" if d == 0 else ""}">{label}</button>'
+                      for d, label in ((0, "הכל"), (1, "היום"), (7, "7 ימים"), (30, "30 יום")))
+    head = ui.page_head("לידים", "מי שנרשם דרך Smoove וקיבל הודעת וואטסאפ דרך ManyChat. לצפייה בלבד.")
+    note = ('<div class="alert alert-info leads-note reveal">' + ui.icon("info") + '<span>הלידים האלה עדיין לא נכנסים '
+            'ל-ClickUp. האם ומתי להכניס אותם לשם זו החלטה של דרור.</span></div>')
+    if rows:
+        table = (f"""<div class="toolbar reveal" style="--i:4"><div class="segmented" id="period">{periods}</div>
+          <select class="select" id="listf" data-picker="inline" aria-label="רשימה">{list_opts}</select>
+          <label class="with-icon grow">{ui.icon("search", 16)}<input class="input" type="search" id="find" data-search
+            placeholder="חיפוש לפי שם או טלפון" aria-label="חיפוש"><span class="kbd">/</span></label></div>
+          <div class="table-wrap reveal" style="--i:5"><table class="table"><thead><tr><th>ליד</th><th class="hide-sm">רשימה</th>
+          <th class="hide-sm">נרשם</th><th class="hide-sm">סטטוס</th><th></th></tr></thead><tbody>{rows}</tbody></table>
+          <div id="none" style="display:none">{ui.empty("אין לידים שמתאימים", "נסה טווח זמן אחר או חיפוש אחר.", ico="search")}</div></div>""")
+    else:
+        table = '<div class="card">' + ui.empty(
+            "עדיין אין לידים", "כשמישהו נרשם דרך Smoove ומקבל הודעת וואטסאפ, הוא יופיע כאן.", ico="user-plus") + "</div>"
+    script = r"""
+var days = 0, list = '', find = document.getElementById('find');
+function apply() {
+  var q = (find ? find.value : '').trim().toLowerCase().replace(/-/g, ''), since = days ? Date.now() - days * 86400000 : 0, n = 0;
+  document.querySelectorAll('tr[data-last]').forEach(function (tr) {
+    var ok = (+tr.dataset.last >= since) && (!list || (' ' + tr.dataset.lists + ' ').indexOf(' ' + list + ' ') >= 0) &&
+             (!q || tr.dataset.q.replace(/-/g, '').indexOf(q) >= 0);
+    tr.hidden = !ok; if (ok) n++; });
+  var none = document.getElementById('none'); if (none) none.style.display = n ? 'none' : 'block';
+}
+var per = document.getElementById('period');
+if (per) per.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return;
+  per.querySelectorAll('button').forEach(function (x) { x.classList.toggle('is-active', x === b); }); days = +b.dataset.days; apply(); });
+var lf = document.getElementById('listf'); if (lf) lf.addEventListener('change', function () { list = lf.value; apply(); });
+if (find) find.addEventListener('input', apply);
+document.addEventListener('click', function (e) { var b = e.target.closest('[data-copy]'); if (b) UI.copy(b.dataset.copy, b); });
+"""
+    return ui.app_page(base, "leads", "לידים · דרור ברק", head + note + f'<div class="stats">{stats}</div>' + table,
+                       script=script, css=CSS + LEADS_CSS).encode("utf-8")
+
+
+def _load_leads() -> list[dict[str, Any]]:
+    return _SAMPLE if DRY_RUN else run_log.read_all()
+
+
 def _not_found(base: str = "") -> bytes:
     return _page("לא נמצא", '<main class="page">' + ui.empty(
         "הדף לא נמצא", "ייתכן שהקישור ישן.", ico="search",
@@ -383,6 +512,12 @@ _SAMPLE: list[dict[str, Any]] = [
      "detail": "https://drive.google.com/file/d/xyz/view"},
     {"ts": "2026-07-15T12:20:00Z", "automation": "campaign_summary", "action": "campaign_report_built",
      "status": "error", "client_id": "מכללת אלפא", "detail": "Meta API: token expired"},
+    {"ts": "2026-07-15T08:05:00Z", "automation": "smoove_to_manychat", "action": "flow_sent", "status": "ok",
+     "client_id": "+972501234567", "name": "דנה", "msg": "889128", "created": True,
+     "detail": "ליד חדש, נשלחה הודעת וואטסאפ (רשימה 889128)"},
+    {"ts": "2026-07-15T09:40:00Z", "automation": "smoove_to_manychat", "action": "flow_sent", "status": "ok",
+     "client_id": "+972547654321", "msg": "1142673", "created": True,
+     "detail": "ליד חדש, נשלחה הודעת וואטסאפ (רשימה 1142673)"},
     {"ts": "2026-07-15T13:40:00Z", "automation": "social_prep", "action": "prep_report_ready",
      "status": "ok", "client_id": "מכללת בטא", "dry_run": True,
      "detail": "https://docs.google.com/document/d/xyz789"},
@@ -402,6 +537,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._redirect("/login")
             q = {k: v[0] for k, v in parse_qs(route.query).items() if v and v[0]}
             return self._send(200, _dashboard_page(_load(q), q))
+        if route.path == "/leads":
+            if not self._authed():
+                return self._redirect("/login")
+            return self._send(200, _leads_page(_load_leads()))
         if route.path == "/login":
             return self._send(200, _login_page())
         if route.path == "/logout":

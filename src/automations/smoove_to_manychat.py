@@ -65,7 +65,7 @@ def run(
         # A public endpoint: an unmapped msg must not fall through to a default
         # Flow. Name the missing key so the fix is one line in .env.
         auto.log_action(
-            "unknown_msg", "skipped", client_id=phone,
+            "unknown_msg", "skipped", client_id=phone, name=(first_name or "").strip(),
             detail=f"no Flow mapped for msg={msg!r}; set {flow_env_key(msg or '')} in .env",
             msg=msg,
         )
@@ -78,8 +78,11 @@ def run(
     auto.log_action(
         "flow_sent",
         client_id=phone,
-        detail=(f"{'נוצר איש קשר חדש' if created else 'איש קשר קיים'} - "
-                f"נשלח Flow '{msg}' ל־{phone}"),
+        # The name is what the dashboard's לידים tab and the activity show; the
+        # phone alone is how the first 140 leads appeared: a column of numbers.
+        name=(first_name or "").strip(),
+        detail=(f"{'ליד חדש' if created else 'ליד שכבר קיים ב-ManyChat'}, "
+                f"נשלחה הודעת וואטסאפ (רשימה {msg})"),
         msg=msg,
         subscriber_id=subscriber_id,
         created=created,

@@ -60,6 +60,7 @@ _ICON_PATHS: dict[str, str] = {
     "rotate": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     "lock": '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     "message": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+    "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
     "users": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     "check-circle": '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>',
     "x-circle": '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
@@ -172,6 +173,7 @@ button { font: inherit; color: inherit; }
 .muted { color: var(--fg-muted); }
 .subtle { color: var(--fg-subtle); }
 .small { font-size: 13px; }
+.show-sm { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .kbd { direction: ltr; unicode-bidi: isolate; font-family: var(--mono); font-size: 11px; line-height: 1; padding: 3px 5px; border-radius: 5px;
   border: 1px solid var(--border); border-bottom-width: 2px; background: var(--surface); color: var(--fg-muted); }
@@ -487,6 +489,8 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
   .page { padding: 22px 16px 88px; }
   .page-title { font-size: 22px; }
   .page-actions { margin-inline-start: 0; width: 100%; }
+  .hide-sm { display: none !important; }
+  .show-sm { display: block; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .stat { padding: 14px; gap: 8px; }
   .stat-value { font-size: 24px; }
@@ -859,6 +863,7 @@ BRAND_MARK = ('<span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="tr
               '<path d="M6 3h6.5a9 9 0 0 1 0 18H6Z" fill="#fff"/></svg></span>')
 
 NAV = (("dashboard", "/dashboard", "פעילות", "activity"),
+       ("leads", "/leads", "לידים", "user-plus"),
        ("questionnaires", "/admin/questionnaires", "שאלונים", "clipboard"),
        ("responses", "/admin/responses", "תשובות", "inbox"))
 

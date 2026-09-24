@@ -128,6 +128,11 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
             return _redirect(f"{base}/login")
         return _html(200, dashboard._dashboard_page(dashboard._load(q), q, base))
 
+    if route == "/leads" and method == "GET":
+        if not valid_session(_cookie_value(event)):
+            return _redirect(f"{base}/login")
+        return _html(200, dashboard._leads_page(dashboard._load_leads(), base))
+
     if route == "/login" and method == "GET":
         return _html(200, dashboard._login_page(base=base))
 

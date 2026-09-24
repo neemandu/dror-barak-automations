@@ -57,6 +57,8 @@ def test_creates_contact_and_sends_flow(read_log, monkeypatch):
     assert result["flow_ns"] == "content_ai_agents"
     assert result["created"] is True
     assert "flow_sent" in _actions(read_log)
+    sent = next(e for e in read_log() if e["action"] == "flow_sent")
+    assert sent["name"] == "דנה", "the לידים tab shows the lead by name, not a phone number"
 
 
 def test_existing_contact_is_not_recreated(read_log, monkeypatch):

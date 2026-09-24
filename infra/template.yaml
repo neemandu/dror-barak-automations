@@ -605,6 +605,13 @@ Resources:
             ApiId: !Ref DashboardApi
             Path: /dashboard
             Method: GET
+        # The Smoove signups (לידים tab).
+        Leads:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DashboardApi
+            Path: /leads
+            Method: GET
         LoginForm:
           Type: HttpApi
           Properties:

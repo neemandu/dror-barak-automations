@@ -24,6 +24,7 @@ class Subject(NamedTuple):
 
 
 SUBJECTS: dict[str, Subject] = {
+    "leads": Subject("leads", "לידים חדשים", "🙋"),
     "clickup": Subject("clickup", "לידים ומשימות", "📋"),
     "quotes": Subject("quotes", "הצעות מחיר וחתימות", "✍️"),
     "morning": Subject("morning", "חשבוניות ותשלומים", "💰"),
@@ -144,6 +145,8 @@ _ACTION_RULES: tuple[tuple[str, str], ...] = (
 )
 
 _AUTOMATION_RULES: dict[str, str] = {
+    # Smoove signups: people who are not in ClickUp (yet), only in ManyChat.
+    "smoove_to_manychat": "leads",
     "lead_to_contacts": "clickup",
     "clickup_to_claude": "clickup",
     "send_questionnaire": "whatsapp",
@@ -241,6 +244,19 @@ def failures(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def client_ids(entries: list[dict[str, Any]]) -> list[str]:
     return sorted({str(e["client_id"]) for e in entries if e.get("client_id")})
+
+
+def is_lead(entry: dict[str, Any]) -> bool:
+    """A Smoove signup: its ``client_id`` is a phone number, not a ClickUp client."""
+    return entry.get("automation") == "smoove_to_manychat"
+
+
+def phone_display(phone: Any) -> str:
+    """``+972525525300`` → ``052-5525300``; anything else as it came."""
+    raw = str(phone or "")
+    if raw.startswith("+972") and len(raw) == 13:
+        return f"0{raw[4:6]}-{raw[6:]}"
+    return raw
 
 
 def counts(entries: list[dict[str, Any]]) -> dict[str, int]:

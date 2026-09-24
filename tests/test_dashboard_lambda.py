@@ -96,3 +96,33 @@ def test_logout_clears_the_cookie():
 def test_unknown_route_is_404_and_healthz_is_public():
     assert dl.lambda_handler(event("GET", "/dev/nope"))["statusCode"] == 404
     assert dl.lambda_handler(event("GET", "/dev/healthz"))["statusCode"] == 200
+
+
+def test_the_leads_tab_needs_a_session_and_then_shows_leads(monkeypatch):
+    assert dl.lambda_handler(event(path="/dev/leads"))["statusCode"] == 303
+    login = dl.lambda_handler(event("POST", "/dev/login", body="password=correct-horse"))
+    leads = [{"ts": "2026-09-23T19:05:02Z", "automation": "smoove_to_manychat", "action": "flow_sent",
+              "status": "ok", "client_id": "+972525525300", "name": "דנה", "msg": "889128"},
+             {"ts": "2026-09-24T07:00:00Z", "automation": "smoove_to_manychat", "action": "flow_sent",
+              "status": "ok", "client_id": "+972525525300", "msg": "1142673"},
+             {"ts": "2026-09-24T08:00:00Z", "automation": "onboarding", "action": "onboarding_done",
+              "status": "ok", "client_id": "86eya3gqt"}]
+    monkeypatch.setattr(dashboard, "_load_leads", lambda: leads)
+    page = dl.lambda_handler(event(path="/dev/leads", cookie=_cookie_of(login)))
+    assert page["statusCode"] == 200
+    body = page["body"]
+    assert "דנה" in body and "052-5525300" in body and "https://wa.me/972525525300" in body
+    assert "רשימה 889128" in body and "רשימה 1142673" in body and "2 הרשמות" in body
+    assert "86eya3gqt" not in body, "a client is not a lead"
+
+
+def test_leads_are_one_row_per_person_newest_first():
+    rows = dashboard.leads_from([
+        {"ts": "2026-09-01T10:00:00Z", "automation": "smoove_to_manychat", "action": "flow_sent", "status": "ok",
+         "client_id": "+972501111111", "msg": "889128"},
+        {"ts": "2026-09-02T10:00:00Z", "automation": "smoove_to_manychat", "action": "flow_sent", "status": "ok",
+         "client_id": "+972502222222", "name": "רון", "msg": "889128"},
+        {"ts": "2026-09-03T10:00:00Z", "automation": "smoove_to_manychat", "action": "flow_sent", "status": "ok",
+         "client_id": "+972501111111", "name": "מיכל", "msg": "1142673"}])
+    assert [r["phone"] for r in rows] == ["+972501111111", "+972502222222"]
+    assert rows[0]["name"] == "מיכל" and rows[0]["lists"] == ["889128", "1142673"] and rows[0]["count"] == 2
