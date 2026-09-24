@@ -8,6 +8,10 @@
   is missing before pressing שלח הצעת מחיר in ClickUp; once signed, the document
   exactly as signed, with its audit record and the PDF.
 
+Each row of the list carries the actions its state allows (send or a WhatsApp link;
+resend or copy the waiting contract's link, which is not a send; the PDF or a new
+contract; ClickUp), on hover on a desktop and behind a "⋯" menu on a touch screen.
+
 Sending: the contract page has the same "send" the ClickUp button has (it runs
 :func:`src.automations.send_quote.send`), after a confirmation that names who it
 goes to and at what price, and a second, louder one for a client who already
@@ -81,6 +85,24 @@ CSS = """
 .small-facts dd { margin: 0; font-weight: 500; text-align: left; overflow-wrap: anywhere; }
 .how { padding: 4px 18px 16px; font-size: 13.5px; color: var(--fg-muted); line-height: 1.7; }
 .ct-card-body { padding: 14px 18px 16px; display: grid; gap: 10px; }
+/* row actions: on a desktop they take the date's place on hover (the row does not
+   widen or jump); on a phone or a touch screen, the "⋯" opens them as a menu */
+.acts-cell { position: relative; min-width: 124px; }
+.acts-cell .when-v { transition: opacity var(--d2); }
+.row-acts { position: absolute; inset-inline-start: 4px; top: 50%; display: flex; gap: 2px; opacity: 0; pointer-events: none;
+  transform: translate(0, -50%) scale(.96); transition: opacity var(--d2) var(--ease), transform var(--d2) var(--ease); }
+.row-acts .btn { width: 32px; }
+.btn.is-off, .menu-item.is-off { opacity: .42; cursor: not-allowed; }
+.go-cell { width: 1%; white-space: nowrap; }
+.row-more { display: none; }
+@media (hover: hover) and (min-width: 721px) {
+  .table tr:hover .row-acts, .table tr:focus-within .row-acts { opacity: 1; pointer-events: auto; transform: translate(0, -50%); }
+  .table tr:hover .acts-cell .when-v, .table tr:focus-within .acts-cell .when-v { opacity: 0; }
+}
+@media (hover: none), (max-width: 720px) { .row-more { display: inline-flex; } .go-cell .row-go { display: none; } }
+.act-shade { position: fixed; inset: 0; z-index: 90; }
+.table tr[data-href] { -webkit-tap-highlight-color: transparent; }
+.act-menu { z-index: 91; animation: menu-in var(--d2) var(--ease); }
 .send-card .btn-block { width: 100%; justify-content: center; }
 .send-card .why-not { font-size: 13px; color: var(--warn-ink); display: flex; gap: 6px; align-items: flex-start; }
 .send-card .why-not .icon { margin-top: 2px; flex: none; }
@@ -151,46 +173,120 @@ if (box) (function () {
 """
 
 
-SEND_JS = r"""
+# Sending, shared by the contract page and the list's row actions: the confirmation
+# (who, which address, what price; louder for a client who signed), the send, and a
+# window with the link (copy, open, WhatsApp to the client's number).
+CT_JS = r"""
+window.CT = {
+  send: function (d, mode, btn, onLink) {
+    var signed = d.signed === '1';
+    var what = mode === 'email'
+      ? 'יישלח מייל ל-' + d.email + ' עם קישור אישי לחתימה על החוזה (' + d.price + ').'
+      : 'ייווצר קישור אישי לחתימה על החוזה (' + d.price + '), ואותו שולחים ידנית, למשל בוואטסאפ.';
+    var text = (signed ? 'הלקוח כבר חתם על חוזה. זה יפתח חוזה חדש לחתימה, והחוזה החתום הקודם נשאר ב-Drive. ' : '') + what +
+      ' הסטטוס ב-ClickUp יעבור ל״נשלחה הצעת מחיר״, ואם הלקוח לא יחתום יישלחו תזכורות במייל.';
+    UI.confirm({title: (mode === 'email' ? 'לשלוח את החוזה ל' : 'ליצור קישור לחתימה עבור ') + d.name + '?', text: text,
+                ok: mode === 'email' ? 'שליחה' : 'יצירת קישור', icon: 'send', danger: signed}).then(function (yes) {
+      if (!yes) return; UI.busy(btn, true);
+      UI.api('/contracts/' + encodeURIComponent(d.client) + '/send', {mode: mode, new_contract: signed}).then(function (r) {
+        UI.busy(btn, false);
+        if (r._status !== 200) { UI.toast((r.errors || ['השליחה נכשלה'])[0], {kind: 'error'}); return; }
+        if (mode === 'email' && r.delivered) {
+          UI.toast('החוזה נשלח ל-' + r.to); setTimeout(UI.reload, 900); return; }
+        if (mode === 'email') UI.toast('המייל לא יצא. הקישור מוכן, אפשר לשלוח אותו ידנית.', {kind: 'error'});
+        (onLink || CT.linkWindow)(r.url, d); UI.forgetPages();
+      });
+    });
+  },
+  // The link to a contract already waiting: no new send, no status change, no reset reminders.
+  copy: function (d, btn) {
+    UI.busy(btn, true);
+    UI.api('/contracts/' + encodeURIComponent(d.client) + '/link', {}).then(function (r) {
+      UI.busy(btn, false);
+      if (r._status !== 200) { UI.toast((r.errors || ['לא הצלחתי ליצור קישור'])[0], {kind: 'error'}); return; }
+      CT.linkWindow(r.url, d);
+    });
+  },
+  fill: function (box, url, d) {
+    box.hidden = false; box.innerHTML =
+      '<div class="linkbox-ok">' + UI.icon('check-circle') + '<span>הקישור לחתימה מוכן</span></div>' +
+      '<div class="copyrow"><input class="input" readonly aria-label="קישור"><button type="button" class="btn" data-link="copy">' +
+      UI.icon('copy') + '<span>העתקה</span></button></div>' +
+      '<div class="acts"><a class="btn btn-sm" target="_blank" rel="noopener" data-link="open">' + UI.icon('external') +
+      '<span>פתיחה</span></a><a class="btn btn-sm" target="_blank" rel="noopener" data-link="wa">' + UI.icon('message') +
+      '<span>שליחה בוואטסאפ</span></a></div>';
+    var input = box.querySelector('input'); input.value = url;
+    input.addEventListener('focus', function () { input.select(); });
+    box.querySelector('[data-link=copy]').onclick = function () { UI.copy(url, this); };
+    box.querySelector('[data-link=open]').href = url;
+    var text = (d.first ? 'היי ' + d.first + ', ' : '') + 'ההסכם מוכן לחתימה דיגיטלית: ' + url;
+    box.querySelector('[data-link=wa]').href = 'https://wa.me/' + (d.phone || '') + '?text=' + encodeURIComponent(text);
+    box.classList.remove('is-new'); void box.offsetWidth; box.classList.add('is-new');
+  },
+  linkWindow: function (url, d) {
+    var dlg = document.createElement('dialog'); dlg.className = 'modal';
+    dlg.innerHTML = '<form method="dialog"><div class="modal-body"><div class="modal-icon">' + UI.icon('link') + '</div>' +
+      '<h2 class="modal-title"></h2><div class="linkbox" style="margin-top:14px"></div></div>' +
+      '<div class="modal-foot"><button value="cancel" class="btn">סגירה</button></div></form>';
+    dlg.querySelector('.modal-title').textContent = 'הקישור לחתימה של ' + d.name;
+    CT.fill(dlg.querySelector('.linkbox'), url, d);
+    document.body.appendChild(dlg);
+    dlg.addEventListener('close', function () { setTimeout(function () { dlg.remove(); }, 50); });
+    dlg.showModal();
+  }
+};
+"""
+
+# The contract page: its send card, the link shown in the card itself.
+PAGE_JS = r"""
 var card = document.getElementById('send-card');
 if (card) card.addEventListener('click', function (e) {
   var b = e.target.closest('button[data-mode]'); if (!b || b.disabled) return;
-  var d = card.dataset, mode = b.dataset.mode, signed = d.signed === '1', box = document.getElementById('linkbox');
-  var what = mode === 'email'
-    ? 'יישלח מייל ל-' + d.email + ' עם קישור אישי לחתימה על החוזה שמוצג כאן (' + d.price + ').'
-    : 'ייווצר קישור אישי לחתימה על החוזה שמוצג כאן (' + d.price + '), ואותו שולחים ידנית, למשל בוואטסאפ.';
-  var text = (signed ? 'הלקוח כבר חתם על חוזה. זה יפתח חוזה חדש לחתימה, והחוזה החתום הקודם נשאר ב-Drive. ' : '') + what +
-    ' הסטטוס ב-ClickUp יעבור ל״נשלחה הצעת מחיר״, ואם הלקוח לא יחתום יישלחו תזכורות במייל.';
-  UI.confirm({title: (mode === 'email' ? 'לשלוח את החוזה ל' : 'ליצור קישור לחתימה עבור ') + d.name + '?', text: text,
-              ok: mode === 'email' ? 'שליחה' : 'יצירת קישור', icon: 'send', danger: signed}).then(function (yes) {
-    if (!yes) return; UI.busy(b, true);
-    UI.api('/contracts/' + encodeURIComponent(d.client) + '/send', {mode: mode, new_contract: signed}).then(function (r) {
-      UI.busy(b, false);
-      if (r._status !== 200) { UI.toast((r.errors || ['השליחה נכשלה'])[0], {kind: 'error'}); return; }
-      if (mode === 'email' && r.delivered) {
-        UI.done(b, 'נשלח'); UI.toast('החוזה נשלח ל-' + r.to);
-        setTimeout(function () { UI.go(location.pathname); }, 1400); return; }
-      if (mode === 'email') UI.toast('המייל לא יצא. הקישור מוכן, אפשר לשלוח אותו ידנית.', {kind: 'error'});
-      showLink(box, r.url, d);
-    });
-  });
+  CT.send(card.dataset, b.dataset.mode, b, function (url, d) { CT.fill(document.getElementById('linkbox'), url, d); });
 });
-function showLink(box, url, d) {
-  box.hidden = false; box.innerHTML =
-    '<div class="linkbox-ok">' + UI.icon('check-circle') + '<span>הקישור לחתימה מוכן</span></div>' +
-    '<div class="copyrow"><input class="input" readonly aria-label="קישור"><button type="button" class="btn" data-act="copy">' +
-    UI.icon('copy') + '<span>העתקה</span></button></div>' +
-    '<div class="acts"><a class="btn btn-sm" target="_blank" rel="noopener" data-act="open">' + UI.icon('external') +
-    '<span>פתיחה</span></a><a class="btn btn-sm" target="_blank" rel="noopener" data-act="wa">' + UI.icon('message') +
-    '<span>שליחה בוואטסאפ</span></a></div>';
-  var input = box.querySelector('input'); input.value = url;
-  input.addEventListener('focus', function () { input.select(); });
-  box.querySelector('[data-act=copy]').onclick = function () { UI.copy(url, this); };
-  box.querySelector('[data-act=open]').href = url;
-  var text = (d.first ? 'היי ' + d.first + ', ' : '') + 'ההסכם מוכן לחתימה דיגיטלית: ' + url;
-  box.querySelector('[data-act=wa]').href = 'https://wa.me/' + (d.phone || '') + '?text=' + encodeURIComponent(text);
-  box.classList.remove('is-new'); void box.offsetWidth; box.classList.add('is-new');
+"""
+
+# The list: row actions (hover on a desktop, the "⋯" menu on a phone or a touch screen).
+LIST_JS = r"""
+var main = document.querySelector('main.page');
+function rowAct(b, d) {
+  var act = b.getAttribute('data-act');
+  if (b.classList.contains('is-off')) { UI.toast(b.getAttribute('data-tip'), {kind: 'error'}); return; }
+  if (act === 'email' || act === 'link') CT.send(d, act, b);
+  if (act === 'copy') CT.copy(d, b);
 }
+function openMore(btn) {
+  var row = btn.closest('tr'), acts = row.querySelector('.row-acts'), r = btn.getBoundingClientRect();
+  var shade = document.createElement('div'); shade.className = 'act-shade';
+  var list = document.createElement('div'); list.className = 'menu-list act-menu'; list.setAttribute('role', 'menu');
+  acts.querySelectorAll('[data-act]').forEach(function (a) {
+    var item = document.createElement(a.tagName === 'A' ? 'a' : 'button');
+    item.className = 'menu-item' + (a.classList.contains('is-off') ? ' is-off' : ''); item.setAttribute('role', 'menuitem');
+    if (a.tagName === 'A') { item.href = a.href; if (a.target) { item.target = a.target; item.rel = 'noopener'; } }
+    else item.type = 'button';
+    item.innerHTML = a.innerHTML + '<span></span>'; item.lastChild.textContent = a.getAttribute('data-label');
+    item.addEventListener('click', function (e) { close();
+      if (a.tagName !== 'A') { e.preventDefault(); rowAct(a, row.dataset); } });
+    list.appendChild(item);
+  });
+  function close() { shade.remove(); list.remove(); window.removeEventListener('scroll', close); }
+  shade.addEventListener('click', close);
+  window.addEventListener('scroll', close, {passive: true});  // removed again on close
+  document.body.appendChild(shade); document.body.appendChild(list);
+  // placed by hand (the menu's own rule anchors it to a parent, which a table would clip)
+  list.style.inset = 'auto'; list.style.position = 'fixed';
+  var top = r.bottom + 6; if (top + list.offsetHeight > innerHeight - 8) top = Math.max(8, r.top - list.offsetHeight - 6);
+  var left = Math.min(Math.max(8, r.left), innerWidth - list.offsetWidth - 8);
+  list.style.top = top + 'px'; list.style.left = left + 'px';
+  var first = list.querySelector('.menu-item'); if (first) first.focus();
+  list.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); btn.focus(); } });
+}
+if (main) main.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-act]'); if (!b || !main.contains(b)) return;
+  if (b.getAttribute('data-act') === 'more') { e.preventDefault(); openMore(b); return; }
+  if (b.tagName === 'A') return;
+  e.preventDefault(); rowAct(b, b.closest('tr').dataset);
+});
 """
 
 
@@ -240,6 +336,62 @@ def state_for(client: dict[str, Any], entries: list[dict[str, Any]], rec: Option
     else:
         out["state"] = "none"
     return out
+
+
+def _blocker(client: dict[str, Any], missing_provider: list[str]) -> str:
+    """Why this client's contract cannot go out at all ("" when it can)."""
+    try:
+        priced = contract.prices(client)["total"] > 0
+    except contract.ContractError:
+        priced = False
+    if not priced:
+        return "אי אפשר לשלוח: אין מחיר ב-ClickUp"
+    return "אי אפשר לשלוח: חסרים פרטי נותן השירות" if missing_provider else ""
+
+
+def _send_data(client: dict[str, Any], s: dict[str, Any]) -> str:
+    """What the confirmation says (who, where, what price), as data- attributes."""
+    cid = str(client.get("id") or "")
+    name = str(client.get("name") or cid)
+    phone = "".join(ch for ch in str(client.get("phone") or "") if ch.isdigit())
+    phone = "972" + phone[1:] if phone.startswith("0") else phone
+    first = str(client.get("first_name") or name.split(" ")[0])
+    return (f'data-client="{_esc(cid)}" data-name="{_esc(name)}" data-first="{_esc(first)}" '
+            f'data-email="{_esc(str(client.get("email") or "").strip())}" data-phone="{_esc(phone)}" '
+            f'data-price="{_esc(_price_line(client))}" data-signed="{"1" if s["state"] in SIGNED_STATES else ""}"')
+
+
+def _row_actions(client: dict[str, Any], s: dict[str, Any], base: str, missing_provider: list[str]) -> str:
+    """The row's actions, by where its contract stands."""
+    cid = str(client.get("id") or "")
+    page = f"{base}/contracts/{quote(cid)}"
+
+    def btn(act: str, icon: str, label: str, off: str = "") -> str:
+        state = ' aria-disabled="true"' if off else ""
+        return (f'<button type="button" class="btn btn-ghost btn-sm btn-icon{" is-off" if off else ""}" data-act="{act}" '
+                f'data-label="{_esc(label)}" data-tip="{_esc(off or label)}" aria-label="{_esc(label)}"{state}>'
+                f'{ui.icon(icon, 15)}</button>')
+
+    def link(href: str, icon: str, label: str, *, out: bool = False) -> str:
+        target = ' target="_blank" rel="noopener"' if out else ""
+        return (f'<a class="btn btn-ghost btn-sm btn-icon" href="{_esc(href)}"{target} data-act="go" '
+                f'data-label="{_esc(label)}" data-tip="{_esc(label)}" aria-label="{_esc(label)}">{ui.icon(icon, 15)}</a>')
+
+    block = _blocker(client, missing_provider)
+    no_mail = "" if str(client.get("email") or "").strip() else "אין מייל ב-ClickUp. אפשר ליצור קישור ולשלוח ידנית."
+    clickup = link(client["url"], "external", "עריכה ב-ClickUp", out=True) if client.get("url") else ""
+    state = s["state"]
+    if state == "none":
+        return (btn("email", "send", "שליחה במייל", block or no_mail)
+                + btn("link", "message", "קישור לשליחה בוואטסאפ", block) + clickup)
+    if state == "waiting":
+        return (btn("email", "send", "שליחה חוזרת במייל", block or no_mail)
+                + btn("copy", "copy", "העתקת הקישור לחוזה") + clickup)
+    if state in ("signed", "outside"):
+        pdf = link(s["link"], "file", "ההסכם החתום", out=True) if s["link"] else ""
+        return pdf + link(f"{page}?new=1", "plus", "חוזה חדש") + clickup
+    note = "פתיחה (התיוק נכשל, המערכת תנסה שוב בבוקר)" if state == "failed" else "פתיחה"
+    return link(page, "eye", note) + clickup
 
 
 def _badge(state: str) -> str:
@@ -323,7 +475,7 @@ def contracts_page(entries: list[dict[str, Any]], base: str = "", *, dry_run: bo
              + ui.stat("נחתמו", count["signed"] + count["outside"], ico="check-circle", tone="ok", i=4)
              + ui.stat("טרם נשלחו", count["none"], ico="send", i=5)
              + (ui.stat("תיוק שנכשל", count["failed"], ico="alert", tone="err", i=6, hot=True) if count["failed"] else ""))
-    rows = ""
+    rows, missing = "", contract.missing_provider()
     for c, s in sorted(states, key=lambda cs: (STATES[cs[1]["state"]][2], -_age_s(cs[1]["sent_at"] or "2000-01-01"))):
         cid, name = str(c["id"]), str(c.get("name") or c["id"])
         href = f"{base}/contracts/{quote(cid)}"
@@ -331,15 +483,17 @@ def contracts_page(entries: list[dict[str, Any]], base: str = "", *, dry_run: bo
         rem = (f'{s["reminders"]} תזכורות' if s["reminders"] > 1 else "תזכורת אחת" if s["reminders"] == 1 else "")
         extra = (f'<div class="small muted">לפני {_days(s["sent_at"])} ימים{" · " + rem if rem else ""}</div>'
                  if s["state"] == "waiting" and s["sent_at"] else "")
-        pdf = (f'<a class="btn btn-sm btn-icon" href="{_esc(s["link"])}" target="_blank" rel="noopener" data-tip="ההסכם החתום">'
-               f'{ui.icon("file", 15)}</a>' if s["link"] else "")
-        rows += (f'<tr data-href="{_esc(href)}" data-state="{s["state"]}" data-q="{_esc(name.lower())}">'
+        rows += (f'<tr data-href="{_esc(href)}" data-state="{s["state"]}" data-q="{_esc(name.lower())}" {_send_data(c, s)}>'
                  f'<td data-v="{_esc(name)}"><a class="person-link" href="{_esc(href)}"><span class="avatar">{_esc(ui.initials(name))}</span>'
                  f'<span>{_esc(name)}</span></a></td>'
                  f'<td data-v="{STATES[s["state"]][2]}">{_badge(s["state"])}{extra}</td>'
                  f'<td class="hide-sm muted" data-v="{clients_pages._ms(s["sent_at"])}">{when_sent}</td>'
-                 f'<td class="hide-sm muted" data-v="{clients_pages._ms(s["signed_at"])}">{ui.when(s["signed_at"], "-")}</td>'
-                 f'<td style="width:1%"><div class="doc-acts">{pdf}{ui.icon("chevron-left", 16, cls="row-go")}</div></td></tr>')
+                 f'<td class="hide-sm muted acts-cell" data-v="{clients_pages._ms(s["signed_at"])}">'
+                 f'<span class="when-v">{ui.when(s["signed_at"], "-")}</span>'
+                 f'<div class="row-acts">{_row_actions(c, s, base, missing)}</div></td>'
+                 f'<td class="go-cell"><button type="button" class="btn btn-ghost btn-sm btn-icon row-more" data-act="more" '
+                 f'aria-label="פעולות" aria-haspopup="menu">{ui.icon("more", 16)}</button>'
+                 f'{ui.icon("chevron-left", 16, cls="row-go")}</td></tr>')
     segs = f'<button class="is-active" data-f="">הכל <span class="count">{len(states)}</span></button>' + "".join(
         f'<button data-f="{k}">{label} <span class="count">{count[k]}</span></button>'
         for k, (label, _cls, _r) in STATES.items() if count[k])
@@ -359,7 +513,7 @@ def contracts_page(entries: list[dict[str, Any]], base: str = "", *, dry_run: bo
             <div id="none" style="display:none">{ui.empty("אין חוזים שמתאימים", "נסה סינון אחר או חיפוש אחר.", ico="search")}</div></div>""")
     else:
         table = '<div class="card">' + ui.empty("עדיין אין לקוחות", "לקוחות שנפתחים ב-ClickUp יופיעו כאן.", ico="users") + "</div>"
-    script = SIGN_JS + r"""
+    script = SIGN_JS + CT_JS + LIST_JS + r"""
 var state = '', find = document.getElementById('find');
 function apply() {
   var q = (find ? find.value : '').trim().toLowerCase(), n = 0;
@@ -532,7 +686,7 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
              f'<div class="card">{ui.empty("אי אפשר להציג את החוזה", "יש לתקן את מה שמופיע בצד.", ico="file")}</div>')
     page = (back + head + f'<div class="ct-grid"><div>{paper}</div><aside class="ct-side">{side}</aside></div>')
     css = clients_pages.CSS + CSS + contract.CONTRACT_CSS + ".paper [data-ask] { background: #eef4ff; color: #3538cd; font-weight: 500; }"
-    return ui.app_page(base, "contracts", f"החוזה של {name} · חוזים", page, css=css, script=SEND_JS, spa=True)
+    return ui.app_page(base, "contracts", f"החוזה של {name} · חוזים", page, css=css, script=CT_JS + PAGE_JS, spa=True)
 
 
 # ------------------------------------------------------- on the client card
@@ -608,3 +762,17 @@ def send_contract(client_id: str, body: dict[str, Any], *, dry_run: bool = False
         return 502, {"errors": [f"השליחה נכשלה: {exc}"]}
     clients_pages._CACHE.update(at=0.0, clients=None)  # the status on ClickUp just changed
     return 200, {"ok": True, "url": out["url"], "to": out.get("to", ""), "delivered": bool(out.get("delivered"))}
+
+
+def contract_link(client_id: str, *, dry_run: bool = False) -> tuple[int, dict[str, Any]]:
+    """The link to a contract already waiting for its signature, for Dror to send
+    himself. Not a send: no status change, no reminder reset, nothing in the log."""
+    from . import dashboard
+
+    client = clients_pages._find_client(client_id, dry_run)
+    if not client:
+        return 404, {"errors": ["הלקוח לא נמצא"]}
+    entries = dashboard._SAMPLE if dry_run else dashboard.run_log.read_all()
+    if state_for(client, entries, _records().get(client_id))["state"] != "waiting":
+        return 409, {"errors": ["אין חוזה שממתין לחתימה. קודם שולחים אותו."]}
+    return 200, {"url": signing.sign_url(client_id)}

@@ -1058,6 +1058,12 @@ JS = r"""
     var u = sameOrigin(href);
     if (u && spa() && navLink(u)) go(u, true); else { UI.progress.start(); location.href = href; }
   };
+  // After a write (a contract sent): drop every prefetched page, then redraw this one fresh.
+  UI.forgetPages = function () { cache = {}; };
+  UI.reload = function () {
+    cache = {}; var u = sameOrigin(location.href);
+    if (u && spa() && navLink(u)) go(u, false); else location.reload();
+  };
 
   document.addEventListener('DOMContentLoaded', function () {
     UI.init(document);

@@ -243,3 +243,46 @@ def test_the_send_route_decodes_the_client_id(monkeypatch):
     qa.handle("POST", f"/admin/api/contracts/{q('מכללת אלפא')}/send", {}, json.dumps({}).encode(),
               {"x-requested-with": "dashboard"}, dry_run=True)
     assert seen == ["מכללת אלפא"]
+
+
+# ------------------------------------------------------------ row actions
+
+
+def _row(html, cid="a1"):
+    import re
+    return re.search(rf'<tr data-href="/dev/contracts/{cid}".*?</tr>', html, re.S).group(0)
+
+
+def test_each_row_offers_what_fits_where_its_contract_stands(monkeypatch):
+    clients = [{**ALPHA, "id": "n1", "url": "https://app.clickup.com/t/n1", "sub_status": "initial_meeting"},
+               {**ALPHA, "id": "w1", "email": "", "sub_status": "quote_sent"},
+               {**ALPHA, "id": "s1", "sub_status": "in_work", "signed_contract_url": "https://drive/x"},
+               {**ALPHA, "id": "p1", "monthly_price": None, "sub_status": "initial_meeting"}]
+    monkeypatch.setattr(cp, "all_clients", lambda dry_run=False: clients)
+    entries = [{"ts": "2026-09-10T08:00:00Z", "automation": "send_quote", "action": "quote_sent", "status": "ok", "client_id": "w1"}]
+    html = ct.contracts_page(entries, "/dev", dry_run=True)
+    none, waiting, signed, unpriced = (_row(html, c) for c in ("n1", "w1", "s1", "p1"))
+    assert 'data-act="email"' in none and 'data-act="link"' in none and "עריכה ב-ClickUp" in none
+    assert "שליחה חוזרת במייל" in waiting and 'data-act="copy"' in waiting
+    assert 'data-tip="אין מייל ב-ClickUp' in waiting, "no address: the send says why instead of failing"
+    assert 'data-act="email"' not in signed and "/dev/contracts/s1?new=1" in signed and "https://drive/x" in signed
+    assert unpriced.count("is-off") == 2 and "אין מחיר" in unpriced
+    assert 'data-price="אסטרטגיה 4,900 ₪ לחודש, לפני מע״מ"' in none and 'data-act="more"' in none
+
+
+def test_copying_the_link_is_only_for_a_contract_already_waiting(alpha):
+    from src.lib import run_log
+
+    assert ct.contract_link("a1", dry_run=True)[0] == 409
+    ct.send_contract("a1", {"mode": "link"}, dry_run=True)
+    before = len(run_log.read_all())
+    monkey_entries = [{"ts": "2026-09-10T08:00:00Z", "automation": "send_quote", "action": "quote_sent", "status": "ok",
+                       "client_id": "a1"}]
+    from src import dashboard
+    dashboard._SAMPLE.extend(monkey_entries)
+    try:
+        status, out = ct.contract_link("a1", dry_run=True)
+    finally:
+        del dashboard._SAMPLE[-1]
+    assert status == 200 and out["url"].startswith("https://")
+    assert len(run_log.read_all()) == before, "a copied link is not a send: nothing is logged"

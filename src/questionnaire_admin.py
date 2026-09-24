@@ -840,14 +840,15 @@ def api(method: str, parts: list[str], body: dict[str, Any], *, dry_run: bool = 
             status, out = contracts_pages.save_signature(body)
             log.info("provider_signature_saved" if status == 200 else "provider_signature_rejected")
             return _json(status, out)
-        if len(parts) == 3 and parts[0] == "contracts" and parts[2] == "send":
-            from . import contracts_pages
-
+        if len(parts) == 3 and parts[0] == "contracts" and parts[2] in ("send", "link"):
             from urllib.parse import unquote
 
+            from . import contracts_pages
+
             client_id = unquote(parts[1])  # the path arrives as sent: a Hebrew id is percent-encoded
-            status, out = contracts_pages.send_contract(client_id, body, dry_run=dry_run)
-            log.info("contract_send", extra={"client_id": client_id, "mode": body.get("mode"), "status": status})
+            status, out = (contracts_pages.send_contract(client_id, body, dry_run=dry_run) if parts[2] == "send"
+                           else contracts_pages.contract_link(client_id, dry_run=dry_run))
+            log.info(f"contract_{parts[2]}", extra={"client_id": client_id, "mode": body.get("mode"), "status": status})
             return _json(status, out)
         if parts == ["links"] and method == "POST":
             client_id = str(body.get("client_id") or "").strip()
