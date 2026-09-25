@@ -22,6 +22,13 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 - [ ] **`SmooveWebhookToken`.** Empty = the Smoove endpoint is open; anyone with the
   URL can create contacts and fire billed WhatsApp Flows. Generate one, deploy it,
   configure Smoove to send it as `X-Smoove-Token`.
+- [ ] **Gmail for the משימות bot: `gmail.readonly` is not granted.** In the
+  delegation entry for client id `109980814053882054300` (admin.google.com),
+  `gmail.compose` works but `gmail.readonly` is refused (checked 25.9, still
+  refused after 10 min). The bot asks for both in one token, so until that line is
+  added it can neither read mail nor leave drafts. `docs/GOOGLE_SETUP.md` step 5b.
+- [ ] **The `הרץ שוב` button on `משימות`** (optional; a bare `קלוד` comment does the
+  same). ClickUp UI only: `docs/CLICKUP_SETUP.md` step 2.
 - [ ] **`DriveTemplateIds`** — the parameter exists since 16.9 but is empty, so
   onboarding copies no templates and logs `no_templates`. Needs the template
   inventory from Dror (Open Questions), then `push_stack_params DriveTemplateIds`.
@@ -130,7 +137,10 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   approval; scheduled on the 1st with a self-invoke fan-out
   (`src/scheduled.py::campaign_report_handler`). Blocked on AWS — see above.
 - [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`; notifies Dror by email.
-- [x] **T9 — ClickUp → Claude Code (bonus).** `src/automations/clickup_to_claude.py`.
+- [x] **T9 — משימות → Claude agent.** `src/automations/clickup_to_claude.py`. A new
+  task, or a `קלוד, ...` comment (revision with the thread), or the `הרץ שוב` button.
+  Drive, Gmail drafts, web research, the linked client's details and folder, branded
+  Docs. Proven live on AWS 25.9 (revision in 22 s, no comment loop).
 - [x] **T10 — Daily report to Dror.** `src/automations/daily_email.py`, scheduled on
   AWS as `DailyEmailFunction` (15.9). Supersedes the WhatsApp `daily_summary.py`.
 - [x] **T11 — Dashboard.** `src/dashboard.py` — read-only, password-protected, local.

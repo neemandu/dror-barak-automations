@@ -183,8 +183,16 @@ statuses and are not read by the CRM code — name them however the team works.
 |---|---|---|
 | `לקוח` | **Relationship** → tasks in `לקוחות` | The client this work is for |
 
-That field is the whole link. It makes the client task show its work, and lets
-`משימות` group by client.
+That field is the whole link. It makes the client task show its work, lets
+`משימות` group by client, and tells the Claude agent (#9) which client a task is
+for: it reads that client's details and questionnaire answers, and files its Docs
+in the client's `אסטרטגיה` folder.
+
+**Optional `הרץ שוב` button** (the agent re-runs the task as it stands; commenting
+a bare `קלוד` does the same). A Button field on `משימות` named `הרץ שוב` →
+Automation: *when button clicked* → *Call webhook*
+`https://<api>/action?action=clickup_to_claude`, header
+`X-Automation-Token: <AUTOMATION_TOKEN>`. Same wiring as the client buttons.
 
 **Assignee** on each task is the campaign manager or the general worker.
 
@@ -278,7 +286,7 @@ with its own secret:
 | Webhook | Events | Fires | Secret |
 |---|---|---|---|
 | `register_clickup_webhook --endpoint <url>` (`לקוחות`) | created, updated, status | New lead → Google Contacts; `סטטוס משני` → `חתם` → onboarding | `CLICKUP_WEBHOOK_SECRET` |
-| `register_clickup_webhook --endpoint <url> --tasks` (`משימות`) | created | The Claude agent does the task | `CLICKUP_TASKS_WEBHOOK_SECRET` |
+| `register_clickup_webhook --endpoint <url> --tasks` (`משימות`) | created, comment posted | The Claude agent does the task; a `קלוד, ...` comment asks for a revision. `--sync-tasks-events` updates an existing one in place | `CLICKUP_TASKS_WEBHOOK_SECRET` |
 
 `פגישה ראשונית` and `נשלח שאלון` are tracking statuses only — nothing fires on them.
 Every delivery is signature-checked; unsigned traffic is rejected before parsing.
