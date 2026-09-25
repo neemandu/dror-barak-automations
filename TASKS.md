@@ -146,6 +146,10 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   campaign manager / personal assistant, each with its own job description; statuses
   `in progress` -> `לבדיקה של דרור`; the campaign manager reads the client's Meta
   ads. Proven live: no employee = untouched; set later = one run, real Meta numbers.
+  Actions (25.9): an email the employee prepares is a branded Gmail draft and a 📧
+  card; Dror's `שלח` in the thread sends it (only his user). Switching `עובד` hands
+  the task over again. Proven live: card -> `שלח` -> sent in 7 s; switch -> v2 by the
+  new employee.
 - [x] **T10 — Daily report to Dror.** `src/automations/daily_email.py`, scheduled on
   AWS as `DailyEmailFunction` (15.9). Supersedes the WhatsApp `daily_summary.py`.
 - [x] **T11 — Dashboard.** `src/dashboard.py` — read-only, password-protected, local.
