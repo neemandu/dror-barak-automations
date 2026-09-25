@@ -159,14 +159,15 @@ def _list_id_of(payload: dict[str, Any]) -> str:
 
 def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
                        dry_run: bool) -> dict[str, Any]:
-    """A משימות task: a new task, or a comment addressed to Claude.
+    """A משימות task: a new task, or a comment that may be feedback to Claude.
 
-    Nothing else on that list fires anything. Updates don't (posting the draft is
-    itself an update), and a comment only does when it starts with Claude/קלוד:
-    the bot's own comments are posted with the same token as Dror's, so they are
-    told apart by content (🤖/❌), and every other comment is people talking.
-    The work runs in the background (:mod:`src.lib.tasks`); API Gateway gives
-    this request 30 seconds.
+    Updates fire nothing (posting an answer is itself an update). A comment is
+    handed to the background job, which decides: a reply in one of Claude's
+    threads is feedback, a top-level "קלוד, ..." too, anything else is ignored.
+    That takes the thread lookup, which a webhook payload does not carry. The
+    bot's own comments are posted with the same token as Dror's, so they are
+    dropped here by content (🤖/❌), never reaching the job. The work runs in the
+    background (:mod:`src.lib.tasks`); API Gateway gives this request 30 seconds.
     """
     from .automations import clickup_to_claude as bot
     from .lib import tasks
@@ -178,36 +179,37 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         return out
 
     if event == "taskCommentPosted":
-        text = _comment_text_of(payload)
+        text, comment_id = _comment_of(payload)
         if text is None:
             # The shape we expect wasn't there; say so rather than silently
-            # dropping what may have been Dror's instruction.
+            # dropping what may have been Dror's feedback.
             log.warning("comment_text_missing", extra={"task_id": task_id,
                         "keys": sorted((payload.get("history_items") or [{}])[0].keys())[:20]})
             return {"ignored": "comment text not found in the payload"}
-        instruction = bot.instruction_in(text)
-        if instruction is None:
-            return {"ignored": "comment not addressed to Claude"}
-        return tasks.dispatch("clickup_to_claude", task_id=task_id,
-                              instruction=instruction, dry_run=dry_run)
+        if not text.strip() or text.strip().startswith(bot.BOT_PREFIXES):
+            return {"ignored": "the bot's own comment"}
+        log.info("task_comment", extra={"task_id": task_id, "comment_id": comment_id})
+        return tasks.dispatch("clickup_to_claude", task_id=task_id, comment=text,
+                              comment_id=comment_id, dry_run=dry_run)
 
     return {"ignored": f"{event} on the tasks list"}
 
 
-def _comment_text_of(payload: dict[str, Any]) -> str | None:
-    """The text of the comment a ``taskCommentPosted`` delivery is about."""
+def _comment_of(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    """``(text, comment id)`` of the comment a ``taskCommentPosted`` is about."""
     for item in payload.get("history_items") or []:
         comment = item.get("comment")
         if not isinstance(comment, dict):
             continue
+        cid = str(comment["id"]) if comment.get("id") else None
         if comment.get("text_content") is not None:
-            return str(comment["text_content"])
+            return str(comment["text_content"]), cid
         if comment.get("comment_text") is not None:
-            return str(comment["comment_text"])
+            return str(comment["comment_text"]), cid
         parts = comment.get("comment")
         if isinstance(parts, list):
-            return "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict))
-    return None
+            return "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict)), cid
+    return None, None
 
 
 def verify_automation_token(supplied: str) -> None:

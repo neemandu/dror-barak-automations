@@ -370,30 +370,29 @@ def _comment_payload(text, task="m1"):
     }, ensure_ascii=False)
 
 
-@pytest.mark.parametrize("text,expected", [
-    ("קלוד, קצר יותר", "קצר יותר"),
-    ("@Claude make it formal", "make it formal"),
-    ("קלוד", ""),  # bare: run the task again as it stands
+@pytest.mark.parametrize("text", [
+    "קלוד, קצר יותר",
+    "קצר יותר, ובלי אימוג'י",  # a reply in Claude's thread needs no keyword
+    "נראה טוב",                # the job decides; it needs the thread lookup
 ])
-def test_a_comment_addressed_to_claude_asks_for_a_revision(monkeypatch, text, expected):
+def test_a_persons_comment_goes_to_the_job_with_its_id(monkeypatch, text):
     from src.automations import clickup_to_claude
 
     seen = []
     monkeypatch.setattr(clickup_to_claude, "run",
-                        lambda task_id, instruction=None, dry_run=False: seen.append(instruction) or {})
+                        lambda task_id, dry_run=False, **k: seen.append(k) or {})
     body = _comment_payload(text)
     lambda_handler.handle(body, _sign_tasks(body), dry_run=True)
-    assert seen == [expected]
+    assert seen == [{"comment": text, "comment_id": "cm1"}]
 
 
 @pytest.mark.parametrize("text", [
-    "🤖 Claude:\n\nהנה הטיוטה",           # the bot's own answer: would loop
-    "🤖 Claude עובד על המשימה.",            # the ack
-    "❌ Claude לא הצליח להשלים את המשימה",   # a failure
-    "נראה טוב, תודה",                      # people talking
-    "claudette said hi",                  # not the word Claude
+    "🤖 Claude: גרסה 2\nhttps://docs.google.com/document/d/x/edit",  # would loop
+    "🤖 Claude עובד על המשימה.",
+    "❌ Claude לא הצליח להשלים את המשימה",
+    "   ",
 ])
-def test_other_comments_do_not_run_claude(monkeypatch, text):
+def test_the_bots_own_comments_never_reach_the_job(monkeypatch, text):
     from src.automations import clickup_to_claude
 
     monkeypatch.setattr(clickup_to_claude, "run", lambda *a, **k: pytest.fail(f"ran on {text!r}"))

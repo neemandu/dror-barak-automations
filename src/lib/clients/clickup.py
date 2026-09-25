@@ -51,6 +51,42 @@ class ClickUpClient(BaseClient):
         comments = resp.json().get("comments", [])
         return sorted(comments, key=lambda c: int(c.get("date") or 0))
 
+    def list_replies(self, comment_id: str) -> list[dict[str, Any]]:
+        """The replies in a comment's thread, oldest first. They are not part of
+        :meth:`list_comments`, which returns only top-level comments."""
+        if self.dry_run:
+            self._record("list_replies", comment_id=comment_id)
+            return []
+        resp = self._request(
+            "GET", f"{self.base_url}/comment/{comment_id}/reply", headers=self._headers()
+        )
+        replies = resp.json().get("comments", [])
+        return sorted(replies, key=lambda c: int(c.get("date") or 0))
+
+    def reply(self, comment_id: str, text: str) -> dict[str, Any]:
+        """Post ``text`` in the thread under ``comment_id``."""
+        if self.dry_run:
+            return self._record("reply", comment_id=comment_id, text=text)
+        resp = self._request(
+            "POST", f"{self.base_url}/comment/{comment_id}/reply",
+            headers=self._headers(), json={"comment_text": text, "notify_all": False},
+        )
+        return resp.json()
+
+    def attach(self, task_id: str, data: bytes, filename: str,
+               content_type: str = "application/pdf") -> dict[str, Any]:
+        """Attach a file to the task itself (its attachments, not a custom field).
+
+        ``filename`` must be ASCII: ClickUp refuses anything else outright.
+        """
+        if self.dry_run:
+            return self._record("attach", task_id=task_id, filename=filename, bytes=len(data))
+        resp = self._request(
+            "POST", f"{self.base_url}/task/{task_id}/attachment", headers=self._headers(),
+            files={"attachment": (filename, data, content_type)},
+        )
+        return resp.json()
+
     def comment(self, task_id: str, text: str) -> dict[str, Any]:
         if self.dry_run:
             return self._record("comment", task_id=task_id, text=text)

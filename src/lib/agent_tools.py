@@ -7,8 +7,9 @@ the other automations use (:mod:`src.lib.google_auth`).
 
 Deliberately limited to what a content task needs — and to what can't hurt:
 
-* **Drive** — search, read, and *create* a Google Doc. No delete, no move, no
-  sharing: a task description is not a reason to change who can see a file.
+* **Drive** — search and read. No write, delete, move or sharing: a task
+  description is not a reason to change who can see a file. (The bot's own
+  answer does become a Doc, but by :mod:`src.lib.task_docs`, not by a tool.)
 * **Gmail** — search, read, and create a **draft**. Never send. A ClickUp task
   can be written by anyone with access to the list, and whatever it says, the
   email goes out only when Dror presses Send himself.
@@ -72,27 +73,6 @@ DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "drive_create_doc",
-        "description": (
-            "Create a branded Google Doc in Dror's Drive (his header and footer on "
-            "every page) and return its link. Use it when the deliverable is long or "
-            "should live in Drive (a script, a content calendar, a set of ads). "
-            "content is Markdown: '#'/'##' headings, lists, tables, **bold** and links "
-            "all render. folder_id is optional (find one with drive_search); without "
-            "it the doc goes to the linked client's folder (its אסטרטגיה subfolder), "
-            "or to the top of Dror's My Drive when the task has no client."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "content": {"type": "string"},
-                "folder_id": {"type": "string"},
-            },
-            "required": ["name", "content"],
-        },
-    },
-    {
         "name": "gmail_search",
         "description": (
             "Search Dror's Gmail with Gmail search syntax (e.g. 'from:college.ac.il "
@@ -140,16 +120,10 @@ class Toolbox:
     """Runs the tools. ``log`` receives (action, detail, url) for every write."""
 
     def __init__(self, *, dry_run: bool = False,
-                 log: Optional[Callable[[str, str, str], None]] = None,
-                 client: Optional[dict[str, Any]] = None, crm: Any = None):
+                 log: Optional[Callable[[str, str, str], None]] = None):
         self.dry_run = dry_run
         self.log = log or (lambda action, detail, url: None)
         self.calls: list[dict[str, Any]] = []
-        # The client the task is linked to (its `לקוח` field), if any. Its folder
-        # is only resolved when a doc is written: resolving it can *create* the
-        # folder, which a task that only reads should never do.
-        self.client = client
-        self.crm = crm
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """Run tool ``name``. Returns ``(text, is_error)``."""
@@ -211,32 +185,6 @@ class Toolbox:
             return (f"'{meta.get('name')}' is {mime or 'an unknown type'}, which this "
                     f"tool cannot read as text. Link: {meta.get('webViewLink')}")
         return f"File: {meta.get('name')}\n\n{_cut(text)}"
-
-    def _drive_create_doc(self, name: str, content: str,
-                          folder_id: Optional[str] = None) -> str:
-        from . import branded_doc, deliverables, pdf
-
-        content = text_style.humanize(content)  # it is Dror's document
-        client_name = str((self.client or {}).get("name") or "")
-        subtitle = (deliverables.prepared_for(client_name) if client_name
-                    else branded_doc.hebrew_date())
-        data = branded_doc.build(name, subtitle, branded_doc.from_markdown(content))
-        parent = folder_id or self._default_folder()
-        doc = pdf.file_to_google_doc(data, branded_doc.DOCX_TYPE, name, parent)
-        link = doc.get("webViewLink") or f"https://docs.google.com/document/d/{doc.get('id')}/edit"
-        self.log("drive_doc_created", name, link)
-        return f"Created Google Doc '{name}': {link}"
-
-    def _default_folder(self) -> str:
-        """The linked client's אסטרטגיה subfolder; else Dror's default; else My Drive."""
-        if self.client and self.crm is not None:
-            from . import client_folder
-            from .clients.google import GoogleClient
-
-            folder = client_folder.ensure(self.crm, self.client)
-            subs = client_folder.ensure_subfolders(GoogleClient(), folder["id"])
-            return str((subs.get("אסטרטגיה") or {}).get("id") or folder["id"])
-        return str(config.get("DRIVE_DEFAULT_PARENT_ID") or "root")
 
     # --- Gmail -----------------------------------------------------------
     def _gmail_search(self, query: str) -> str:

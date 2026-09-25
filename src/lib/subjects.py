@@ -45,7 +45,9 @@ ACTION_LABELS: dict[str, str] = {
     "flow_sent": "הודעת וואטסאפ נשלחה לליד",
     "unknown_msg": "הודעה לא מוכרת מ-Smoove",
     "draft_posted": "Claude השלים משימה",
+    "draft_revised": "Claude תיקן לפי ההערה",
     "draft_failed": "Claude לא הצליח להשלים משימה",
+    "pdf_attach_failed": "לא הצלחנו לצרף את ה-PDF למשימה",
     "drive_doc_created": "Claude יצר מסמך ב-Drive",
     "gmail_draft_created": "Claude הכין טיוטת מייל",
     # quotes and signing
