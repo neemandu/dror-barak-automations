@@ -174,14 +174,23 @@ Any other field of Dror's is ignored — never read, never written.
 
 Create a second list named **`משימות`** in the same space.
 
-**Statuses:** `to do` / `בעבודה` / `בבדיקה` / `הושלם`. These are ordinary work
-statuses and are not read by the CRM code — name them however the team works.
+**Statuses**, in this order. The bots move tasks through the middle two, so these
+two names must be exact:
 
-**One custom field:**
+`to do` → **`in progress`** → **`לבדיקה של דרור`** → `complete`
+
+(List ⋯ → List settings → Task statuses → Use custom statuses.)
+
+**Two custom fields:**
 
 | Field name | Type | Points at |
 |---|---|---|
 | `לקוח` | **Relationship** → tasks in `לקוחות` | The client this work is for |
+| `עובד` | **Dropdown**: `כותב תוכן`, `אנליסט רשתות`, `מנהל קמפיינים`, `עוזר אישי` | Which bot does the task. **Empty = a task for a person**, no bot touches it. The option names must match `src/lib/workers.py` exactly. |
+
+**Dror's inbox view:** + View → List, named `לבדיקה של דרור`, filtered on that
+status, grouped by `לקוח`, pinned. Everything a bot finished and is waiting for
+him is there.
 
 That field is the whole link. It makes the client task show its work, lets
 `משימות` group by client, and tells the Claude agent (#9) which client a task is

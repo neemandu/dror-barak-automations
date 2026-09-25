@@ -142,6 +142,10 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   the task, and a comment. Feedback is a reply in Claude's thread; the revision comes
   back in the same thread. Drive, Gmail drafts, web research, the linked client.
   Proven live on AWS 25.9 (thread revision in 33 s, PDF attached, no comment loop).
+  The bots as employees (25.9): the `עובד` dropdown picks copywriter / social analyst /
+  campaign manager / personal assistant, each with its own job description; statuses
+  `in progress` -> `לבדיקה של דרור`; the campaign manager reads the client's Meta
+  ads. Proven live: no employee = untouched; set later = one run, real Meta numbers.
 - [x] **T10 — Daily report to Dror.** `src/automations/daily_email.py`, scheduled on
   AWS as `DailyEmailFunction` (15.9). Supersedes the WhatsApp `daily_summary.py`.
 - [x] **T11 — Dashboard.** `src/dashboard.py` — read-only, password-protected, local.
