@@ -12,7 +12,6 @@ import pytest
 from src.automations import (
     campaign_summary,
     clickup_to_claude,
-    daily_summary,
     lead_to_contacts,
     onboarding,
     send_questionnaire,
@@ -344,15 +343,3 @@ def test_the_tasks_agent_gives_up_after_max_turns(monkeypatch, read_log):
         clickup_to_claude.run("abc123", dry_run=True)
     assert next(e for e in read_log() if e["action"] == "draft_failed")["status"] == "error"
 
-
-def test_daily_summary_reads_run_log(read_log):
-    # Generate some activity first, then summarize it.
-    lead_to_contacts.run("42", dry_run=True)
-    result = daily_summary.run(dry_run=True)
-    assert result["entries"] >= 1
-    assert "summary_sent" in _actions(read_log)
-
-
-def test_daily_summary_empty_is_graceful():
-    result = daily_summary.run(dry_run=True)
-    assert "אין פעילות" in result["message"] or result["entries"] >= 0

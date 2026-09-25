@@ -154,8 +154,6 @@ logging, and a `--dry-run` mode.
   `python -m src.tools.push_stack_params <ParameterName>`. A second stack,
   `dror-automations-test` (`Stage=test`, `WEBHOOK_DRY_RUN=1`, fake tokens in
   `.env.test`), exercises the real wiring against mocks.
-- **Webhook (local)** — `src\webhook_server.py` is the stdlib equivalent for
-  development. It has no auth.
 - **Scheduled (local)** — cron / Task Scheduler can run
   `python -m src.automations.<name>` instead of the EventBridge schedules.
 - **Manual** — every automation has a CLI entrypoint with `--dry-run`; the buttons

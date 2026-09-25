@@ -166,7 +166,7 @@ def test_a_failed_press_can_be_retried(monkeypatch):
     def flaky(cid, dry):
         attempts.append(cid)
         if len(attempts) == 1:
-            raise RuntimeError("Fillout 503")
+            raise RuntimeError("SMTP 503")
         return {"ok": True}
 
     monkeypatch.setitem(actions._RUNNERS, "send_quote", flaky)
@@ -193,7 +193,7 @@ def test_success_is_reported_back_on_the_task(monkeypatch):
 
 def test_failure_is_reported_back_on_the_task(monkeypatch):
     def boom(cid, dry):
-        raise RuntimeError("Fillout is down")
+        raise RuntimeError("SMTP is down")
 
     monkeypatch.setitem(actions._RUNNERS, "send_quote", boom)
     said = []

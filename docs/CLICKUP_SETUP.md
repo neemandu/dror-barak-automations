@@ -271,25 +271,17 @@ until the required pieces exist. It never writes to ClickUp.
 
 ## Step 5 — webhooks
 
-In production one ClickUp webhook (registered with
-`python -m src.tools.register_clickup_webhook`) posts every event to the Lambda's
-`/clickup` route, which sorts them out itself. The routes below are the **local**
-`webhook_server.py` equivalents:
+Two ClickUp webhooks post to the Lambda's `/clickup` route, which sorts events
+out itself. A ClickUp webhook watches one list, so there is one per list, each
+with its own secret:
 
-| Event | Route | Fires |
-|---|---|---|
-| Task created in `לקוחות` | `POST /crm/new-lead` | Save the phone to Google Contacts |
-| `סטטוס משני` → `חתם` | `POST /crm/status` | Onboarding |
-| Task created in `משימות` | `POST /clickup/task` | Hand the task to Claude Code |
+| Webhook | Events | Fires | Secret |
+|---|---|---|---|
+| `register_clickup_webhook --endpoint <url>` (`לקוחות`) | created, updated, status | New lead → Google Contacts; `סטטוס משני` → `חתם` → onboarding | `CLICKUP_WEBHOOK_SECRET` |
+| `register_clickup_webhook --endpoint <url> --tasks` (`משימות`) | created | The Claude agent does the task | `CLICKUP_TASKS_WEBHOOK_SECRET` |
 
 `פגישה ראשונית` and `נשלח שאלון` are tracking statuses only — nothing fires on them.
-
-Point the ClickUp→Claude Code webhook at **`משימות` only**. Aimed at `לקוחות` it
-would fire on every client status change.
-
-The webhook server has **no authentication of its own** — put it behind a proxy
-with auth first. Anyone who can reach `/crm/status` can trigger onboarding for any
-client id.
+Every delivery is signature-checked; unsigned traffic is rejected before parsing.
 
 ## Step 6 — migrate existing clients (optional)
 

@@ -2,7 +2,7 @@
 
 ClickUp retries deliveries it thinks failed, and a slow response or a Lambda
 timeout can produce the same event twice. Without a guard, a duplicated `חתם`
-event runs onboarding twice: two Drive folders, two Morning clients, two
+event runs onboarding twice: two Drive folders, two questionnaire emails, two
 "welcome" messages. Those are not idempotent operations and they are not
 retractable, so the guard has to sit in front of them.
 
@@ -170,7 +170,7 @@ def guard(automation: str, client_id: str, marker: str = "") -> str:
 
     Layer 2. Use for work that must not happen twice regardless of how many
     distinct events ask for it — onboarding being the obvious one, since it
-    creates a Drive folder and a Morning client that nobody wants duplicated.
+    creates a Drive folder that nobody wants duplicated.
     """
     suffix = f":{marker}" if marker else ""
     return f"once:{automation}:{client_id}{suffix}"

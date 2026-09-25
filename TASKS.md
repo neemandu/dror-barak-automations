@@ -66,11 +66,11 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 - [ ] **File the signed contract into the `חוזים` subfolder.** Onboarding gives every
   client folder four subfolders, but the signing page runs *before* it and drops the
   signed PDF in the folder root. Small and cosmetic.
-- [ ] **Retire dead code from replaced systems:** `src/lib/clients/green_api.py`,
-  `fillout.py`, `daily_summary.py` (the WhatsApp digest), and the Morning field
-  mappings in `crm.py` / `subjects.py` / `docs/CLICKUP_SETUP.md`.
-- [ ] **Add auth to `webhook_server.py`**, the local stdlib receiver, or retire it
-  now that the Lambda is the real entrypoint.
+- [x] **Retire dead code from replaced systems (25.9).** Green API and Fillout
+  clients, the WhatsApp `daily_summary`, the Morning field aliases / subject /
+  mock fields, the stale token-request email, and the unauthenticated local
+  `webhook_server.py` (the Lambda is the only receiver). The production run-log
+  had no rows for any of them.
 
 ## Decisions for Dror about the funnel after the questionnaire
 

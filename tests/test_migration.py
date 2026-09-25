@@ -12,7 +12,7 @@ SAMPLE = str(Path(__file__).resolve().parents[1] / "examples" / "taskey_sample.c
 def test_canonical_matching_hebrew_and_english():
     assert mig._canonical_for("מחיר חודשי") == "monthly_price"
     assert mig._canonical_for("Monthly Price") == "monthly_price"
-    assert mig._canonical_for("סטטוס Morning") == "morning_status"
+    assert mig._canonical_for("סטטוס Morning") is None  # Morning is gone
     assert mig._canonical_for("totally unknown column") is None
 
 

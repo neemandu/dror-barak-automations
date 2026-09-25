@@ -138,8 +138,8 @@ def route(
         if sub == SUB_SIGNED:
             # Layer 2: distinct events can mean the same thing. Moving a client
             # חתם -> בעבודה -> חתם is two real events, and layer 1 lets both
-            # through. Onboarding creates a Drive folder and a Morning client, so
-            # running it twice is not recoverable by retrying.
+            # through. Onboarding creates a Drive folder and messages the client,
+            # so running it twice is not recoverable by retrying.
             once = idempotency.guard("onboarding", task_id)
             if not idempotency.claim(once):
                 log.info("onboarding_already_done", extra={"client_id": task_id})
@@ -376,7 +376,7 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
     # Lets a real deployed stack take real ClickUp events and prove the wiring —
     # signature, dedup, routing — while the automations touch nothing. Worth
     # having for the first deploy, since the alternative is finding out by
-    # creating a live Morning client.
+    # creating a real Drive folder or emailing a real client.
     dry_run = config.get_bool("WEBHOOK_DRY_RUN")
 
     path = str((event.get("requestContext") or {}).get("http", {}).get("path")

@@ -2,13 +2,13 @@
 
 The run-log records one entry per *action* (``drive_folder_created``,
 ``payment_requested``, ...). Dror does not think in actions — he thinks in
-"what's happening with the invoices / the leads / the campaign reports". This
+"what's happening with the leads / the contracts / the campaign reports". This
 module maps entries onto those subjects and pulls out any link an entry carries,
 so the dashboard and the daily email can both present the log the way he reads it.
 
 Action rules win over automation rules, because a single automation can touch
-several subjects: onboarding creates a Drive folder *and* a Morning client, and
-those belong under different headings.
+several subjects: onboarding creates a Drive folder *and* sends the questionnaire,
+and those belong under different headings.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ SUBJECTS: dict[str, Subject] = {
     "leads": Subject("leads", "לידים חדשים", "🙋"),
     "clickup": Subject("clickup", "לידים ומשימות", "📋"),
     "quotes": Subject("quotes", "הצעות מחיר וחתימות", "✍️"),
-    "morning": Subject("morning", "חשבוניות ותשלומים", "💰"),
     "meta": Subject("meta", "קמפיינים ודוחות", "📊"),
     "whatsapp": Subject("whatsapp", "הודעות ללקוחות", "💬"),
     "drive": Subject("drive", "קבצים ותיקיות", "📁"),
@@ -122,9 +121,6 @@ _ACTION_RULES: tuple[tuple[str, str], ...] = (
     ("drive", "drive"),
     ("folder", "drive"),
     ("template", "drive"),
-    ("morning", "morning"),
-    ("payment", "morning"),
-    ("invoice", "morning"),
     ("quote", "quotes"),
     ("signature", "quotes"),
     ("signed", "quotes"),
@@ -160,7 +156,6 @@ _AUTOMATION_RULES: dict[str, str] = {
     "campaign_summary": "meta",
     "social_prep": "ai",
     "strategy_bot": "ai",
-    "daily_summary": "system",
     "daily_email": "system",
     "migrate_taskey_to_clickup": "system",
 }
@@ -187,7 +182,6 @@ _LINK_LABELS: tuple[tuple[str, str], ...] = (
     ("docs.google.com", "פתח מסמך"),
     ("app.clickup.com", "פתח ב-ClickUp"),
     ("clickup.com", "פתח ב-ClickUp"),
-    ("greeninvoice", "פתח ב-Morning"),
     ("facebook.com", "פתח ב-Meta"),
 )
 

@@ -59,7 +59,7 @@ class _ContextAdapter(logging.LoggerAdapter):
     Context whose name collides with a built-in LogRecord attribute is suffixed
     rather than passed through: ``logging`` raises ``KeyError`` on a collision,
     and a log line must never be able to fail the work it is describing.
-    ``daily_summary`` passing ``message=`` is a real instance of this.
+    A caller passing ``message=`` is the classic instance of this.
     """
 
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:

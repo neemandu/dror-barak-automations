@@ -209,7 +209,7 @@ Parameters:
     AllowedValues: ["0", "1"]
     Description: >
       1 = accept real ClickUp events and prove the wiring, but let the automations
-      touch nothing (no Drive folders, no Morning clients, no WhatsApp). Deploy
+      touch nothing (no Drive folders, no emails, no WhatsApp). Deploy
       with 1 first, watch the logs, then redeploy with 0 to go live. Covers the
       schedules too, so a test stack chases nobody.
   DashboardPassword:
@@ -241,7 +241,7 @@ Globals:
   Function:
     Runtime: python3.12
     MemorySize: 512
-    # Generous: onboarding calls Drive, Morning and WhatsApp in sequence. Well
+    # Generous: onboarding calls Drive, email and WhatsApp in sequence. Well
     # under Lambda's 15-minute ceiling, but not so tight that a slow Drive call
     # times out mid-onboarding and leaves a half-created client.
     Timeout: 180

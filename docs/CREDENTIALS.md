@@ -248,4 +248,4 @@ account and no monthly fee. It needs:
 - If a token is ever pasted somewhere public, revoke and regenerate it. Every system
   above lets you revoke.
 - Check that everything loaded without exposing values:
-  `python -c "from src.lib import config; config.load_dotenv(); import os; print({k: bool(os.environ.get(k)) for k in ['CLICKUP_API_TOKEN','MORNING_API_KEY','GREEN_API_ID_INSTANCE','ANTHROPIC_API_KEY']})"`
+  `python -c "from src.lib import config; config.load_dotenv(); import os; print({k: bool(os.environ.get(k)) for k in ['CLICKUP_API_TOKEN','MANYCHAT_API_KEY','SMTP_PASSWORD','ANTHROPIC_API_KEY']})"`

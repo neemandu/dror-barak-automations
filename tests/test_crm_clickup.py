@@ -173,8 +173,7 @@ def test_task_maps_onto_the_client_dict_the_automations_expect(client):
 def test_fields_not_configured_read_as_empty_not_missing_keys(client):
     # Automations index these directly; a KeyError would crash the run.
     c = client._to_client(TASK)
-    for key in ("email", "service_type", "recordings_path", "morning_status",
-                "morning_client_id", "signed_contract_url"):
+    for key in ("email", "service_type", "recordings_path", "signed_contract_url"):
         assert c[key] == ""
 
 
@@ -268,7 +267,7 @@ def test_his_field_names_are_recognised():
     resolved = crm_fields.resolve_fields(DROR_FIELDS)
     assert resolved["monthly_price"]["name"] == "מחיר חודשי ללא מעמ"
     assert resolved["drive_folder"]["name"] == "נתיב לגוגל דרייב"
-    assert resolved["morning_client_id"]["name"] == "מזהה מורנינג"
+    assert "morning_client_id" not in resolved  # his old Morning column is ignored
     assert resolved["status"]["name"] == "סטטוס ראשי"
 
 

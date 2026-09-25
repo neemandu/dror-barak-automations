@@ -32,8 +32,7 @@ ALIASES: dict[str, list[str]] = {
     "sub_status": ["sub status", "substatus", "סטטוס משני"],
     "monthly_price": [
         "monthly price", "price", "מחיר חודשי", "מחיר", "ריטיינר",
-        # Dror's field is explicitly ex-VAT. Morning adds מע"מ when it issues the
-        # document, so an ex-VAT amount is the correct thing to send it.
+        # Dror's field is explicitly ex-VAT; the contract adds מע"מ itself.
         "מחיר חודשי ללא מעמ", 'מחיר חודשי ללא מע"מ', "מחיר ללא מעמ",
     ],
     # The contract prices each service on its own line. Optional: without them the
@@ -53,10 +52,6 @@ ALIASES: dict[str, list[str]] = {
     ],
     "signed_contract": ["signed contract", "contract", "חוזה חתום", "חוזה"],
     "recordings_path": ["recordings", "נתיב הקלטות", "הקלטות"],
-    "morning_status": ["morning", "morning status", "סטטוס morning", "סטטוס מורנינג"],
-    "morning_client_id": [
-        "morning client id", "morning id", "מזהה morning", "מזהה מורנינג",
-    ],
     # The Meta ad account for the monthly campaign report (T7), the act_ id.
     # NOTE: normalize() casefolds, so a "Meta" the user typed arrives as "meta" —
     # every alias here must be lowercase or it silently never matches, and the

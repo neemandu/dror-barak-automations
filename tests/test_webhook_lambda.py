@@ -1,7 +1,7 @@
 """Tests for the ClickUp webhook Lambda: signature, idempotency, routing.
 
 The endpoint is public and the work behind it is not retractable — a duplicate
-`חתם` runs onboarding twice, creating two Drive folders and two Morning clients.
+`חתם` runs onboarding twice, creating two Drive folders and emailing the client twice.
 So the duplicate and failure paths matter more than the happy path here.
 """
 
@@ -209,7 +209,7 @@ def test_unrelated_status_change_does_nothing(crm_says):
 def test_onboarding_runs_once_even_for_two_distinct_signed_events(monkeypatch, crm_says):
     # Dror flips חתם -> בעבודה -> חתם: two real deliveries, two different history
     # ids, so delivery dedup does NOT catch this. Onboarding must still run once,
-    # or the client gets two Drive folders and two Morning records.
+    # or the client gets two Drive folders and two emails.
     from src.automations import onboarding
 
     crm_says("signed")
@@ -295,7 +295,7 @@ def test_lambda_handler_returns_401_for_a_forged_request():
 
 def test_lambda_handler_returns_500_so_clickup_retries(monkeypatch):
     def boom(p, dry_run=False, **kw):
-        raise RuntimeError("Morning is down")
+        raise RuntimeError("Drive is down")
 
     monkeypatch.setattr(lambda_handler, "route", boom)
     body = payload(after={"name": "חתם"})

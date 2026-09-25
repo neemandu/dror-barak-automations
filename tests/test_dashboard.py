@@ -59,8 +59,8 @@ def test_links_are_found_in_free_text_detail():
 
 
 def test_links_recognise_the_explicit_url_field():
-    entry = {"url": "https://app.greeninvoice.co.il/documents/9", "detail": "3500₪"}
-    assert subjects.links_for(entry) == [("פתח ב-Morning", "https://app.greeninvoice.co.il/documents/9")]
+    entry = {"url": "https://app.clickup.com/t/9", "detail": "3500₪"}
+    assert subjects.links_for(entry) == [("פתח ב-ClickUp", "https://app.clickup.com/t/9")]
 
 
 def test_entry_without_a_link_yields_none():

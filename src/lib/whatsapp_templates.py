@@ -19,21 +19,10 @@ TEMPLATES: dict[str, str] = {
         "כדי שנתכונן בצורה הטובה ביותר, נשמח שתמלא/י שאלון קצר:\n"
         "{questionnaire_url}"
     ),
-    # Sent with the monthly payment request / invoice link.
-    "payment_request": (
-        "היי {first_name}, הופקה דרישת תשלום עבור חודש {month}.\n"
-        "לתשלום מאובטח: {payment_url}\n"
-        "תודה, דרור ברק."
-    ),
     # Sent when a new client's WhatsApp channel is opened during onboarding.
     "onboarding_welcome": (
         "ברוך/ה הבא/ה {first_name}! 🎉\n"
         "שמחים להתחיל לעבוד יחד. פתחנו ערוץ הזה לכל התיאומים והעדכונים."
-    ),
-    # Daily end-of-day summary that Dror himself receives.
-    "daily_summary": (
-        "סיכום יומי - {date} 📊\n"
-        "{body}"
     ),
     # Internal ping to Dror to choose which templates to copy for a new client.
     "onboarding_dror_prompt": (

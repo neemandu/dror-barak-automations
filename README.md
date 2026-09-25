@@ -44,8 +44,6 @@ run live.
 | — | `sign_reminders` | Scheduled: daily | `python -m src.automations.sign_reminders --dry-run` |
 | — | `questionnaire_reminders` | Scheduled: daily | `python -m src.automations.questionnaire_reminders --dry-run` |
 
-`daily_summary` (the WhatsApp version of T10) is superseded by `daily_email` — see
-the 24-hour-window note in [`CLAUDE.md`](CLAUDE.md).
 
 ## Dashboard
 
@@ -102,23 +100,11 @@ python -m src.tools.publish_chromium_layer                                      
 0 8 1 * * cd /path/to/dror_barak && python -m src.automations.campaign_summary --all
 ```
 
-**Webhook** — start the receiver and point each system's webhook at the route:
-
-```bash
-python -m src.webhook_server            # live  (PORT via WEBHOOK_PORT, default 8000)
-python -m src.webhook_server --dry-run  # dispatch automations in dry-run
-```
-
-| System event | Route | Automation |
-|---|---|---|
-| ClickUp: new lead | `POST /crm/new-lead` | T1 |
-| ClickUp: status change | `POST /crm/status` | T5 (signed) |
-| ClickUp: task | `POST /clickup/task` | T9 |
-| Smoove: lead | `POST /smoove` | T12 (find/create ManyChat contact → Flow) |
-
-**The receiver has no authentication of its own.** Put it behind a reverse proxy
-with auth before exposing it publicly — anyone who can reach `/crm/status` can
-trigger onboarding for any client id.
+**Webhooks** are received only by the Lambda (`src/lambda_handler.py`): ClickUp at
+`/clickup` (signed; two webhooks, `לקוחות` and `משימות`), buttons at `/action`
+(token header), Smoove at its own API. There is no local receiver: exercise the
+routing with `python -m pytest tests/test_webhook_lambda.py`, or deploy to the test
+stack. (The old stdlib `webhook_server.py` had no auth and was retired on 25.9.)
 
 ## How it's built (and why it runs without credentials)
 

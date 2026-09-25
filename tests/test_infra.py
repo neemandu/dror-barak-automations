@@ -98,7 +98,7 @@ def test_per_call_context_survives_into_the_log_line(capsys):
 def test_reserved_context_names_do_not_crash_the_automation(capsys):
     """`message` is a LogRecord attribute; logging raises KeyError on collision.
 
-    daily_summary really does log `message=...`. A log line must never be able to
+    Passing `message=...` is an easy mistake. A log line must never be able to
     fail the work it describes, so collisions are renamed, not raised.
     """
     import json

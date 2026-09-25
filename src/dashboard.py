@@ -1,8 +1,7 @@
 """Dashboard — one page where Dror sees everything the automations did.
 
-Read-only by design: it shows the run-log, grouped into subjects (invoices, leads,
-campaign reports, ...), with links out to the real artefacts in Drive / ClickUp /
-Morning. Nothing can be triggered from here, so the page cannot cause an action —
+Read-only by design: it shows the run-log, grouped into subjects (leads, contracts,
+campaign reports, ...), with links out to the real artefacts in Drive / ClickUp. Nothing can be triggered from here, so the page cannot cause an action —
 the worst a visitor can do is read.
 
 That "worst case" is still client phone numbers, monthly prices and contract links,
@@ -121,7 +120,7 @@ _STATUS = {
 }
 
 #: Lucide icons for the subjects (the emoji in ``subjects`` stay for the email).
-_SUBJECT_ICONS = {"leads": "user-plus", "clickup": "clipboard", "quotes": "pen", "morning": "file", "meta": "gauge",
+_SUBJECT_ICONS = {"leads": "user-plus", "clickup": "clipboard", "quotes": "pen", "meta": "gauge",
                   "whatsapp": "message", "drive": "folder", "ai": "sparkles", "system": "activity",
                   "other": "info"}
 

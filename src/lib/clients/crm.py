@@ -75,11 +75,6 @@ def _fixture_client(client_id: str) -> dict[str, Any]:
         "drive_folder_url": "",
         "signed_contract_url": "",
         "recordings_path": "",
-        # An *active* client has been through onboarding by definition, so Morning
-        # knows them. A fixture without this represents a state that cannot occur,
-        # and made the billing tests exercise the skip path rather than the work.
-        "morning_status": "created",
-        "morning_client_id": "morning-client-mock",
         "meta_ad_account": "act_100000000000001",
         "url": "https://app.clickup.com/t/mock",
         "social_profiles": {
@@ -201,8 +196,6 @@ class CrmClient(BaseClient):
             "drive_folder_url": drive if drive.startswith("http") else "",
             "signed_contract_url": str(field_value("signed_contract") or ""),
             "recordings_path": str(field_value("recordings_path") or ""),
-            "morning_status": str(field_value("morning_status") or ""),
-            "morning_client_id": str(field_value("morning_client_id") or ""),
             "meta_ad_account": str(field_value("meta_ad_account") or ""),
             "url": str(task.get("url") or ""),
             "social_profiles": {},
@@ -433,7 +426,6 @@ _MOCK_FIELDS: list[dict[str, Any]] = [
     {"id": "f-drive", "name": "תיקיית Drive", "type": "url"},
     {"id": "f-contract", "name": "חוזה חתום", "type": "url"},
     {"id": "f-recordings", "name": "נתיב הקלטות", "type": "short_text"},
-    {"id": "f-morning", "name": "סטטוס Morning", "type": "short_text"},
     {"id": "f-meta-act", "name": "חשבון מודעות Meta", "type": "short_text"},
     {
         "id": "f-sub",
