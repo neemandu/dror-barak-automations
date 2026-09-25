@@ -46,9 +46,9 @@ NAME = "register_clickup_webhook"
 #                 this is what actually fires the questionnaire and onboarding.
 # taskStatusUpdated -> the task status (the primary lifecycle).
 EVENTS = ["taskCreated", "taskUpdated", "taskStatusUpdated"]
-# The משימות list: a new task, and comments (a "קלוד, ..." comment asks for a
-# revision). Updates would only be ignored traffic.
-TASK_EVENTS = ["taskCreated", "taskCommentPosted"]
+# The משימות list: a new task, an update (the עובד field set after creation hands
+# the task to a bot), and comments (feedback in Claude's thread).
+TASK_EVENTS = ["taskCreated", "taskUpdated", "taskCommentPosted"]
 
 
 def _headers() -> dict[str, str]:

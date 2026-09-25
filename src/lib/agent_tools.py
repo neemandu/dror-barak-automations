@@ -116,20 +116,52 @@ DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
+# Offered only when the task's client has a Meta ad account, and bound to that
+# account: the model cannot name another one, so one client's numbers can never
+# end up in another client's work.
+META_DEFINITION: dict[str, Any] = {
+    "name": "meta_ads_insights",
+    "description": (
+        "Read-only Meta Ads results for THIS task's client (their ad account). "
+        "Give a date range (YYYY-MM-DD, inclusive) and a level: 'campaign' returns "
+        "totals and per-campaign spend, impressions, clicks, CTR, leads and cost per "
+        "lead; 'adset' or 'ad' returns the same per ad set or ad. Call it twice to "
+        "compare two periods. It cannot change anything in the account."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "since": {"type": "string", "description": "YYYY-MM-DD"},
+            "until": {"type": "string", "description": "YYYY-MM-DD"},
+            "level": {"type": "string", "enum": ["campaign", "adset", "ad"]},
+        },
+        "required": ["since", "until"],
+    },
+}
+
+
 class Toolbox:
-    """Runs the tools. ``log`` receives (action, detail, url) for every write."""
+    """Runs the tools. ``log`` receives (action, detail, url) for every write.
+
+    ``meta_account``: the task's client's ad account; when given, the read-only
+    Meta tool is offered too (:data:`META_DEFINITION`).
+    """
 
     def __init__(self, *, dry_run: bool = False,
-                 log: Optional[Callable[[str, str, str], None]] = None):
+                 log: Optional[Callable[[str, str, str], None]] = None,
+                 meta_account: Optional[str] = None):
         self.dry_run = dry_run
         self.log = log or (lambda action, detail, url: None)
         self.calls: list[dict[str, Any]] = []
+        self.meta_account = meta_account or None
+        self.definitions: list[dict[str, Any]] = DEFINITIONS + (
+            [META_DEFINITION] if self.meta_account else [])
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """Run tool ``name``. Returns ``(text, is_error)``."""
         self.calls.append({"tool": name, "input": args})
         handler = getattr(self, f"_{name}", None)
-        if handler is None or name not in {d["name"] for d in DEFINITIONS}:
+        if handler is None or name not in {d["name"] for d in self.definitions}:
             return f"Unknown tool {name!r}.", True
         if self.dry_run:
             return f"[dry-run] {name} would run with {json.dumps(args, ensure_ascii=False)[:300]}", False
@@ -185,6 +217,26 @@ class Toolbox:
             return (f"'{meta.get('name')}' is {mime or 'an unknown type'}, which this "
                     f"tool cannot read as text. Link: {meta.get('webViewLink')}")
         return f"File: {meta.get('name')}\n\n{_cut(text)}"
+
+    # --- Meta Ads (read-only) --------------------------------------------
+    def _meta_ads_insights(self, since: str, until: str, level: str = "campaign") -> str:
+        from . import campaign_metrics
+        from .clients.meta_ads import MetaAdsClient
+
+        meta = MetaAdsClient()
+        account = meta.account(str(self.meta_account))
+        rows = meta.insights(str(self.meta_account), since=since, until=until, level=level)
+        if level == "campaign":
+            summary = campaign_metrics.summarize(rows, currency=account.get("currency") or "ILS")
+            return json.dumps({"account": account.get("name"), "since": since, "until": until,
+                               **summary}, ensure_ascii=False, default=str)
+        slim = [{"name": r.get(f"{level}_name"), "campaign": r.get("campaign_name"),
+                 **({"adset": r.get("adset_name")} if level == "ad" else {}),
+                 **{k: r.get(k) for k in ("spend", "impressions", "clicks")},
+                 "leads": campaign_metrics.leads_in(r)}
+                for r in rows]
+        return json.dumps({"account": account.get("name"), "since": since, "until": until,
+                           "level": level, "rows": slim}, ensure_ascii=False, default=str)
 
     # --- Gmail -----------------------------------------------------------
     def _gmail_search(self, query: str) -> str:

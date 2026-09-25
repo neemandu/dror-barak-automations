@@ -260,6 +260,9 @@ def test_task_created_saves_the_lead(monkeypatch):
 
 def test_a_task_in_the_work_list_goes_to_claude_not_the_crm(monkeypatch):
     from src.automations import clickup_to_claude
+    from src.lib.clients.clickup import ClickUpClient
+
+    monkeypatch.setattr(ClickUpClient, "__init__", lambda self, dry_run=False: setattr(self, "dry_run", True) or setattr(self, "calls", []))
 
     monkeypatch.setenv("CLICKUP_TASKS_LIST_ID", "999")
     seen = []

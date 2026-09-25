@@ -117,7 +117,11 @@ class MetaAdsClient(BaseClient):
         params = {
             "level": level,
             "time_range": json.dumps({"since": since, "until": until}),
-            "fields": "campaign_id,campaign_name,spend,impressions,clicks,actions,account_currency",
+            # The report asks per campaign; the campaign-manager bot also per
+            # ad set / ad, which needs those names too.
+            "fields": ("campaign_id,campaign_name,"
+                       + {"adset": "adset_id,adset_name,", "ad": "adset_name,ad_id,ad_name,"}.get(level, "")
+                       + "spend,impressions,clicks,actions,account_currency"),
             "limit": "100",
             "access_token": self.token,
         }

@@ -48,6 +48,7 @@ ACTION_LABELS: dict[str, str] = {
     "draft_revised": "Claude תיקן לפי ההערה",
     "draft_failed": "Claude לא הצליח להשלים משימה",
     "pdf_attach_failed": "לא הצלחנו לצרף את ה-PDF למשימה",
+    "status_not_set": "לא הצלחנו לעדכן את סטטוס המשימה",
     "drive_doc_created": "Claude יצר מסמך ב-Drive",
     "gmail_draft_created": "Claude הכין טיוטת מייל",
     # quotes and signing

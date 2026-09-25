@@ -79,7 +79,7 @@ def test_a_new_task_gets_version_1_as_a_doc_a_pdf_and_a_top_level_comment(monkey
     out = bot.run("t1", dry_run=True)
     assert out["version"] == 1 and not out["revised"]
     assert len(board.posted) == 1 and board.replied == []
-    assert board.posted[0].startswith("🤖 Claude: גרסה 1\nhttps://docs.google.com/document/d/")
+    assert board.posted[0].startswith("🤖 Claude: גרסה 1 · כותב תוכן\nhttps://docs.google.com/document/d/")
     assert board.attached == ["claude-v1.pdf"]
     entry = next(e for e in read_log() if e["action"] == "draft_posted")
     assert entry["url"].startswith("https://docs.google.com/document/d/")

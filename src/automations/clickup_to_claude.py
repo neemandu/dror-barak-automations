@@ -1,7 +1,15 @@
 """T9 — ClickUp → Claude (the משימות list).
 
+The bots are Dror's employees (:mod:`src.lib.workers`): a task is given to one
+through the list's ``עובד`` dropdown (copywriter, social analyst, campaign
+manager, personal assistant), and each has its own job description on top of the
+shared instructions. An empty ``עובד`` is a task for a person: no bot runs.
+The bot moves the task to ``in progress`` while it works and to ``לבדיקה של
+דרור`` when its answer is in, which is Dror's review inbox.
+
 Trigger:
-* a task **created** on the משימות list (``CLICKUP_TASKS_LIST_ID``);
+* a task on the משימות list whose ``עובד`` names an employee, when it is created
+  with it or when the field is set later (once per task);
 * a **reply in the thread** under one of Claude's answers: that is feedback, and
   the revised version is posted in the same thread;
 * a top-level comment starting with ``Claude`` / ``קלוד``: the rest is feedback on
@@ -35,10 +43,11 @@ Manual/dry-run:
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
-from ..lib import questionnaire, questionnaire_store, task_docs, text_style
-from ..lib.agent_tools import DEFINITIONS, Toolbox
+from ..lib import questionnaire, questionnaire_store, task_docs, text_style, workers
+from ..lib.agent_tools import Toolbox
 from ..lib.clients.anthropic_ai import WEB_TOOLS, AnthropicClient
 from ..lib.clients.clickup import ClickUpClient
 from ..lib.clients.crm import CrmClient
@@ -137,8 +146,13 @@ def _client_context(client: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _today() -> str:
+    # Israel is UTC+2/+3; "the last 7 days" should not start at midnight UTC.
+    return (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%Y-%m-%d")
+
+
 def _task_prompt(task: dict[str, Any], client: Optional[dict[str, Any]]) -> str:
-    parts = []
+    parts = [f"תאריך היום: {_today()}", ""]
     if client:
         parts += ["# הלקוח שהמשימה עבורו", _client_context(client), ""]
     parts += [
@@ -244,11 +258,24 @@ def _load_client(crm: CrmClient, client_id: str) -> dict[str, Any]:
     return client
 
 
-def _comment_body(version: int, doc_url: str, draft: str) -> str:
+def _comment_body(version: int, doc_url: str, draft: str, worker: str = "") -> str:
     plain = task_docs.as_plain_text(draft)
     if len(plain) > _FULL_COMMENT_CHARS:
         plain = plain[:_PREVIEW_CHARS].rstrip() + "\n\n[ההמשך במסמך]"
-    return f"{DRAFT_PREFIX} גרסה {version}\n{doc_url}\n\n{plain}"
+    signed = f" · {worker}" if worker else ""
+    return f"{DRAFT_PREFIX} גרסה {version}{signed}\n{doc_url}\n\n{plain}"
+
+
+def _move(clickup: ClickUpClient, task: dict[str, Any], status: str, auto: Automation) -> None:
+    """Best-effort status change, only on a list set up for employees (it has the
+    ``עובד`` field, and so the statuses of docs/CLICKUP_SETUP.md step 2)."""
+    if not workers.has_field(task):
+        return
+    try:
+        clickup.set_status(str(task.get("id")), status)
+    except Exception as exc:  # noqa: BLE001 - the answer matters more than the status
+        auto.log_action("status_not_set", "error", client_id=str(task.get("id")),
+                        detail=f"{status}: {exc}")
 
 
 def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[str] = None,
@@ -297,6 +324,10 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
     client: Optional[dict[str, Any]] = None
     try:
         task = clickup.get_task(task_id)
+        # A button press or a "קלוד" on a task with no employee still asks for work:
+        # the copywriter takes it.
+        worker = workers.worker_of(task) or workers.DEFAULT
+        _move(clickup, task, workers.STATUS_WORKING, auto)
         client_id = linked_client_id(task)
         if client_id:
             client = _load_client(crm, client_id)
@@ -308,13 +339,15 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
             messages = [{"role": "user", "content": f"{prompt}\n\nהערה מדרור: {feedback}"}]
         else:
             messages = [{"role": "user", "content": prompt}]
-        tools = Toolbox(dry_run=dry_run, log=log_write)
-        draft = _agent_loop(ai, tools, messages)
+        tools = Toolbox(dry_run=dry_run, log=log_write,
+                        meta_account=(client or {}).get("meta_ad_account"))
+        draft = _agent_loop(ai, tools, messages, job=worker.job)
 
         version = versions(all_threads) + 1
         name = f"{task.get('name', '') or task_id} - גרסה {version}"
         doc = task_docs.save(name, draft, client=client, crm=crm, dry_run=dry_run)
-        post(_comment_body(version, doc["url"], draft))
+        post(_comment_body(version, doc["url"], draft, worker.name))
+        _move(clickup, task, workers.STATUS_REVIEW, auto)
     except Exception as exc:  # noqa: BLE001
         # Dror was told on the task that Claude is working on it. Say it failed
         # there too, or the task waits forever for a draft that isn't coming.
@@ -328,8 +361,9 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
 
     attached = _attach_pdf(clickup, task_id, doc["id"], version, auto, dry_run)
     auto.log_action("draft_revised" if thread is not None else "draft_posted",
-                    client_id=task_id, detail=name, url=doc["url"])
+                    client_id=task_id, detail=f"{worker.name}: {name}", url=doc["url"])
     return {"task": task.get("name", ""), "client": (client or {}).get("name"),
+            "worker": worker.name,
             "version": version, "doc": doc, "attached": attached,
             "revised": thread is not None, "draft": draft, "tool_calls": tools.calls}
 
@@ -348,13 +382,14 @@ def _attach_pdf(clickup: ClickUpClient, task_id: str, doc_id: str, version: int,
 
 
 def _agent_loop(ai: AnthropicClient, tools: Toolbox,
-                messages: Union[str, list[dict[str, Any]]]) -> str:
+                messages: Union[str, list[dict[str, Any]]], *, job: str = "") -> str:
     """Call Claude, run the tools it asks for, repeat until it answers."""
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
     messages = list(messages)
+    system = f"{_SYSTEM}\n\n{job}" if job else _SYSTEM
     for _ in range(MAX_TURNS):
-        resp = ai.create_message(messages, system=_SYSTEM, tools=DEFINITIONS + WEB_TOOLS)
+        resp = ai.create_message(messages, system=system, tools=tools.definitions + WEB_TOOLS)
         content = resp.get("content", [])
         stop = resp.get("stop_reason")
         if stop == "refusal":

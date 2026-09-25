@@ -87,6 +87,16 @@ class ClickUpClient(BaseClient):
         )
         return resp.json()
 
+    def set_status(self, task_id: str, status: str) -> dict[str, Any]:
+        """Move the task to ``status`` (a status name that exists on its list)."""
+        if self.dry_run:
+            return self._record("set_status", task_id=task_id, status=status)
+        resp = self._request(
+            "PUT", f"{self.base_url}/task/{task_id}", headers=self._headers(),
+            json={"status": status},
+        )
+        return resp.json()
+
     def comment(self, task_id: str, text: str) -> dict[str, Any]:
         if self.dry_run:
             return self._record("comment", task_id=task_id, text=text)

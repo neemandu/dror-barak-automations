@@ -159,9 +159,14 @@ def _list_id_of(payload: dict[str, Any]) -> str:
 
 def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
                        dry_run: bool) -> dict[str, Any]:
-    """A משימות task: a new task, or a comment that may be feedback to Claude.
+    """A משימות task: given to an employee, or a comment that may be feedback.
 
-    Updates fire nothing (posting an answer is itself an update). A comment is
+    A task runs when its ``עובד`` field names one of the bots (:mod:`src.lib.workers`):
+    at creation, or on the update that sets the field later. An empty field is a
+    task for a person. Each task runs this way once (a guard, since the bot's own
+    status changes and Dror's edits are updates too); running again is explicit,
+    by a comment or the button. A list without the field at all runs every new
+    task, as before it existed. A comment is
     handed to the background job, which decides: a reply in one of Claude's
     threads is feedback, a top-level "קלוד, ..." too, anything else is ignored.
     That takes the thread lookup, which a webhook payload does not carry. The
@@ -172,11 +177,25 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
     from .automations import clickup_to_claude as bot
     from .lib import tasks
 
-    if event == "taskCreated":
-        out = tasks.dispatch("clickup_to_claude", task_id=task_id, dry_run=dry_run)
-        if out.get("queued"):
-            _comment(task_id, "🤖 Claude עובד על המשימה. הטיוטה תופיע כאן כתגובה.", dry_run)
-        return out
+    if event in ("taskCreated", "taskUpdated"):
+        from .lib import workers
+        from .lib.clients.clickup import ClickUpClient
+
+        task = ClickUpClient(dry_run=dry_run).get_task(task_id)
+        if event == "taskUpdated" and not workers.has_field(task):
+            return {"ignored": "update on a list without the עובד field"}
+        worker = workers.worker_of(task)
+        if worker is None:
+            return {"ignored": "no employee on this task (a task for a person)"}
+        once = idempotency.guard("clickup_to_claude", task_id)
+        if not idempotency.claim(once):
+            return {"ignored": "this task was already handed to its employee"}
+        try:
+            out = tasks.dispatch("clickup_to_claude", task_id=task_id, dry_run=dry_run)
+        except Exception:
+            idempotency.release(once)  # let ClickUp's retry hand it over
+            raise
+        return {**out, "worker": worker.name}
 
     if event == "taskCommentPosted":
         text, comment_id = _comment_of(payload)
