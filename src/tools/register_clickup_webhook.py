@@ -46,8 +46,9 @@ NAME = "register_clickup_webhook"
 #                 this is what actually fires the questionnaire and onboarding.
 # taskStatusUpdated -> the task status (the primary lifecycle).
 EVENTS = ["taskCreated", "taskUpdated", "taskStatusUpdated"]
-# The משימות list only drafts new tasks; updates would be ignored traffic.
-TASK_EVENTS = ["taskCreated"]
+# The משימות list: a new task, and comments (a "קלוד, ..." comment asks for a
+# revision). Updates would only be ignored traffic.
+TASK_EVENTS = ["taskCreated", "taskCommentPosted"]
 
 
 def _headers() -> dict[str, str]:
@@ -109,6 +110,28 @@ def create(team_id: str, endpoint: str, list_id: str | None, dry_run: bool,
     print("\n  Without it the Lambda rejects every delivery as unsigned.")
 
 
+def sync_events(team_id: str, list_id: str, events: list[str], dry_run: bool) -> None:
+    """Set the events of the webhook already watching ``list_id``, in place.
+
+    Updating keeps the webhook's id and secret; deleting and re-registering would
+    mint a new secret that must then be pushed to the stack before anything works.
+    """
+    hooks = [h for h in list_webhooks(team_id) if str(h.get("list_id")) == str(list_id)]
+    if not hooks:
+        print(f"No webhook watches list {list_id}. Register one with --endpoint ... --tasks.")
+        sys.exit(1)
+    hook = hooks[0]
+    if sorted(hook.get("events") or []) == sorted(events):
+        print(f"Webhook {hook.get('id')} already has {events}.")
+        return
+    body = {"endpoint": hook.get("endpoint"), "events": events, "status": "active"}
+    if dry_run:
+        print(f"Would PUT {_base()}/webhook/{hook.get('id')}:\n{json.dumps(body, indent=2)}")
+        return
+    http_request("PUT", f"{_base()}/webhook/{hook.get('id')}", headers=_headers(), json=body)
+    print(f"Webhook {hook.get('id')}: events {hook.get('events')} -> {events} (same secret).")
+
+
 def delete(webhook_id: str) -> None:
     http_request("DELETE", f"{_base()}/webhook/{webhook_id}", headers=_headers())
     print(f"Deleted webhook {webhook_id}.")
@@ -123,6 +146,8 @@ def main() -> None:
                         help="Register the משימות webhook (CLICKUP_TASKS_LIST_ID, "
                              "taskCreated only) instead of the clients one.")
     parser.add_argument("--delete", metavar="WEBHOOK_ID", help="Delete a webhook.")
+    parser.add_argument("--sync-tasks-events", action="store_true",
+                        help="Update the משימות webhook to the current TASK_EVENTS, keeping its secret.")
     parser.add_argument("--dry-run", action="store_true", help="No writes; print the plan.")
     args = parser.parse_args()
     config.load_dotenv()
@@ -138,6 +163,10 @@ def main() -> None:
         return
     if args.delete:
         delete(args.delete)
+        return
+    if args.sync_tasks_events:
+        sync_events(str(team_id), str(config.get("CLICKUP_TASKS_LIST_ID")), TASK_EVENTS,
+                    args.dry_run)
         return
     if not args.endpoint:
         print("Nothing to do. Pass --endpoint <url>, --list, or --delete <id>.")

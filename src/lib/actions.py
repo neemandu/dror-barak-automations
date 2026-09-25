@@ -73,6 +73,14 @@ ACTIONS: dict[str, Action] = {
         confirm="⏳ דוח הקמפיין בהכנה - הקישור יופיע כאן כשיסתיים",
         once_only=False,
     ),
+    # On the משימות list, not the clients list: runs the task again as it stands
+    # now (the same as commenting a bare "קלוד").
+    "clickup_to_claude": Action(
+        key="clickup_to_claude",
+        label="הרץ שוב",
+        confirm="🤖 Claude מתחיל מחדש. הטיוטה תופיע כאן כתגובה.",
+        once_only=False,
+    ),
 }
 
 # Deliberately NOT a button:
@@ -113,7 +121,15 @@ def _campaign_summary(client_id: str, dry_run: bool) -> dict[str, Any]:
     return tasks.dispatch("campaign_summary", client_id=client_id, dry_run=dry_run)
 
 
+def _claude_task(task_id: str, dry_run: bool) -> dict[str, Any]:
+    # Minutes of work: in the background, or API Gateway times the press out.
+    from . import tasks
+
+    return tasks.dispatch("clickup_to_claude", task_id=task_id, instruction="", dry_run=dry_run)
+
+
 _RUNNERS: dict[str, Callable[[str, bool], dict[str, Any]]] = {
+    "clickup_to_claude": _claude_task,
     "send_quote": _send_quote,
     "send_questionnaire": _send_questionnaire,
     "social_prep": _social_prep,

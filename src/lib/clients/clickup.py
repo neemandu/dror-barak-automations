@@ -40,6 +40,17 @@ class ClickUpClient(BaseClient):
         )
         return resp.json()
 
+    def list_comments(self, task_id: str) -> list[dict[str, Any]]:
+        """The task's comments, oldest first (ClickUp returns newest first)."""
+        if self.dry_run:
+            self._record("list_comments", task_id=task_id)
+            return []
+        resp = self._request(
+            "GET", f"{self.base_url}/task/{task_id}/comment", headers=self._headers()
+        )
+        comments = resp.json().get("comments", [])
+        return sorted(comments, key=lambda c: int(c.get("date") or 0))
+
     def comment(self, task_id: str, text: str) -> dict[str, Any]:
         if self.dry_run:
             return self._record("comment", task_id=task_id, text=text)

@@ -263,7 +263,7 @@ def test_a_task_in_the_work_list_goes_to_claude_not_the_crm(monkeypatch):
 
     monkeypatch.setenv("CLICKUP_TASKS_LIST_ID", "999")
     seen = []
-    monkeypatch.setattr(clickup_to_claude, "run", lambda tid, dry_run=False: seen.append(tid) or {})
+    monkeypatch.setattr(clickup_to_claude, "run", lambda task_id, dry_run=False, **k: seen.append(task_id) or {})
     lambda_handler.route(json.loads(payload(event="taskCreated", list_id="999")))
     assert seen == ["t1"], "משימות tasks must not be treated as new leads"
 
@@ -335,7 +335,7 @@ def test_a_new_task_on_the_tasks_list_goes_to_claude_not_to_contacts(monkeypatch
     from src.automations import clickup_to_claude, lead_to_contacts
 
     ran = []
-    monkeypatch.setattr(clickup_to_claude, "run", lambda t, dry_run=False: ran.append(t) or {"draft": "x"})
+    monkeypatch.setattr(clickup_to_claude, "run", lambda task_id, dry_run=False, **k: ran.append(task_id) or {"draft": "x"})
     monkeypatch.setattr(lead_to_contacts, "run", lambda *a, **k: pytest.fail("a task is not a lead"))
     body = payload(event="taskCreated", task="m1", after=None)
     lambda_handler.handle(body, _sign_tasks(body), dry_run=True)
@@ -350,8 +350,61 @@ def test_an_update_on_the_tasks_list_is_ignored(monkeypatch):
     assert "ignored" in lambda_handler.handle(body, _sign_tasks(body), dry_run=True)["result"]
 
 
-def test_the_async_claude_invoke_runs_the_task(monkeypatch):
+def test_the_background_claude_task_runs_through_the_shared_runner(monkeypatch):
     from src.automations import clickup_to_claude
 
-    monkeypatch.setattr(clickup_to_claude, "run", lambda t, dry_run=False: {"task": t})
-    assert lambda_handler.lambda_handler({lambda_handler.CLAUDE_TASK_KEY: "m9"}) == {"task": "m9"}
+    seen = []
+    monkeypatch.setattr(clickup_to_claude, "run",
+                        lambda task_id, instruction=None, dry_run=False: seen.append((task_id, instruction)) or {})
+    out = lambda_handler.lambda_handler(
+        {"task": "clickup_to_claude", "args": {"task_id": "m9", "instruction": "קצר יותר"}})
+    assert out["ok"] and seen == [("m9", "קצר יותר")]
+
+
+def _comment_payload(text, task="m1"):
+    return json.dumps({
+        "event": "taskCommentPosted", "task_id": task, "webhook_id": "wh",
+        "history_items": [{"id": "c1", "field": "comment",
+                           "comment": {"id": "cm1", "text_content": text,
+                                       "comment": [{"text": text}]}}],
+    }, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("קלוד, קצר יותר", "קצר יותר"),
+    ("@Claude make it formal", "make it formal"),
+    ("קלוד", ""),  # bare: run the task again as it stands
+])
+def test_a_comment_addressed_to_claude_asks_for_a_revision(monkeypatch, text, expected):
+    from src.automations import clickup_to_claude
+
+    seen = []
+    monkeypatch.setattr(clickup_to_claude, "run",
+                        lambda task_id, instruction=None, dry_run=False: seen.append(instruction) or {})
+    body = _comment_payload(text)
+    lambda_handler.handle(body, _sign_tasks(body), dry_run=True)
+    assert seen == [expected]
+
+
+@pytest.mark.parametrize("text", [
+    "🤖 Claude:\n\nהנה הטיוטה",           # the bot's own answer: would loop
+    "🤖 Claude עובד על המשימה.",            # the ack
+    "❌ Claude לא הצליח להשלים את המשימה",   # a failure
+    "נראה טוב, תודה",                      # people talking
+    "claudette said hi",                  # not the word Claude
+])
+def test_other_comments_do_not_run_claude(monkeypatch, text):
+    from src.automations import clickup_to_claude
+
+    monkeypatch.setattr(clickup_to_claude, "run", lambda *a, **k: pytest.fail(f"ran on {text!r}"))
+    body = _comment_payload(text)
+    assert "ignored" in lambda_handler.handle(body, _sign_tasks(body), dry_run=True)["result"]
+
+
+def test_a_comment_without_text_is_logged_not_guessed(monkeypatch):
+    from src.automations import clickup_to_claude
+
+    monkeypatch.setattr(clickup_to_claude, "run", lambda *a, **k: pytest.fail("no text, no run"))
+    body = json.dumps({"event": "taskCommentPosted", "task_id": "m1",
+                       "history_items": [{"id": "c2", "field": "comment"}]})
+    assert "not found" in lambda_handler.handle(body, _sign_tasks(body), dry_run=True)["result"]["ignored"]

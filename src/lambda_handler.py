@@ -24,7 +24,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 from typing import Any
 
 from .lib import actions, config, idempotency
@@ -34,8 +33,6 @@ from .lib.logging_setup import get_logger
 
 log = get_logger("webhook", "lambda")
 
-# An async self-invoke carrying a משימות task for Claude (see _dispatch_claude_task).
-CLAUDE_TASK_KEY = "claude_task_id"
 
 
 class Rejected(Exception):
@@ -109,11 +106,7 @@ def route(
     through to the lead branch below — that would save a marketing task to Google
     Contacts.
     """
-    from .automations import (
-        clickup_to_claude,
-        lead_to_contacts,
-        onboarding,
-    )
+    from .automations import lead_to_contacts, onboarding
 
     event = str(payload.get("event") or "")
     task_id = str(payload.get("task_id") or "")
@@ -124,11 +117,7 @@ def route(
     # A משימות task is work for Claude, not a client. Same webhook shape, so the
     # list id is what tells them apart.
     if source == "tasks" or (tasks_list and _list_id_of(payload) == tasks_list):
-        if event != "taskCreated":
-            # Posting the draft changes the task. Drafting on updates would loop
-            # and bill Opus for every edit.
-            return {"ignored": f"{event} on the tasks list"}
-        return _dispatch_claude_task(task_id, dry_run, clickup_to_claude)
+        return _route_claude_task(payload, event, task_id, dry_run)
 
     if event == "taskCreated":
         return lead_to_contacts.run(task_id, dry_run=dry_run)
@@ -168,27 +157,57 @@ def _list_id_of(payload: dict[str, Any]) -> str:
     return ""
 
 
-def _dispatch_claude_task(task_id: str, dry_run: bool, module: Any) -> dict[str, Any]:
-    """Hand a משימות task to Claude without holding the webhook open.
+def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
+                       dry_run: bool) -> dict[str, Any]:
+    """A משימות task: a new task, or a comment addressed to Claude.
 
-    API Gateway cuts the request at 30 seconds; an Opus draft takes longer. So on
-    Lambda this acknowledges on the task and async-invokes this same function,
-    which :func:`lambda_handler` routes to ``clickup_to_claude.run``. Locally, in
-    tests and in dry-run there is nothing to parallelise — it runs inline.
+    Nothing else on that list fires anything. Updates don't (posting the draft is
+    itself an update), and a comment only does when it starts with Claude/קלוד:
+    the bot's own comments are posted with the same token as Dror's, so they are
+    told apart by content (🤖/❌), and every other comment is people talking.
+    The work runs in the background (:mod:`src.lib.tasks`); API Gateway gives
+    this request 30 seconds.
     """
-    function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
-    if dry_run or not function_name:
-        return module.run(task_id, dry_run=dry_run)
+    from .automations import clickup_to_claude as bot
+    from .lib import tasks
 
-    import boto3
+    if event == "taskCreated":
+        out = tasks.dispatch("clickup_to_claude", task_id=task_id, dry_run=dry_run)
+        if out.get("queued"):
+            _comment(task_id, "🤖 Claude עובד על המשימה. הטיוטה תופיע כאן כתגובה.", dry_run)
+        return out
 
-    boto3.client("lambda").invoke(
-        FunctionName=function_name,
-        InvocationType="Event",
-        Payload=json.dumps({CLAUDE_TASK_KEY: task_id}).encode("utf-8"),
-    )
-    _comment(task_id, "🤖 Claude עובד על המשימה. הטיוטה תופיע כאן כתגובה.", dry_run)
-    return {"dispatched": task_id}
+    if event == "taskCommentPosted":
+        text = _comment_text_of(payload)
+        if text is None:
+            # The shape we expect wasn't there; say so rather than silently
+            # dropping what may have been Dror's instruction.
+            log.warning("comment_text_missing", extra={"task_id": task_id,
+                        "keys": sorted((payload.get("history_items") or [{}])[0].keys())[:20]})
+            return {"ignored": "comment text not found in the payload"}
+        instruction = bot.instruction_in(text)
+        if instruction is None:
+            return {"ignored": "comment not addressed to Claude"}
+        return tasks.dispatch("clickup_to_claude", task_id=task_id,
+                              instruction=instruction, dry_run=dry_run)
+
+    return {"ignored": f"{event} on the tasks list"}
+
+
+def _comment_text_of(payload: dict[str, Any]) -> str | None:
+    """The text of the comment a ``taskCommentPosted`` delivery is about."""
+    for item in payload.get("history_items") or []:
+        comment = item.get("comment")
+        if not isinstance(comment, dict):
+            continue
+        if comment.get("text_content") is not None:
+            return str(comment["text_content"])
+        if comment.get("comment_text") is not None:
+            return str(comment["comment_text"])
+        parts = comment.get("comment")
+        if isinstance(parts, list):
+            return "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict))
+    return None
 
 
 def verify_automation_token(supplied: str) -> None:
@@ -356,15 +375,6 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         from . import sign_page
 
         return sign_page.self_check(return_pdf=bool(event.get("return_pdf")))
-
-    if CLAUDE_TASK_KEY in event:
-        # Our own async invoke, not API Gateway: no path, no headers, no signature.
-        # Only this function's role can invoke it, so there is nothing to verify.
-        from .automations import clickup_to_claude
-
-        return clickup_to_claude.run(
-            str(event[CLAUDE_TASK_KEY]), dry_run=config.get_bool("WEBHOOK_DRY_RUN")
-        )
 
     raw = event.get("body") or ""
     if event.get("isBase64Encoded"):
