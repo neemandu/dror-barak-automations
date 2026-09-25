@@ -35,32 +35,32 @@ def pending(issued_days_ago: float, reminders_sent: int = 0):
 # --------------------------------------------------------- the cadence
 
 
-def test_no_reminder_before_two_days():
-    assert sign_reminders._due(pending(1), time.time()) is None
+def test_no_reminder_before_three_days():
+    assert sign_reminders._due(pending(2.9), time.time()) is None
 
 
-def test_first_reminder_at_two_days():
-    assert sign_reminders._due(pending(2), time.time()) == 1
+def test_the_reminder_at_three_days():
+    assert sign_reminders._due(pending(3), time.time()) == 1
 
 
-def test_second_reminder_at_four_days():
-    assert sign_reminders._due(pending(4, reminders_sent=1), time.time()) == 2
+def test_one_reminder_only():
+    # Dror's call (25.9): one follow-up, then it is his to pick up the phone.
+    assert sign_reminders._due(pending(4, reminders_sent=1), time.time()) is None
+    assert sign_reminders._due(pending(30, reminders_sent=1), time.time()) is None
 
 
-def test_no_third_reminder_ever():
-    # Two nudges, then stop. Chasing a prospect harder loses the deal.
-    assert sign_reminders._due(pending(10, reminders_sent=2), time.time()) is None
+def test_a_missed_day_still_sends_it_once():
+    assert sign_reminders._due(pending(6, reminders_sent=0), time.time()) == 1
 
 
-def test_a_missed_day_does_not_send_two_reminders_at_once():
-    # The job didn't run for a while; the client is now 5 days in with none sent.
-    # They should get ONE nudge (#2), not #1 and #2 back to back.
-    assert sign_reminders._due(pending(5, reminders_sent=0), time.time()) == 2
+def test_the_reminder_is_drors_wording_with_the_signing_button():
+    from src.lib import email_templates
 
-
-def test_already_reminded_today_is_not_reminded_again():
-    # #1 sent, only 2 days in — #2 isn't due until day 4.
-    assert sign_reminders._due(pending(2, reminders_sent=1), time.time()) is None
+    mail = email_templates.render("sign_reminder", client_name="רונית", cta_url="https://x/sign?t=1")
+    assert mail["text"].startswith("היי רונית")
+    assert "בהמשך לפגישה שלנו" in mail["text"] and "יוצאים לדרך :)" in mail["text"]
+    assert "לצמיחה לצמיחה" not in mail["text"]
+    assert "https://x/sign?t=1" in mail["text"] and "https://x/sign?t=1" in mail["html"]
 
 
 # ----------------------------------------------------- the whole run

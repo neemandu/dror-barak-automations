@@ -77,17 +77,18 @@ TEMPLATES: dict[str, EmailTemplate] = {
         ),
         cta="למילוי השאלון",
     ),
-    # Chases an unsigned contract. Same link as the original: a client who lost
-    # the first email can sign from this one. Gentle, a nudge rather than a demand.
+    # The one follow-up on an unsigned contract, 3 days after it was sent. Same
+    # link as the original: a client who lost the first email can sign from this
+    # one. The body is Dror's own wording (25.9).
     "sign_reminder": EmailTemplate(
         subject="ההסכם עדיין מחכה לחתימה",
         body=(
-            "היי {client_name},\n"
+            "היי {client_name}\n"
             "\n"
-            "רק מזכיר שההסכם והמפרט לצמיחה ברווחים שלך עדיין מחכים לחתימה. "
-            "החתימה דיגיטלית ולוקחת רגע, ומיד אחריה אנחנו יוצאים לדרך.\n"
-            "\n"
-            "יש שאלות? אני כאן."
+            "בהמשך לפגישה שלנו, אני מקווה שיצא לך לעבור על ההסכם והמפרט לצמיחה "
+            "ברווחים שלך.\n"
+            "במידה ויש שאלות, אני כאן בשבילך.\n"
+            "לתחילת עבודה יש לחתום דיגיטלית ואנחנו יוצאים לדרך :)"
         ),
         cta="לחתימה על ההסכם",
     ),

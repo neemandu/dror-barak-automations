@@ -450,7 +450,7 @@ def _setup_card(clients: list[dict[str, Any]], dry_run: bool) -> str:
          "בחוזה הוא מופיע כשורת האסטרטגיה בלבד. כדי לתמחר גם קמפיינים, מוסיפים ברשימת הלקוחות ב-ClickUp "
          "שני שדות מסוג Currency: ״מחיר אסטרטגיה״ ו״מחיר קמפיינים״."),
         ("info", "שליחה", "מהמשימה ב-ClickUp, בכפתור ״שלח הצעת מחיר״. הלקוח מקבל מייל עם קישור אישי, "
-                          "ותזכורות אחרי יומיים ואחרי ארבעה ימים."),
+                          "ותזכורת אחת אחרי 3 ימים אם לא חתם."),
     ]
     return (f'<section class="card reveal" style="--i:2"><div class="card-head"><h2 class="card-title">הגדרות החוזה</h2></div>'
             f'{_checks(rows)}</section>')
@@ -620,7 +620,7 @@ def _send_card(client: dict[str, Any], s: dict[str, Any], *, again: bool) -> str
             + f'<button type="button" class="btn btn-block" data-mode="link"{" disabled" if blockers else ""}>'
               f'{ui.icon("link", 15)}<span>יצירת קישור לשליחה ידנית</span></button>'
             + '<p class="small muted" style="margin:0">כמו הכפתור ״שלח הצעת מחיר״ ב-ClickUp: הסטטוס עובר ל״נשלחה הצעת '
-              'מחיר״, ולקוח שלא חותם מקבל תזכורות אחרי יומיים ו-4 ימים.</p>'
+              'מחיר״, ולקוח שלא חותם מקבל תזכורת אחת אחרי 3 ימים.</p>'
             + '<div class="linkbox" id="linkbox" hidden></div></div></section>')
 
 

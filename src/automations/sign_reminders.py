@@ -2,9 +2,9 @@
 
 Trigger: scheduled daily (EventBridge).
 
-Dror sends a quote; if the client doesn't sign, this nudges them **twice** — at 2
-days and again at 4 days — then stops. Two reminders is a nudge; more is nagging,
-and nagging a prospect loses the deal you were trying to close.
+Dror sends a quote; if the client hasn't signed after **3 days**, this sends them
+**one** follow-up in Dror's own words (``sign_reminder``) with the signing link,
+then stops (Dror's call, 25.9: one follow-up, not a chase).
 
 How it knows who to chase: every client currently in secondary status
 ``נשלחה הצעת מחיר`` (quote sent, not yet signed). Signing moves them to ``חתם``,
@@ -32,9 +32,9 @@ from .base import Automation, build_arg_parser, run_cli
 NAME = "sign_reminders"
 
 DAY = 24 * 60 * 60
-# (reminder number, age in days) — the schedule Dror asked for.
-SCHEDULE = [(1, 2), (2, 4)]
-MAX_REMINDERS = 2
+# (reminder number, age in days): the schedule Dror asked for (25.9).
+SCHEDULE = [(1, 3)]
+MAX_REMINDERS = 1
 
 
 def _due(pending: dict[str, Any], now: float) -> int | None:
