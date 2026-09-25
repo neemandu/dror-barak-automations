@@ -137,10 +137,11 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   approval; scheduled on the 1st with a self-invoke fan-out
   (`src/scheduled.py::campaign_report_handler`). Blocked on AWS — see above.
 - [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`; notifies Dror by email.
-- [x] **T9 — משימות → Claude agent.** `src/automations/clickup_to_claude.py`. A new
-  task, or a `קלוד, ...` comment (revision with the thread), or the `הרץ שוב` button.
-  Drive, Gmail drafts, web research, the linked client's details and folder, branded
-  Docs. Proven live on AWS 25.9 (revision in 22 s, no comment loop).
+- [x] **T9 — משימות → Claude agent.** `src/automations/clickup_to_claude.py`. Every
+  answer is a version: a branded Google Doc in the client's `משימות` folder, a PDF on
+  the task, and a comment. Feedback is a reply in Claude's thread; the revision comes
+  back in the same thread. Drive, Gmail drafts, web research, the linked client.
+  Proven live on AWS 25.9 (thread revision in 33 s, PDF attached, no comment loop).
 - [x] **T10 — Daily report to Dror.** `src/automations/daily_email.py`, scheduled on
   AWS as `DailyEmailFunction` (15.9). Supersedes the WhatsApp `daily_summary.py`.
 - [x] **T11 — Dashboard.** `src/dashboard.py` — read-only, password-protected, local.
