@@ -51,6 +51,8 @@ ACTION_LABELS: dict[str, str] = {
     "status_not_set": "לא הצלחנו לעדכן את סטטוס המשימה",
     "drive_doc_created": "Claude יצר מסמך ב-Drive",
     "gmail_draft_created": "Claude הכין טיוטת מייל",
+    "client_email_sent": "מייל נשלח באישורך",
+    "send_refused": "סירבנו לשלוח מייל: האישור לא היה שלך",
     # quotes and signing
     "quote_sent": "הצעת המחיר נשלחה לחתימה",
     "no_price": "חסר מחיר להצעה",

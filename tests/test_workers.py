@@ -162,3 +162,108 @@ def test_the_meta_tool_reads_only_the_tasks_client(monkeypatch):
         "meta_ads_insights", {"since": "2026-09-01", "until": "2026-09-07"})
     assert not is_error and asked == ["act_777"]
     assert "campaigns" in json.loads(text) or "totals" in json.loads(text)
+
+
+# ------------------------------------------------------------ switching employee
+
+
+def test_switching_the_employee_hands_the_task_over_again(env, monkeypatch):
+    _route(monkeypatch, "taskUpdated", task_with(0))       # copywriter
+    _route(monkeypatch, "taskUpdated", task_with(0))       # a status change: nothing
+    out = _route(monkeypatch, "taskUpdated", task_with(2))  # -> campaign manager
+    assert out["worker"] == "מנהל קמפיינים"
+    out = _route(monkeypatch, "taskUpdated", task_with(0))  # and back
+    assert out["worker"] == "כותב תוכן"
+    assert env == ["t1", "t1", "t1"]
+
+
+# ------------------------------------------------------------ actions: email
+
+
+DOC = "https://docs.google.com/document/d/DOC1/edit"
+DROR = {"id": 0}          # ClickUpClient.me() is "0" in dry-run
+SOMEONE = {"id": 555}
+
+
+def _card(cid, draft_id="dr1"):
+    return {"id": cid, "comment_text": bot.card_text({"id": draft_id, "to": "client@x.co", "subject": "המלצות"}),
+            "user": DROR}
+
+
+class _Thread:
+    def __init__(self, monkeypatch, replies):
+        root = {"id": "C1", "comment_text": f"🤖 Claude: גרסה 1\n{DOC}\n\nהמלצות", "reply_count": len(replies)}
+        self.replied = []
+        board = self
+        monkeypatch.setattr(ClickUpClient, "list_comments", lambda s, tid: [root])
+        monkeypatch.setattr(ClickUpClient, "list_replies", lambda s, cid: list(replies))
+        monkeypatch.setattr(ClickUpClient, "reply", lambda s, cid, text: board.replied.append(text) or {})
+        monkeypatch.setattr(ClickUpClient, "get_task", lambda s, tid: task_with(2))
+
+
+def test_drors_send_sends_the_pending_email(monkeypatch, read_log):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    monkeypatch.setattr(AnthropicClient, "create_message", lambda *a, **k: pytest.fail("no model call"))
+    thread = _Thread(monkeypatch, [_card("K1"), {"id": "A1", "comment_text": "שלח", "user": DROR}])
+    out = bot.run("t1", comment="שלח", comment_id="A1", dry_run=True)
+    assert out["sent"]["id"] == "dr1"
+    assert thread.replied[-1].startswith("✅ המייל נשלח אל client@x.co")
+    assert any(e["action"] == "client_email_sent" for e in read_log())
+
+
+def test_nobody_but_dror_can_approve_a_send(monkeypatch, read_log):
+    thread = _Thread(monkeypatch, [_card("K1"), {"id": "A1", "comment_text": "שלח", "user": SOMEONE}])
+    out = bot.run("t1", comment="שלח", comment_id="A1", dry_run=True)
+    assert "refused" in out and "רק דרור" in thread.replied[-1]
+    assert any(e["action"] == "send_refused" for e in read_log())
+
+
+def test_an_email_is_sent_once(monkeypatch):
+    sent = {"id": "S1", "comment_text": "✅ המייל נשלח אל client@x.co: המלצות\n[draft:dr1]"}
+    thread = _Thread(monkeypatch, [_card("K1"), sent, {"id": "A2", "comment_text": "שלח", "user": DROR}])
+    out = bot.run("t1", comment="שלח", comment_id="A2", dry_run=True)
+    assert "ignored" in out and "אין בשרשור" in thread.replied[-1]
+
+
+def test_send_with_nothing_pending_is_not_fed_to_claude(monkeypatch):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    monkeypatch.setattr(AnthropicClient, "create_message", lambda *a, **k: pytest.fail("no model call"))
+    _Thread(monkeypatch, [{"id": "A1", "comment_text": "שלח", "user": DROR}])
+    assert "ignored" in bot.run("t1", comment="שלח", comment_id="A1", dry_run=True)
+
+
+def test_a_draft_the_agent_made_becomes_a_card_in_the_thread(monkeypatch):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    posted, replied = [], []
+    monkeypatch.setattr(ClickUpClient, "get_task", lambda s, tid: task_with(2))
+    monkeypatch.setattr(ClickUpClient, "list_comments", lambda s, tid: [])
+    monkeypatch.setattr(ClickUpClient, "comment", lambda s, tid, text: posted.append(text) or {"id": "NEW"})
+    monkeypatch.setattr(ClickUpClient, "reply", lambda s, cid, text: replied.append((cid, text)) or {})
+
+    script = [
+        {"stop_reason": "tool_use", "content": [{"type": "tool_use", "id": "u1", "name": "gmail_create_draft",
+                                                 "input": {"to": "c@x.co", "subject": "המלצות", "body": "שלום"}}]},
+        {"stop_reason": "end_turn", "content": [{"type": "text", "text": "# המלצות\nהכנתי טיוטה."}]},
+    ]
+    monkeypatch.setattr(AnthropicClient, "create_message", lambda *a, **k: script.pop(0))
+
+    def fake_post(url, *, gmail=False, **kw):
+        class R:
+            def json(self):
+                return {"id": "dr9"}
+        return R()
+
+    monkeypatch.setattr(Toolbox, "_post", staticmethod(fake_post))
+    monkeypatch.setattr(bot, "Toolbox", lambda **kw: Toolbox(**{**kw, "dry_run": False}))
+    bot.run("t1", dry_run=True)
+    assert replied and replied[0][0] == "NEW"
+    assert replied[0][1].startswith("📧 מייל מוכן לשליחה") and "[draft:dr9]" in replied[0][1]
+
+
+def test_the_bots_cards_and_confirmations_never_count_as_feedback():
+    for text in (bot.card_text({"id": "x", "to": "a", "subject": "b"}), "✅ המייל נשלח אל a: b"):
+        assert bot.instruction_in(text) is None
+        assert text.startswith(bot.BOT_PREFIXES)

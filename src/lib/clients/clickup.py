@@ -87,6 +87,13 @@ class ClickUpClient(BaseClient):
         )
         return resp.json()
 
+    def me(self) -> str:
+        """The id of the ClickUp user this token belongs to (Dror)."""
+        if self.dry_run:
+            return "0"
+        resp = self._request("GET", f"{self.base_url}/user", headers=self._headers())
+        return str((resp.json().get("user") or {}).get("id") or "")
+
     def set_status(self, task_id: str, status: str) -> dict[str, Any]:
         """Move the task to ``status`` (a status name that exists on its list)."""
         if self.dry_run:

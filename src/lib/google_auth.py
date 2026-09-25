@@ -41,6 +41,11 @@ SCOPES = [
 # drafts for him to send. Minted as a separate token, so the automations above
 # keep working on a domain where these two scopes were never granted — a Gmail
 # scope missing from delegation must not break onboarding.
+# Each Gmail operation asks only for its own scope, so a missing one breaks only
+# that operation: drafts and approved sends need compose, reading needs readonly.
+GMAIL_READ_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+GMAIL_COMPOSE_SCOPES = ["https://www.googleapis.com/auth/gmail.compose"]
+
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",

@@ -163,9 +163,11 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
 
     A task runs when its ``עובד`` field names one of the bots (:mod:`src.lib.workers`):
     at creation, or on the update that sets the field later. An empty field is a
-    task for a person. Each task runs this way once (a guard, since the bot's own
-    status changes and Dror's edits are updates too); running again is explicit,
-    by a comment or the button. A list without the field at all runs every new
+    task for a person. Each hand-over runs once: a guard per (task, employee), since
+    the bot's own status changes and Dror's edits are updates too. Switching the
+    field to another employee is a new hand-over (and frees the previous one, so
+    switching back hands it back); running again otherwise is explicit, by a
+    comment or the button. A list without the field at all runs every new
     task, as before it existed. A comment is
     handed to the background job, which decides: a reply in one of Claude's
     threads is feedback, a top-level "קלוד, ..." too, anything else is ignored.
@@ -187,14 +189,17 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         worker = workers.worker_of(task)
         if worker is None:
             return {"ignored": "no employee on this task (a task for a person)"}
-        once = idempotency.guard("clickup_to_claude", task_id)
+        once = idempotency.guard("clickup_to_claude", task_id, worker.name)
         if not idempotency.claim(once):
-            return {"ignored": "this task was already handed to its employee"}
+            return {"ignored": f"this task is already with {worker.name}"}
         try:
             out = tasks.dispatch("clickup_to_claude", task_id=task_id, dry_run=dry_run)
         except Exception:
             idempotency.release(once)  # let ClickUp's retry hand it over
             raise
+        for other in workers.WORKERS:
+            if other != worker.name:
+                idempotency.release(idempotency.guard("clickup_to_claude", task_id, other))
         return {**out, "worker": worker.name}
 
     if event == "taskCommentPosted":

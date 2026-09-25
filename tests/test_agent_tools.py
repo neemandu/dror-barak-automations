@@ -37,7 +37,12 @@ def test_a_draft_goes_out_in_the_house_style(monkeypatch):
     assert not is_error and "Not sent" in text
     msg = email.message_from_bytes(base64.urlsafe_b64decode(sent["message"]["raw"]))
     assert "—" not in str(email.header.make_header(email.header.decode_header(msg["Subject"])))
-    assert "—" not in msg.get_payload(decode=True).decode()
+    plain = next(p for p in msg.walk() if p.get_content_type() == "text/plain")
+    html = next(p for p in msg.walk() if p.get_content_type() == "text/html")
+    assert "—" not in plain.get_payload(decode=True).decode()
+    # the client gets Dror's branded card and signature, with its band image inline
+    assert "cid:" in html.get_payload(decode=True).decode()
+    assert any(p.get_content_type() == "image/png" for p in msg.walk())
     assert logged and logged[0][0] == "gmail_draft_created"
 
 
