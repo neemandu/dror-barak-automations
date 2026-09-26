@@ -184,7 +184,8 @@ window.CT = {
       ? 'יישלח מייל ל-' + d.email + ' עם קישור אישי לחתימה על החוזה (' + d.price + ').'
       : 'ייווצר קישור אישי לחתימה על החוזה (' + d.price + '), ואותו שולחים ידנית, למשל בוואטסאפ.';
     var text = (signed ? 'הלקוח כבר חתם על חוזה. זה יפתח חוזה חדש לחתימה, והחוזה החתום הקודם נשאר ב-Drive. ' : '') + what +
-      ' הסטטוס ב-ClickUp יעבור ל״נשלחה הצעת מחיר״, ואם הלקוח לא יחתום יישלחו תזכורות במייל.';
+      ' הסטטוס ב-ClickUp יעבור ל״נשלחה הצעת מחיר״, ואם הלקוח לא יחתום תישלח תזכורת אחת במייל אחרי 3 ימים' +
+      ' (את הנוסח והתאריך אפשר לשנות במשימה ״תזכורת חתימה״ ב-ClickUp).';
     UI.confirm({title: (mode === 'email' ? 'לשלוח את החוזה ל' : 'ליצור קישור לחתימה עבור ') + d.name + '?', text: text,
                 ok: mode === 'email' ? 'שליחה' : 'יצירת קישור', icon: 'send', danger: signed}).then(function (yes) {
       if (!yes) return; UI.busy(btn, true);
@@ -662,7 +663,7 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
         label = "תצוגה מקדימה: כך הלקוח יראה את החוזה"
         status = ""
         if s["state"] == "waiting":
-            rem = f', {s["reminders"]} תזכורות' if s["reminders"] else ""
+            rem = (f', {s["reminders"]} תזכורות' if s["reminders"] > 1 else ", נשלחה תזכורת" if s["reminders"] else "")
             status = (f'<div class="alert alert-warn" style="margin:0 18px 12px">{ui.icon("hourglass")}<span>נשלח {_esc(signing.local_time(s["sent_at"]))}'
                       f'{rem}. ממתין לחתימה.</span></div>')
         already = s["state"] in SIGNED_STATES
@@ -697,7 +698,8 @@ def client_card_section(client: dict[str, Any], entries: list[dict[str, Any]], b
     s = state_for(client, entries, _records().get(cid))
     lines = []
     if s["sent_at"]:
-        lines.append(f'נשלח {ui.when(s["sent_at"], "-")}' + (f' · {s["reminders"]} תזכורות' if s["reminders"] else ""))
+        rem = f'{s["reminders"]} תזכורות' if s["reminders"] > 1 else "נשלחה תזכורת" if s["reminders"] else ""
+        lines.append(f'נשלח {ui.when(s["sent_at"], "-")}' + (f" · {rem}" if rem else ""))
     if s["signed_at"]:
         lines.append(f'נחתם {ui.when(s["signed_at"], "-")}')
     pdf = (f'<a class="btn btn-sm" href="{_esc(s["link"])}" target="_blank" rel="noopener">{ui.icon("file", 14)}<span>PDF</span></a>'
