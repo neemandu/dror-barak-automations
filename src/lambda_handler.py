@@ -331,7 +331,18 @@ def handle_action(
 
     try:
         result = action.run(task_id, dry_run)
+    except actions.Refused as exc:
+        # Declined for a reason a retry will not change (no email, no price): say
+        # so once and answer 200, or ClickUp calls again four times and each call
+        # fails and comments the same way. Pressing again after the fix is a new press.
+        idempotency.complete(key)
+        if not exc.commented:
+            _comment(task_id, f"⚠️ {action.label}: {exc}", dry_run)
+        log.warning("action_refused", extra={"action": action.key, "task_id": task_id, "reason": str(exc)})
+        return {"ok": False, "action": action.key, "refused": str(exc)}
     except Exception as exc:  # noqa: BLE001
+        # Anything else may be a blip (Drive, SMTP, ClickUp): give the claim back and
+        # answer an error, so ClickUp's retry can do the work.
         idempotency.release(key)
         # Dror pressed a button and is waiting. Silence would leave him wondering
         # whether the quote went out; say so where he pressed it.
@@ -532,7 +543,7 @@ def _questionnaire_route(
     except Exception as exc:  # noqa: BLE001
         log.error("questionnaire_failed", extra={"error": str(exc)})
         return _html(500, questionnaire_page.error_page(
-            "אירעה שגיאה בשמירת השאלון. נסה/י שוב, או פנה/י לדרור."))
+            "אירעה שגיאה בשמירת השאלון. אפשר לנסות שוב בעוד רגע, או לפנות לדרור."))
 
 
 def _html(status: int, body: str) -> dict[str, Any]:

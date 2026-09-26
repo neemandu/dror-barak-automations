@@ -51,12 +51,11 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
     # broken document, and the price is Dror's to know, not theirs to fill in.
     fields = contract.fields_from_client(client)
     if contract.prices(client)["total"] <= 0:
+        from ..lib.actions import Refused
+
         auto.log_action("no_price", "error", client_id=client_id,
                         detail="אין מחיר במשימה ב-ClickUp")
-        raise ValueError(
-            f"client {client_id} has no monthly price on the ClickUp task; "
-            f"set מחיר חודשי before sending a quote"
-        )
+        raise Refused("אין מחיר במשימה. ממלאים את המחיר החודשי ולוחצים שוב.")
 
     url = signing.sign_url(client_id)
 

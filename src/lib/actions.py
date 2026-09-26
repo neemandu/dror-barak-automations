@@ -29,6 +29,21 @@ from __future__ import annotations
 from typing import Any, Callable, NamedTuple, Optional
 
 
+class Refused(ValueError):
+    """The action declined for a reason a retry will not fix: no email, no price.
+
+    Raised instead of a plain error so the button's webhook answers 200 with the
+    reason. An error answer makes ClickUp retry the call four more times (after 5,
+    10, 20 and 40 minutes), and each retry would fail the same way and comment on
+    the task again. ``commented`` says the action already explained itself on the
+    task, so the button handler does not say it twice.
+    """
+
+    def __init__(self, message: str, *, commented: bool = False):
+        super().__init__(message)
+        self.commented = commented
+
+
 class Action(NamedTuple):
     key: str  # the ?action= value
     label: str  # Hebrew — the button text Dror sees

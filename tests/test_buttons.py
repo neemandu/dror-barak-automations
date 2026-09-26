@@ -179,6 +179,34 @@ def test_a_failed_press_can_be_retried(monkeypatch):
     assert len(attempts) == 2
 
 
+def test_a_refusal_is_answered_once_not_retried(monkeypatch):
+    """No email, no price: a retry changes nothing. An error answer made ClickUp call
+    four more times (5, 10, 20, 40 minutes later), each failing and commenting again."""
+    attempts, comments = [], []
+
+    def refuse(cid, dry):
+        attempts.append(cid)
+        raise actions.Refused("אין כתובת מייל ללקוח")
+
+    monkeypatch.setitem(actions._RUNNERS, "send_questionnaire", refuse)
+    monkeypatch.setattr(lambda_handler, "_comment", lambda tid, msg, dry: comments.append(msg))
+    b = body()
+    first = lambda_handler.handle_action("send_questionnaire", b, TOKEN)
+    assert first["ok"] is False and "מייל" in first["refused"], "answered, not raised: a 200"
+    again = lambda_handler.handle_action("send_questionnaire", b, TOKEN)  # ClickUp's retry of the same press
+    assert again.get("duplicate") and len(attempts) == 1
+    assert comments == ["⚠️ שלח שאלון: אין כתובת מייל ללקוח"]
+
+
+def test_a_refusal_that_already_explained_itself_is_not_repeated(monkeypatch):
+    comments = []
+    monkeypatch.setitem(actions._RUNNERS, "send_questionnaire",
+                        lambda cid, dry: (_ for _ in ()).throw(actions.Refused("x", commented=True)))
+    monkeypatch.setattr(lambda_handler, "_comment", lambda tid, msg, dry: comments.append(msg))
+    lambda_handler.handle_action("send_questionnaire", body(), TOKEN)
+    assert comments == []
+
+
 # --------------------------------------------------------------- feedback
 
 

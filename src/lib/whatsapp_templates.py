@@ -16,19 +16,19 @@ TEMPLATES: dict[str, str] = {
     # Sent after the initial meeting, asking the lead to fill the questionnaire.
     "questionnaire": (
         "היי {first_name}, תודה על הפגישה! 🙏\n"
-        "כדי שנתכונן בצורה הטובה ביותר, נשמח שתמלא/י שאלון קצר:\n"
+        "כדי שנתכונן בצורה הטובה ביותר, נשמח שתמלאו שאלון קצר:\n"
         "{questionnaire_url}"
     ),
     # Sent when a new client's WhatsApp channel is opened during onboarding.
     "onboarding_welcome": (
-        "ברוך/ה הבא/ה {first_name}! 🎉\n"
+        "ברוכים הבאים, {first_name}! 🎉\n"
         "שמחים להתחיל לעבוד יחד. פתחנו ערוץ הזה לכל התיאומים והעדכונים."
     ),
     # Internal ping to Dror to choose which templates to copy for a new client.
     "onboarding_dror_prompt": (
         "לקוח חדש נחתם: {client_name}.\n"
         "נפתחה תיקייה בדרייב: {drive_url}\n"
-        "אילו טמפלטים להעתיק לתיקייה? השב/י כאן."
+        "אילו טמפלטים להעתיק לתיקייה? אפשר להשיב כאן."
     ),
 }
 

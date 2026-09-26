@@ -112,8 +112,11 @@ def test_send_questionnaire_fails_loudly_without_an_email(read_log, monkeypatch)
 
     monkeypatch.setattr(CrmClient, "get_client",
                         lambda self, cid: {"id": cid, "name": "מכללה", "email": ""})
-    with pytest.raises(RuntimeError, match="אין כתובת מייל"):
+    from src.lib.actions import Refused
+
+    with pytest.raises(Refused, match="אין כתובת מייל") as exc:
         send_questionnaire.run("42", dry_run=True)
+    assert exc.value.commented, "it already said why on the task"
     assert "no_email" in _actions(read_log)
 
 
@@ -136,7 +139,9 @@ def test_send_quote_refuses_without_a_price(read_log, monkeypatch):
 
     monkeypatch.setattr(CrmClient, "get_client",
                         lambda self, cid: {"id": cid, "name": "מכללה", "monthly_price": None})
-    with pytest.raises(ValueError, match="no monthly price"):
+    from src.lib.actions import Refused
+
+    with pytest.raises(Refused, match="אין מחיר"):
         send_quote.send("42", dry_run=True)
     assert "no_price" in _actions(read_log)
 

@@ -76,8 +76,8 @@ def run(*, dry_run: bool = False, now: float | None = None) -> dict[str, Any]:
                 and _age_days(pending, now) >= GIVE_UP_AFTER_DAYS):
             auto.log_action(
                 "questionnaire_unanswered", "error", client_id=client_id,
-                detail=f"{client.get('name') or client_id} לא מילא/ה את השאלון "
-                       f"אחרי {MAX_REMINDERS} תזכורות - כדאי להרים טלפון",
+                detail=f"{client.get('name') or client_id}: השאלון עוד לא מולא "
+                       f"אחרי {MAX_REMINDERS} תזכורות. כדאי להרים טלפון",
             )
             if not dry_run:
                 signing.clear_questionnaire_pending(client_id)

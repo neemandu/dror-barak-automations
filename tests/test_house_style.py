@@ -43,6 +43,15 @@ def test_no_long_dash_in_any_string_the_code_can_emit():
     assert not found, f"long dash in: {found}"
 
 
+def test_no_gendered_slash_in_any_string_the_code_can_emit():
+    """"מלא/י", "נסה/י": our copy speaks neutrally ("ממלאים", "אפשר לנסות") instead."""
+    slash = re.compile(r"[\u05d0-\u05ea]/[\u05d9\u05d4](?![\u05d0-\u05ea])")
+    found = [f"{p.relative_to(ROOT)}:{line}"
+             for p in sorted((ROOT / "src").rglob("*.py"))
+             for line, s in _runtime_strings(p) if slash.search(s)]
+    assert not found, f"gendered slash in: {found}"
+
+
 @pytest.mark.parametrize("name", ["contract_he.html", "campaign_report_he.html"])
 def test_no_long_dash_in_a_template_page(name):
     html = (ROOT / "templates" / name).read_text(encoding="utf-8")

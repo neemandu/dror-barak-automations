@@ -43,7 +43,7 @@ def send_link(auto: Automation, crm: CrmClient, client: dict[str, Any],
         auto.log_action("no_email", "error", client_id=client_id,
                         detail="client has no אימייל for the questionnaire")
         crm.append_automation_log(
-            client_id, f"⚠️ {reason}. מלא/י את שדה המייל ולחץ/י על 'שלח שאלון'.")
+            client_id, f"⚠️ {reason}. ממלאים את שדה המייל ולוחצים שוב על 'שלח שאלון'.")
         return reason
     try:
         url = signing.questionnaire_url(client_id)
@@ -76,9 +76,14 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     auto = Automation(NAME, dry_run=dry_run)
     crm = CrmClient(dry_run=dry_run)
     client = crm.get_client(client_id)
+    if not str(client.get("email") or "").strip():
+        send_link(auto, crm, {**client, "id": client_id}, dry_run=dry_run)  # logs and comments why
+        from ..lib.actions import Refused
+
+        raise Refused("אין כתובת מייל ללקוח", commented=True)
     problem = send_link(auto, crm, {**client, "id": client_id}, dry_run=dry_run)
     if problem:
-        raise RuntimeError(problem)
+        raise RuntimeError(problem)  # the mail itself failed: worth ClickUp's retry
     return {"sent": True, "to": client.get("email")}
 
 

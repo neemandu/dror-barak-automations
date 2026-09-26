@@ -103,6 +103,12 @@ Docs API is not enabled in the Google project.
 button, or the send on the dashboard's contract page. Sending a client a contract is
 Dror's decision, not something a status change should trigger.
 
+**A button's refusal is not an error.** When an action declines for a reason a retry
+will not fix (no email, no price), raise `actions.Refused`: the webhook answers 200 with
+the reason and comments once. Any other exception answers an error, and ClickUp retries
+the call four times (after 5, 10, 20 and 40 minutes), which is right for a blip and wrong
+for a refusal: each retry fails and comments again.
+
 **Both statuses matter, and they answer different questions.** The *secondary*
 status drives the funnel; the **primary** status is what `list_active_clients`
 filters on, and that is the list the monthly campaign report iterates. Onboarding
