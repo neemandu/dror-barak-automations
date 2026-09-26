@@ -41,9 +41,8 @@ Configuration on the stack, not code (details and owners in `TASKS.md` → "Now"
 - **The monthly report** — builds on AWS since 17.9 (Meta token set, Chromium layer
   driven over DevTools); emailed to Dror for approval.
 - **The Smoove endpoint is open** — `SmooveWebhookToken` is empty.
-- **Go-live on Dror's ClickUp** — the workspace wired to the stack is a test
-  workspace. It is where end-to-end tests run; Dror's own list comes next
-  (`docs/CLICKUP_SETUP.md`).
+- ClickUp: the workspace wired to the stack is Dror's production workspace
+  (corrected 26.9; an earlier note called it a test workspace).
 
 ## Out of scope (as agreed)
 

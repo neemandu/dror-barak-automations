@@ -213,12 +213,9 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
 ## Open Questions
 
-1. **Going live on Dror's own ClickUp.** The workspace wired to the stack today is a
-   **test workspace** (one test client) — which is why it is safe to run real
-   end-to-end tests there, and why its task count says nothing about adoption.
-   Go-live means building the list in Dror's workspace (`docs/CLICKUP_SETUP.md`),
-   pushing `ClickUpListId` / `ClickUpTeamId` / the token, and re-registering the
-   webhook.
+1. ~~**Going live on Dror's own ClickUp.**~~ Settled (26.9): the workspace wired to
+   the stack **is** Dror's production workspace, not a test one. End-to-end tests there
+   touch real data: use a test task and Dror's own contacts, and clean up after.
 2. **WhatsApp templates.** Who writes the Hebrew and submits them to Meta for
    approval? The client-facing flows (welcome after onboarding, quote, reminders)
    cannot exist until they do; today those go by email.
