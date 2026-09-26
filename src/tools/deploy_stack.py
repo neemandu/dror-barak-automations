@@ -290,6 +290,12 @@ def main() -> None:
     args = parser.parse_args()
     ok = run(args.stack, args.env_file, build_dir=args.build_dir, plan_only=args.plan, yes=args.yes,
              over_newer=args.over_newer, allow_removals=args.allow_removals)
+    if ok and not args.plan:
+        # Dror's guide in ClickUp follows what is now running (src/tools/sync_guide.py).
+        from . import sync_guide
+
+        config.load_dotenv()
+        sync_guide.sync_if_configured()
     sys.exit(0 if ok else 1)
 
 

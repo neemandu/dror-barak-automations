@@ -191,7 +191,11 @@ calling it done. Activity is shown with `subjects.label_for` (Hebrew), never the
 action name; `tests\test_house_style.py` fails on a logged action without a label.
 
 **Document every automation for Dror.** [`docs\OPERATIONS.md`](docs\OPERATIONS.md)
-is the Hebrew operator's guide — what each automation does, how Dror uses it, and
+is the Hebrew operator's guide. Dror reads it as the `📘 מדריך המערכת` Doc in ClickUp,
+published from this file after every successful `deploy_stack` (`src\tools\sync_guide.py`,
+`CLICKUP_GUIDE_DOC_ID`); edits made in ClickUp are overwritten, so the file is the only
+place to change it. Client-facing guides live in `templates\client_docs\` and are published
+as branded templates with `src\tools\publish_client_template.py`. The guide itself — what each automation does, how Dror uses it, and
 the hands-on procedures (e.g. the Meta partner + system-user setup for a new
 client). When you **add or change an automation**, update `OPERATIONS.md` in the
 same change: add its row to the automations table, and if it introduces an operator
