@@ -84,7 +84,23 @@ def pdf_of(doc_id: str) -> bytes:
 
 
 def text_of(doc_id: str) -> str:
-    return _export(doc_id, "text/plain").decode("utf-8-sig", errors="replace")
+    """The answer a version's Doc holds, without the title block :func:`save` put
+    on top. A revision reads earlier versions back from here; with the title and
+    "הוכן עבור" line left in, the model copied them into the next version."""
+    return without_title(_export(doc_id, "text/plain").decode("utf-8-sig", errors="replace"))
+
+
+_DATE_LINE = re.compile(r"^\d{1,2} ב\S+ \d{4}$")
+
+
+def without_title(text: str) -> str:
+    lines = text.strip().splitlines()
+    if len(lines) >= 2 and lines[0].strip():
+        rest = [ln for ln in lines[1:] if ln.strip()]
+        if rest and (rest[0].strip().startswith("הוכן עבור") or _DATE_LINE.match(rest[0].strip())):
+            cut = lines.index(rest[0], 1) + 1
+            return "\n".join(lines[cut:]).strip()
+    return text.strip()
 
 
 def as_plain_text(markdown: str) -> str:

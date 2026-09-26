@@ -255,3 +255,17 @@ def test_the_client_is_never_the_agent(monkeypatch):
     assert bot.linked_client_id({"custom_fields": [agent, client]}) is None
     client["value"] = [{"id": "C9"}]
     assert bot.linked_client_id({"custom_fields": [agent, client]}) == "C9"
+
+
+
+def test_a_revision_reads_an_earlier_version_without_its_title_block():
+    # With the title and "prepared for" line left in, the model copied them into
+    # the next version (seen live 26.9), giving its Doc a double title.
+    doc = ("בדיקה: מבנה וובינר - גרסה 1\n"
+           "הוכן עבור אור גרשון   ·   26 בספטמבר 2026\n\n"
+           "פתיחה\nתוכן")
+    assert task_docs.without_title(doc) == "פתיחה\nתוכן"
+    no_client = "רעיונות - גרסה 1\n26 בספטמבר 2026\n\nרעיון אחד"
+    assert task_docs.without_title(no_client) == "רעיון אחד"
+    plain = "טקסט בלי כותרת"
+    assert task_docs.without_title(plain) == plain
