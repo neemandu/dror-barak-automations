@@ -34,6 +34,10 @@ def isolated_run_log(tmp_path, monkeypatch):
     _blank(monkeypatch, "RUN_LOG_TABLE", "IDEMPOTENCY_TABLE", "QUESTIONNAIRE_TABLE")
     # Questionnaires and answers go to a file per test, never the real table.
     monkeypatch.setenv("QUESTIONNAIRE_PATH", str(tmp_path / "questionnaires.json"))
+    # Idempotency claims too: they carry TTLs (a template copy claims for 10
+    # minutes), so a shared logs/idempotency.json made a test pass or fail
+    # depending on whether the suite had run in the last few minutes.
+    monkeypatch.setenv("IDEMPOTENCY_PATH", str(tmp_path / "idempotency.json"))
     # Background tasks run inline off Lambda; a stray function name would make
     # them try to invoke AWS.
     _blank(monkeypatch, "AWS_LAMBDA_FUNCTION_NAME")
