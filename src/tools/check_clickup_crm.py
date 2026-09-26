@@ -109,6 +109,9 @@ MISSING_MEANS = {
     "service_type": "shown on the client card and given to the strategy and the campaign report",
 }
 
+#: Actions whose button lives on another list, not on the clients list checked here.
+ELSEWHERE = {"clickup_to_claude": "optional 'הרץ שוב' button on the משימות list, not here"}
+
 #: Other names a button may carry for the same action (the text on it is Dror's).
 BUTTON_ALIASES = {"send_quote": ["שלח חוזה", "שליחת חוזה", "הצעת מחיר"],
                   "social_prep": ["דוח רשתות"], "strategy_bot": ["אסטרטגיה"],
@@ -127,6 +130,9 @@ def buttons_report(fields: list[dict[str, Any]]) -> set[str]:
     found: set[str] = set()
     print("\nbuttons (Button fields; each runs an Automation that calls ?action=<key>):")
     for key, action in ACTIONS.items():
+        if key in ELSEWHERE:
+            print(f"       ({key}: {ELSEWHERE[key]})")
+            continue
         names = [crm_fields.normalize(n) for n in [action.label, *BUTTON_ALIASES.get(key, [])]]
         match = next((b for b in buttons if any(n in crm_fields.normalize(str(b.get("name"))) for n in names)), None)
         if match:
