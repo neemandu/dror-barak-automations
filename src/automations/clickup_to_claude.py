@@ -137,10 +137,18 @@ def linked_client_id(task: dict[str, Any]) -> Optional[str]:
     """The client in the task's ``לקוח`` relationship field, if one is linked.
 
     ClickUp gives the value as a list of linked tasks: ``[{"id", "name", ...}]``.
+    The task has two such fields (``עובד`` links to the סוכנים list), so the
+    client is the one pointing at the clients list (``CLICKUP_LIST_ID``), or,
+    failing that, the one named ``לקוח``; never simply the first.
     """
-    for field in task.get("custom_fields") or []:
-        if field.get("type") != "list_relationship":
-            continue
+    from ..lib import config, crm_fields
+
+    clients_list = str(config.get("CLICKUP_LIST_ID") or "")
+    candidates = [f for f in task.get("custom_fields") or [] if f.get("type") == "list_relationship"]
+    by_list = [f for f in candidates
+               if clients_list and str((f.get("type_config") or {}).get("subcategory_id")) == clients_list]
+    by_name = [f for f in candidates if crm_fields.field_key(str(f.get("name") or "")) == "לקוח"]
+    for field in by_list or by_name:
         value = field.get("value") or []
         if isinstance(value, list) and value and isinstance(value[0], dict) and value[0].get("id"):
             return str(value[0]["id"])

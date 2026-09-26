@@ -140,7 +140,8 @@ def test_a_linked_client_is_in_the_prompt(monkeypatch):
     from src.lib.clients.anthropic_ai import AnthropicClient
 
     _Board(monkeypatch, task={"id": "t1", "name": "3 מודעות", "description": "",
-                              "custom_fields": [{"type": "list_relationship", "value": [{"id": "42"}]}]})
+                              "custom_fields": [{"name": "לקוח", "type": "list_relationship",
+                                                 "value": [{"id": "42"}]}]})
     prompts = []
     real = AnthropicClient.create_message
     monkeypatch.setattr(AnthropicClient, "create_message",
@@ -241,3 +242,16 @@ def test_the_doc_is_the_branded_docx(monkeypatch):
 def test_a_doc_link_is_found_in_a_comment():
     assert task_docs.doc_id_in(f"🤖 Claude: גרסה 1\n{DOC}\n\nטקסט") == "DOC1"
     assert task_docs.doc_id_in("אין קישור") is None
+
+
+def test_the_client_is_never_the_agent(monkeypatch):
+    # Two relationship fields: עובד (-> סוכנים) and לקוח (-> לקוחות). With the
+    # client empty, the agent must not be taken for the client.
+    monkeypatch.setenv("CLICKUP_LIST_ID", "CLIENTS")
+    agent = {"name": "🎤 עובד", "type": "list_relationship",
+             "type_config": {"subcategory_id": "AGENTS"}, "value": [{"id": "A1"}]}
+    client = {"name": "לקוח", "type": "list_relationship",
+              "type_config": {"subcategory_id": "CLIENTS"}, "value": []}
+    assert bot.linked_client_id({"custom_fields": [agent, client]}) is None
+    client["value"] = [{"id": "C9"}]
+    assert bot.linked_client_id({"custom_fields": [agent, client]}) == "C9"
