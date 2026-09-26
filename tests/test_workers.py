@@ -267,3 +267,15 @@ def test_the_bots_cards_and_confirmations_never_count_as_feedback():
     for text in (bot.card_text({"id": "x", "to": "a", "subject": "b"}), "✅ המייל נשלח אל a: b"):
         assert bot.instruction_in(text) is None
         assert text.startswith(bot.BOT_PREFIXES)
+
+
+def test_a_decorated_field_name_is_still_found():
+    # Dror names fields with emoji ("📋 תבניות"); the lookup must not go quiet.
+    from src.automations import client_templates
+
+    task = {"custom_fields": [{"name": "📋 תבניות", "type": "labels", "value": ["x1"],
+                               "type_config": {"options": [{"id": "x1", "label": "מעקב פאנלים"}]}},
+                              {"name": "👤 עובד", "type": "drop_down", "value": 1,
+                               "type_config": {"options": OPTIONS}}]}
+    assert client_templates.picked(task) == ["מעקב פאנלים"]
+    assert workers.worker_of(task).name == "אנליסט רשתות"

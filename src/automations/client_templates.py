@@ -64,9 +64,9 @@ def copy_name(template: str, client_name: str) -> str:
 
 def picked(task: dict[str, Any]) -> list[str]:
     """The template names picked in the task's ``תבניות`` Labels field."""
-    wanted = crm_fields.normalize(FIELD)
+    wanted = crm_fields.field_key(FIELD)
     for field in task.get("custom_fields") or []:
-        if crm_fields.normalize(str(field.get("name") or "")) != wanted:
+        if crm_fields.field_key(str(field.get("name") or "")) != wanted:
             continue
         options = (field.get("type_config") or {}).get("options") or []
         by_id = {str(o.get("id")): str(o.get("label") or o.get("name") or "") for o in options}

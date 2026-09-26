@@ -103,6 +103,15 @@ def normalize(text: str) -> str:
     return " ".join((text or "").strip().casefold().split())
 
 
+def field_key(text: str) -> str:
+    """A field's name as the code looks it up: letters and digits only.
+
+    Dror decorates field names ("📋 תבניות"); a lookup by the plain name must
+    still find them, or the automation behind the field goes quiet.
+    """
+    return " ".join("".join(ch if ch.isalnum() or ch.isspace() else " " for ch in normalize(text)).split())
+
+
 def _match(raw: str, table: dict[str, list[str]]) -> Optional[str]:
     norm = normalize(raw)
     if not norm:

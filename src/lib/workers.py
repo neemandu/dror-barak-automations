@@ -78,9 +78,9 @@ DEFAULT = WRITER
 
 
 def _field(task: dict[str, Any]) -> Optional[dict[str, Any]]:
-    wanted = crm_fields.normalize(FIELD)
+    wanted = crm_fields.field_key(FIELD)
     for field in task.get("custom_fields") or []:
-        if crm_fields.normalize(str(field.get("name") or "")) == wanted:
+        if crm_fields.field_key(str(field.get("name") or "")) == wanted:
             return field
     return None
 
