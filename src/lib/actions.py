@@ -64,13 +64,13 @@ ACTIONS: dict[str, Action] = {
     "strategy_bot": Action(
         key="strategy_bot",
         label="בנה אסטרטגיה",
-        confirm="⏳ האסטרטגיה בבנייה - הקישור יופיע כאן כשתסתיים (כמה דקות)",
+        confirm="⏳ האסטרטגיה בבנייה (כמה דקות). היא תגיע כמשימה במשימות, בסטטוס לבדיקה של דרור, והקישור יופיע גם כאן",
         once_only=False,
     ),
     "campaign_summary": Action(
         key="campaign_summary",
         label="בנה דוח קמפיין",
-        confirm="⏳ דוח הקמפיין בהכנה - הקישור יופיע כאן כשיסתיים",
+        confirm="⏳ דוח הקמפיין בהכנה. הוא יגיע כמשימה במשימות, בסטטוס לבדיקה של דרור, עם טיוטת מייל ללקוח שנשלחת רק כשעונים שלח",
         once_only=False,
     ),
     # On the משימות list, not the clients list: runs the task again as it stands

@@ -104,6 +104,8 @@ ACTION_LABELS: dict[str, str] = {
     "task_failed": "משימה ברקע נכשלה",
     # campaigns
     "campaign_summary_ready": "דוח הקמפיינים מוכן לאישור",
+    "campaign_summary_revised": "דוח הקמפיינים תוקן לפי ההערות",
+    "review_task_failed": "לא נפתחה משימה לבדיקה, נשלח מייל במקום",
     "campaign_report_built": "דוח הקמפיינים נבנה",
     "campaign_reports_done": "סבב דוחות הקמפיינים הסתיים",
     "no_ad_account": "אין ללקוח חשבון מודעות",

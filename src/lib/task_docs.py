@@ -42,8 +42,9 @@ def _child_folder(google: Any, parent_id: str, name: str) -> str:
     return str(google.create_folder(name, parent_id)["id"])
 
 
-def folder_for(client: Optional[dict[str, Any]], crm: Any) -> str:
-    """Where this task's Docs go (see the module docstring)."""
+def folder_for(client: Optional[dict[str, Any]], crm: Any, subfolder: str = "") -> str:
+    """Where this task's Docs go (see the module docstring); ``subfolder`` names
+    another subfolder of the client's folder (the strategy's ``אסטרטגיה``)."""
     from .clients.google import GoogleClient
 
     google = GoogleClient()
@@ -51,13 +52,13 @@ def folder_for(client: Optional[dict[str, Any]], crm: Any) -> str:
         from . import client_folder
 
         folder = client_folder.ensure(crm, client)  # the client's existing folder
-        return _child_folder(google, folder["id"], CLIENT_SUBFOLDER)
+        return _child_folder(google, folder["id"], subfolder or CLIENT_SUBFOLDER)
     parent = str(config.get("DRIVE_DEFAULT_PARENT_ID") or "root")
     return _child_folder(google, parent, NO_CLIENT_FOLDER)
 
 
 def save(name: str, markdown: str, *, client: Optional[dict[str, Any]], crm: Any,
-         dry_run: bool = False) -> dict[str, str]:
+         subfolder: str = "", dry_run: bool = False) -> dict[str, str]:
     """Write ``markdown`` as a branded Google Doc; returns ``{"id", "url"}``."""
     client_name = str((client or {}).get("name") or "")
     subtitle = deliverables.prepared_for(client_name) if client_name else branded_doc.hebrew_date()
@@ -66,7 +67,7 @@ def save(name: str, markdown: str, *, client: Optional[dict[str, Any]], crm: Any
         return {"id": "task-doc-mock", "url": "https://docs.google.com/document/d/task-doc-mock/edit"}
     from . import pdf
 
-    doc = pdf.file_to_google_doc(data, branded_doc.DOCX_TYPE, name, folder_for(client, crm))
+    doc = pdf.file_to_google_doc(data, branded_doc.DOCX_TYPE, name, folder_for(client, crm, subfolder))
     return {"id": str(doc["id"]),
             "url": str(doc.get("webViewLink") or f"https://docs.google.com/document/d/{doc['id']}/edit")}
 

@@ -280,15 +280,9 @@ class Toolbox:
     def _gmail_create_draft(self, to: str, subject: str, body: str,
                             cc: Optional[str] = None,
                             thread_id: Optional[str] = None) -> str:
-        # Sent in Dror's name: his house style, his branded layout and signature.
-        subject, body = text_style.humanize(subject), text_style.humanize(body)
-        raw = base64.urlsafe_b64encode(_branded_mime(to, subject, body, cc).as_bytes()).decode("ascii")
-        message: dict[str, Any] = {"raw": raw}
-        if thread_id:
-            message["threadId"] = thread_id
-        draft = self._post(f"{_GMAIL}/drafts", gmail=True,
-                           json={"message": message}).json()
-        self.drafts.append({"id": str(draft.get("id")), "to": to, "subject": subject})
+        draft = create_draft(to, subject, body, cc=cc, thread_id=thread_id)
+        subject = draft["subject"]
+        self.drafts.append(draft)
         self.log("gmail_draft_created", f"{to}: {subject}", DRAFTS_URL)
         return (f"Draft created (id {draft.get('id')}) to {to}, subject '{subject}'. Not sent: "
                 f"Dror will be asked to approve it on the task before it goes out.")
@@ -303,6 +297,36 @@ def _auth(gmail: Optional[str]) -> dict[str, str]:
     scopes = {"read": google_auth.GMAIL_READ_SCOPES,
               "compose": google_auth.GMAIL_COMPOSE_SCOPES}.get(gmail or "")
     return {"Authorization": f"Bearer {google_auth.access_token(scopes=scopes)}"}
+
+
+def create_draft(to: str, subject: str, body: str, *, cc: Optional[str] = None,
+                 thread_id: Optional[str] = None,
+                 attachments: Optional[list[tuple[str, bytes]]] = None,
+                 dry_run: bool = False) -> dict[str, str]:
+    """A Gmail draft in Dror's name (his house style, branded layout and signature),
+    never sent here; returns ``{"id", "to", "subject"}`` for an approval card.
+    ``attachments``: ``[(filename, pdf bytes)]``."""
+    subject, body = text_style.humanize(subject), text_style.humanize(body)
+    mime = _branded_mime(to, subject, body, cc)
+    for filename, data in attachments or []:
+        mime.add_attachment(data, maintype="application", subtype="pdf", filename=filename)
+    if dry_run:
+        return {"id": "draft-mock", "to": to, "subject": subject}
+    message: dict[str, Any] = {"raw": base64.urlsafe_b64encode(mime.as_bytes()).decode("ascii")}
+    if thread_id:
+        message["threadId"] = thread_id
+    draft = Toolbox._post(f"{_GMAIL}/drafts", gmail=True, json={"message": message}).json()
+    return {"id": str(draft.get("id")), "to": to, "subject": subject}
+
+
+def delete_draft(draft_id: str) -> None:
+    """Remove a draft a newer one replaced. Best-effort: gone already is fine."""
+    from .http import request
+
+    try:
+        request("DELETE", f"{_GMAIL}/drafts/{draft_id}", headers=_auth("compose"))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _branded_mime(to: str, subject: str, body: str, cc: Optional[str] = None) -> EmailMessage:

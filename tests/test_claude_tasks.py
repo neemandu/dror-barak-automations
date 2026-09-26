@@ -232,7 +232,7 @@ def test_the_doc_is_the_branded_docx(monkeypatch):
     from src.lib import branded_doc, pdf
 
     got = {}
-    monkeypatch.setattr(task_docs, "folder_for", lambda client, crm: "F")
+    monkeypatch.setattr(task_docs, "folder_for", lambda client, crm, subfolder="": "F")
     monkeypatch.setattr(pdf, "file_to_google_doc",
                         lambda data, ct, name, parent: got.update(data=data, ct=ct, parent=parent) or {"id": "D"})
     out = task_docs.save("מודעות - גרסה 1", "# כותרת\n- אחת", client={"name": "X"}, crm=None)

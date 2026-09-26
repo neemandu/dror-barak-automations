@@ -53,7 +53,7 @@ import string
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
-from ..lib import questionnaire, questionnaire_store, task_docs, text_style, workers
+from ..lib import questionnaire, questionnaire_store, review_tasks, task_docs, text_style, workers
 from ..lib import agent_tools
 from ..lib.agent_tools import Toolbox
 from ..lib.clients.anthropic_ai import WEB_TOOLS, AnthropicClient
@@ -418,9 +418,17 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
     client: Optional[dict[str, Any]] = None
     try:
         task = clickup.get_task(task_id)
+        # The system's own review tasks (review_tasks): a report is rebuilt by its
+        # automation (a PDF, not a Doc); a strategy is revised by the strategist.
+        kind = review_tasks.kind_of(task)
+        if kind is review_tasks.REPORT:
+            from . import campaign_summary
+
+            return campaign_summary.revise(task, thread, feedback, all_threads, dry_run=dry_run)
         # A button press or a "קלוד" on a task with no employee still asks for work:
         # the copywriter takes it.
-        worker = workers.worker_of(task, clickup) or workers.DEFAULT
+        worker = workers.worker_of(task, clickup) if workers.has_field(task) else None
+        worker = worker or (kind.worker if kind else None) or workers.DEFAULT
         if not worker.active:
             post(f"⏸️ הסוכן {worker.name} כבוי כרגע (המשימה שלו ברשימת סוכנים סגורה).")
             return {"ignored": f"{worker.name} is switched off"}
@@ -444,7 +452,8 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
 
         version = versions(all_threads) + 1
         name = f"{task.get('name', '') or task_id} - גרסה {version}"
-        doc = task_docs.save(name, draft, client=client, crm=crm, dry_run=dry_run)
+        doc = task_docs.save(name, draft, client=client, crm=crm,
+                              subfolder=kind.subfolder if kind else "", dry_run=dry_run)
         root = post(_comment_body(version, doc["url"], draft, worker.name))
         for made in tools.drafts:
             card = card_text(made)

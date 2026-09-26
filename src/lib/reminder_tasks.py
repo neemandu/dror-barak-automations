@@ -42,13 +42,6 @@ def default_body(client: dict[str, Any]) -> str:
     return email_templates.TEMPLATES["sign_reminder"].body.format(client_name=name)
 
 
-def _relationship_field(clickup: Any, list_id: str) -> Optional[str]:
-    for field in clickup.get_list_fields(list_id):
-        if field.get("type") == "list_relationship":
-            return str(field["id"])
-    return None
-
-
 def open_task(client_id: str, client: dict[str, Any], *, now: Optional[float] = None,
               dry_run: bool = False) -> Optional[str]:
     """Open the follow-up task for a contract just sent; returns its id.
@@ -73,7 +66,10 @@ def open_task(client_id: str, client: dict[str, Any], *, now: Optional[float] = 
             clickup.update_task(str(previous), due_date=due_ms)
             return str(previous)
 
-    rel = _relationship_field(clickup, str(list_id))
+    from . import review_tasks
+
+    # The לקוח field, never simply the first Relationship field: that may be עובד.
+    rel = review_tasks.client_field(clickup, str(list_id))
     made = clickup.create_task(
         str(list_id), f"{PREFIX}{client.get('name') or client_id}",
         description=default_body(client),

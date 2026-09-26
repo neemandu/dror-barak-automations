@@ -92,6 +92,12 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 
 ## Done
 
+- [x] **The strategy and the monthly report as review tasks (26.9).** Both arrive on
+  משימות in `לבדיקה של דרור`, linked to the client (`src/lib/review_tasks.py`), with
+  versions and thread feedback like the agents; the report's email to the client is a
+  Gmail draft with the PDF behind a `שלח` card. Email to Dror remains the fallback.
+  Also hardened: the signing follow-up linked the client into the *first* Relationship
+  field; it is now chosen by its target list (on the real list `לקוח` happens to be first).
 - [x] **Questionnaire editor + branded form (23.9).** Questions are data in
   `QuestionnaireTable`, edited at `/admin/questionnaires` (sections, 9 question types,
   required, choices, the link role the AI reads), with preview, several questionnaires and

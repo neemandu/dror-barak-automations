@@ -43,6 +43,9 @@ def isolated_run_log(tmp_path, monkeypatch):
     _blank(monkeypatch, "AWS_LAMBDA_FUNCTION_NAME")
     # Keep tests hermetic: no recipient side-channels unless a test sets them.
     _blank(monkeypatch, "DROR_WHATSAPP", "DRIVE_DEFAULT_PARENT_ID", "DRIVE_TEMPLATE_IDS")
+    # The strategy and the report go to a task on משימות when that list is set;
+    # the tests that want it set it themselves.
+    _blank(monkeypatch, "CLICKUP_TASKS_LIST_ID")
 
     # Meta Ads creds: a real token in a developer's .env would make the campaign
     # client build live and reach Graph, so the "no credentials needed" dry-run

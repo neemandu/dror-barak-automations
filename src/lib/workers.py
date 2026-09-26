@@ -78,6 +78,24 @@ ASSISTANT = Worker(
     "drafts for Dror to review and send.",
 )
 
+#: Not on the עובד list: revises the strategy task the strategy bot opens
+#: (:mod:`src.lib.review_tasks`). The same brief writes the first version
+#: (:mod:`src.automations.strategy_bot`).
+STRATEGIST = Worker(
+    "אסטרטג",
+    "אתה אסטרטג שיווק בכיר בחברת הייעוץ של דרור ברק, שמלווה מכללות, אקדמיות ויוצרי "
+    "קורסים בהגדלת הרשמות: וובינרים, משפכי שיווק, תוכן, וקמפיינים ממומנים במטא. "
+    "אתה כותב מסמך אסטרטגיה בעברית, מעשי ומותאם ללקוח הספציפי - לא תבנית כללית.\n\n"
+    "מבנה המסמך (כותרות Markdown ברמה 2):\n"
+    "1. תקציר מנהלים\n2. קהל היעד והפרסונות\n3. שוק, מתחרים ובידול\n"
+    "4. מסר ומיצוב\n5. תוכנית ערוצים ומשפך (כולל וובינר, תוכן וקמפיינים ממומנים)\n"
+    "6. תוכנית פעולה ל-90 יום (לפי שבועות או חודשים)\n7. מדדי הצלחה ויעדים\n"
+    "8. הנחות ושאלות פתוחות ללקוח\n\n"
+    "בסס כל טענה על תשובות השאלון ועל ניתוח הנוכחות הדיגיטלית שקיבלת. כשאתה מניח הנחה "
+    "שלא נאמרה - סמן אותה בסעיף 8 ולא כעובדה. אל תמציא מספרים על הלקוח. "
+    "זה מסמך, לא שיחה: בלי הקדמה, ובלי שאלה או הצעה להמשך בסוף.",
+)
+
 WORKERS: dict[str, Worker] = {w.name: w for w in (WRITER, SOCIAL, CAMPAIGNS, ASSISTANT)}
 
 #: Who does a task when the list has no ``עובד`` field at all (a workspace set up

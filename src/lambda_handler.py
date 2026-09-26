@@ -195,6 +195,10 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
 
         if str(task.get("name") or "").startswith(reminder_tasks.PREFIX):
             return {"ignored": "a signing follow-up task, sent by the reminder job"}
+        from .lib import review_tasks
+
+        if review_tasks.kind_of(task):
+            return {"ignored": "a review task the system opened; replies revise it"}
         if event == "taskUpdated" and not workers.has_field(task):
             return {"ignored": "update on a list without the עובד field"}
         worker = workers.worker_of(task, clickup)
