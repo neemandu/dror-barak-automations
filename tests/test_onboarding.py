@@ -30,9 +30,27 @@ def captured(monkeypatch):
         lambda self, client_id, message: state["comments"].append(message) or {})
     monkeypatch.setattr(
         GoogleClient, "copy_file",
-        lambda self, file_id, new_name, parent_id: state["copies"].append(new_name)
+        lambda self, file_id, new_name, parent_id, **kw: state["copies"].append(new_name)
         or {"id": "copy", "name": new_name})
     return state
+
+
+def templates_picked(monkeypatch, *names, library=("מעקב פאנלים.xlsx", "תוכנית תוכן.docx"),
+                     present=()):
+    """Dror ticked ``names`` in the client's תבניות field; the library holds ``library``."""
+    from src.automations import client_templates
+
+    monkeypatch.setenv("DRIVE_TEMPLATES_FOLDER_ID", "TPL")
+    monkeypatch.setattr(client_templates, "picked_for", lambda cid, dry_run=False: list(names))
+
+    def list_folder(self, parent_id):
+        if parent_id == "TPL":
+            return [{"id": f"t{i}", "name": n, "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+                    for i, n in enumerate(library)]
+        return [{"id": f"p{i}", "name": n, "mimeType": "application/vnd.google-apps.spreadsheet"}
+                for i, n in enumerate(present)]
+
+    monkeypatch.setattr(GoogleClient, "list_folder", list_folder)
 
 
 def client_says(monkeypatch, **overrides):
@@ -77,57 +95,54 @@ def test_promotion_happens_even_when_the_client_has_no_email(captured, monkeypat
 # ------------------------------------------------------------- templates
 
 
-def test_template_copies_are_named_after_the_template(captured, monkeypatch):
-    # Not after the Drive id, which is what the folder used to fill up with.
-    monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "tpl1,tpl2")
+def test_only_the_templates_dror_picked_are_copied(captured, monkeypatch):
+    templates_picked(monkeypatch, "מעקב פאנלים")
     onboarding.run("42", dry_run=True)
-    assert captured["copies"] == [
-        "תבנית tpl1 - מכללת דוגמה",
-        "תבנית tpl2 - מכללת דוגמה",
-    ]
+    assert captured["copies"] == ["מעקב פאנלים - מכללת דוגמה"], "not the whole library"
 
 
-def test_a_template_already_in_the_folder_is_not_copied_twice(captured, monkeypatch, read_log):
-    monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "tpl1,tpl2")
-    monkeypatch.setattr(GoogleClient, "list_folder", lambda self, parent_id: [
-        {"id": "f1", "name": "תבנית tpl1 - מכללת דוגמה", "mimeType": "application/pdf"}])
-
-    onboarding.run("42", dry_run=True)
-    assert captured["copies"] == ["תבנית tpl2 - מכללת דוגמה"], \
-        "a rerun must not duplicate what the first run already copied"
-
-
-def test_a_copy_named_the_old_way_is_not_copied_again(captured, monkeypatch):
-    monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "tpl1")
-    monkeypatch.setattr(GoogleClient, "list_folder", lambda self, parent_id: [
-        {"id": "f1", "name": "תבנית tpl1 \u2014 מכללת דוגמה", "mimeType": "application/pdf"}])
+def test_nothing_picked_copies_nothing(captured, monkeypatch):
+    templates_picked(monkeypatch)
     onboarding.run("42", dry_run=True)
     assert captured["copies"] == []
 
 
-def test_one_unreadable_template_does_not_lose_the_questionnaire(captured, monkeypatch, read_log):
-    monkeypatch.setenv("DRIVE_TEMPLATE_IDS", "bad,tpl2")
+def test_a_template_already_in_the_folder_is_not_copied_twice(captured, monkeypatch):
+    templates_picked(monkeypatch, "מעקב פאנלים", "תוכנית תוכן",
+                     present=("מעקב פאנלים - מכללת דוגמה",))
+    onboarding.run("42", dry_run=True)
+    assert captured["copies"] == ["תוכנית תוכן - מכללת דוגמה"]
 
-    def flaky(self, file_id):
-        if file_id == "bad":
-            raise RuntimeError("404 file not found")
-        return f"תבנית {file_id}"
 
-    monkeypatch.setattr(GoogleClient, "file_name", flaky)
+def test_a_template_failure_does_not_lose_the_questionnaire(captured, monkeypatch, read_log):
+    from src.automations import client_templates
+
+    monkeypatch.setattr(client_templates, "picked_for",
+                        lambda cid, dry_run=False: (_ for _ in ()).throw(RuntimeError("ClickUp 503")))
     result = onboarding.run("42", dry_run=True)
-
-    actions = {e["action"] for e in read_log()}
-    assert "template_copy_failed" in actions
-    assert captured["copies"] == ["תבנית tpl2 - מכללת דוגמה"], "the good one still copies"
+    assert "template_copy_failed" in {e["action"] for e in read_log()}
     assert result["questionnaire_sent"] is True
     assert _written(captured["fields"])["status"] == STATUS_ACTIVE
 
 
-def test_an_empty_template_list_is_reported_not_silent(captured, read_log):
-    # DRIVE_TEMPLATE_IDS is unset by conftest. The old code logged nothing at all,
-    # so an unconfigured install looked exactly like a successful one.
-    onboarding.run("42", dry_run=True)
-    assert "no_templates" in {e["action"] for e in read_log()}
+def test_the_client_gets_their_folder_at_onboarding(captured, monkeypatch, read_log):
+    from src.lib import client_folder
+
+    shared = []
+    monkeypatch.setattr(client_folder, "share_with_client",
+                        lambda folder_id, email, dry_run=False: shared.append((folder_id, email)) or True)
+    result = onboarding.run("42", dry_run=True)
+    assert shared and shared[0][1] == result["shared_with"]
+    assert "folder_shared" in {e["action"] for e in read_log()}
+    assert any("שותפה" in c for c in captured["comments"])
+
+
+def test_no_email_means_no_share_but_onboarding_goes_on(captured, monkeypatch, read_log):
+    client_says(monkeypatch, email="")
+    result = onboarding.run("42", dry_run=True)
+    assert result["shared_with"] is None
+    assert "folder_not_shared" in {e["action"] for e in read_log()}
+    assert _written(captured["fields"])["status"] == STATUS_ACTIVE
 
 
 # ------------------------------------------------------------- folder shape

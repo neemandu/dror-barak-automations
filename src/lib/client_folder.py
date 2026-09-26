@@ -89,6 +89,27 @@ def ensure(crm: Any, client: dict[str, Any], *, dry_run: bool = False) -> dict[s
     return {"id": folder["id"], "url": folder["webViewLink"], "created": True}
 
 
+def share_with_client(folder_id: str, email: str, *, dry_run: bool = False) -> bool:
+    """Give ``email`` edit access to the folder; Google emails them the invitation.
+
+    Idempotent: ``False`` if they already have access. Dror's decision (26.9):
+    the whole folder, from onboarding. A Workspace that forbids sharing outside
+    the domain answers 403 here, which the caller reports.
+    """
+    if dry_run:
+        return True
+    perms = request("GET", f"{DRIVE}/{folder_id}/permissions", headers=_headers(),
+                    params={"fields": "permissions(emailAddress,role)", "supportsAllDrives": "true"}
+                    ).json().get("permissions", [])
+    if any(str(p.get("emailAddress") or "").lower() == email.lower() for p in perms):
+        return False
+    request("POST", f"{DRIVE}/{folder_id}/permissions", headers=_headers(),
+            params={"sendNotificationEmail": "true", "supportsAllDrives": "true",
+                    "emailMessage": "זו התיקייה שלנו לעבודה המשותפת. כאן יופיעו המסמכים והתבניות שלך."},
+            json={"type": "user", "role": "writer", "emailAddress": email})
+    return True
+
+
 # The shape of every client folder, so Dror finds the same four places in each
 # one. Names are what he calls them, and are the identity of the subfolder —
 # renaming one here makes the next run create it again alongside the old.

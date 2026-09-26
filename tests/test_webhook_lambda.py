@@ -200,10 +200,19 @@ def test_onboarding_fires_on_signed(monkeypatch, crm_says):
     assert seen == ["t1"]
 
 
-def test_unrelated_status_change_does_nothing(crm_says):
+def test_unrelated_status_change_only_checks_the_templates(crm_says, monkeypatch):
+    # Not onboarding; but it may be the תבניות field, so the templates job is
+    # handed the client (in the background).
+    from src.automations import onboarding
+    from src.lib import tasks
+
+    queued = []
+    monkeypatch.setattr(onboarding, "run", lambda *a, **k: pytest.fail("not a signing"))
+    monkeypatch.setattr(tasks, "dispatch", lambda name, **kw: queued.append((name, kw)) or {"queued": True})
     crm_says("in_work")
     result = lambda_handler.route(json.loads(payload()))
-    assert "ignored" in result
+    assert queued == [("client_templates", {"client_id": "t1", "dry_run": False})]
+    assert result["sub_status"] == "in_work"
 
 
 def test_onboarding_runs_once_even_for_two_distinct_signed_events(monkeypatch, crm_says):

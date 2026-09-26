@@ -5,7 +5,8 @@ Action: everything needed to turn a signed client into a working one, replacing
 the manual intake:
 
   1. Create the client's Drive folder and its standard subfolders.
-  2. Copy the template files into it.
+  2. Share the folder with the client, and copy in the templates Dror picked
+     for them in the ``תבניות`` field (:mod:`client_templates`).
   3. Email the client the strategy questionnaire, and start chasing it.
   4. Check the client has a Meta ad account, which the monthly report needs.
   5. Promote the client to ``active`` / ``in_work`` and summarise on the task.
@@ -26,16 +27,10 @@ from typing import Any
 from ..lib import client_folder, config
 from ..lib.clients.crm import STATUS_ACTIVE, SUB_IN_WORK, CrmClient
 from ..lib.clients.google import GoogleClient
-from . import send_questionnaire
+from . import client_templates, send_questionnaire
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "onboarding"
-
-
-def _template_ids() -> list[str]:
-    """Template Drive file ids to copy, from ``DRIVE_TEMPLATE_IDS`` (comma-sep)."""
-    raw = config.get("DRIVE_TEMPLATE_IDS", "")
-    return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -62,8 +57,12 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     result["subfolders"] = _make_subfolders(auto, crm, google, client_id, folder,
                                             dry_run=dry_run)
 
-    # 2. Copy templates
-    result["templates"] = _copy_templates(auto, google, client_id, name, folder["id"])
+    # 2. The client gets their folder (Dror's call, 26.9: the whole folder, from
+    # onboarding), then the templates Dror picked for them.
+    result["shared_with"] = client_templates.share_folder(
+        auto, crm, {**client, "id": client_id}, folder["id"], dry_run=dry_run)
+    result["templates"] = _copy_templates(auto, crm, google, {**client, "id": client_id},
+                                          folder["id"], dry_run=dry_run)
 
     # 3. Email the strategy questionnaire. Its answers become the Google Doc that
     # seeds the whole strategy and feed the last-5-videos analysis, so getting the
@@ -117,59 +116,18 @@ def _make_subfolders(auto: Automation, crm: CrmClient, google: GoogleClient,
     return subs
 
 
-def _copy_name(template_name: str, client_name: str) -> str:
-    """What a copied template is called in the client's folder.
-
-    The template's own name, then the client's — so the file is recognisable
-    both in the folder and once Dror has downloaded or forwarded it.
-    """
-    return f"{template_name} - {client_name}"
-
-
-def _copy_templates(auto: Automation, google: GoogleClient, client_id: str,
-                    name: str, folder_id: str) -> dict[str, Any]:
-    """Copy each configured template in, skipping ones already there.
-
-    Per template rather than all-or-nothing: one unreadable id used to raise out
-    of ``run`` with the folder created and the questionnaire never sent.
-    """
-    ids = _template_ids()
-    if not ids:
-        # Silence here used to look like success. It is not: the client's folder
-        # comes out empty and nobody finds out until Dror opens it.
-        auto.log_action("no_templates", "skipped", client_id=client_id,
-                        detail="DRIVE_TEMPLATE_IDS is empty - no templates copied")
-        return {"copied": [], "skipped": [], "failed": []}
-
+def _copy_templates(auto: Automation, crm: CrmClient, google: GoogleClient,
+                    client: dict[str, Any], folder_id: str, *, dry_run: bool) -> dict[str, Any]:
+    """The picked templates, copied in. Best-effort: a Drive or ClickUp hiccup here
+    must not cost the client their questionnaire."""
     try:
-        present = {str(f.get("name")) for f in google.list_folder(folder_id)}
-    except Exception as exc:  # noqa: BLE001 - listing failed; copy blind rather than not at all
-        auto.log_action("folder_listing_failed", "error", client_id=client_id,
+        names = client_templates.picked_for(str(client["id"]), dry_run=dry_run)
+        return client_templates.copy_picked(auto, crm, google, client, folder_id, names,
+                                            dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001
+        auto.log_action("template_copy_failed", "error", client_id=str(client["id"]),
                         detail=str(exc))
-        present = set()
-
-    copied, skipped, failed = [], [], []
-    for tid in ids:
-        try:
-            template_name = google.file_name(tid)
-            title = _copy_name(template_name, name)
-            # Copies made before 2026-09-23 were named with a long dash.
-            if title in present or f"{template_name} \u2014 {name}" in present:
-                skipped.append(title)
-                continue
-            google.copy_file(tid, title, folder_id)
-            copied.append(title)
-        except Exception as exc:  # noqa: BLE001 - one bad id must not stop the rest
-            failed.append(tid)
-            auto.log_action("template_copy_failed", "error", client_id=client_id,
-                            detail=f"{tid}: {exc}")
-
-    if copied or skipped:
-        detail = f"{len(copied)} הועתקו"
-        if skipped:
-            detail += f", {len(skipped)} כבר היו בתיקייה"
-        auto.log_action("templates_copied", client_id=client_id, detail=detail)
-    return {"copied": copied, "skipped": skipped, "failed": failed}
+        return {"copied": [], "failed": [str(exc)]}
 
 
 def _send_welcome_flow(auto: Automation, client: dict[str, Any], *, dry_run: bool) -> bool:
@@ -240,7 +198,9 @@ def _summarise(auto: Automation, crm: CrmClient, client_id: str, name: str,
     if copied:
         lines.append(f"📄 {copied} תבניות הועתקו לתיקייה")
     if templates.get("failed"):
-        lines.append(f"⚠️ {len(templates['failed'])} תבניות נכשלו בהעתקה - ראה את הדוח היומי")
+        lines.append("⚠️ העתקת התבניות נכשלה - ראה את הדוח היומי")
+    if result.get("shared_with"):
+        lines.append(f"🔓 התיקייה שותפה עם {result['shared_with']}")
     if result.get("questionnaire_sent"):
         lines.append("📋 שאלון האסטרטגיה נשלח, ותישלח תזכורת אם לא ימולא")
     lines.append("🚀 הסטטוס עודכן ל'לקוח פעיל' / 'בעבודה'")

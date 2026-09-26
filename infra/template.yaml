@@ -65,6 +65,13 @@ Parameters:
   DriveClientsParentId:
     Type: String
     Description: Drive folder that holds client folders; signed PDFs land here.
+  DriveTemplatesFolderId:
+    Type: String
+    Default: ""
+    Description: >
+      The Drive folder of templates ("טמפלטים ללקוחות"). Dror picks per client in the
+      תבניות Labels field on the client's task; the picked ones are copied into the
+      client's folder (src/automations/client_templates.py).
   DriveTemplateIds:
     Type: String
     Default: ""
@@ -271,6 +278,7 @@ Globals:
         SIGN_BASE_URL: !Ref SignBaseUrl
         DRIVE_CLIENTS_PARENT_ID: !Ref DriveClientsParentId
         DRIVE_TEMPLATE_IDS: !Ref DriveTemplateIds
+        DRIVE_TEMPLATES_FOLDER_ID: !Ref DriveTemplatesFolderId
         # ManyChat for every function: Smoove uses it for leads, onboarding for
         # the welcome Flow. The per-list Smoove Flows stay on SmooveFunction.
         MANYCHAT_API_KEY: !Ref ManyChatApiKey

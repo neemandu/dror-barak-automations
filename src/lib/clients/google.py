@@ -123,18 +123,26 @@ class GoogleClient(BaseClient):
             or file_id
         )
 
-    def copy_file(self, file_id: str, new_name: str, parent_id: str) -> dict[str, Any]:
+    def copy_file(self, file_id: str, new_name: str, parent_id: str,
+                  *, mime_type: Optional[str] = None) -> dict[str, Any]:
+        """Copy a file into ``parent_id``. ``mime_type`` converts on the way (an
+        .xlsx into a Google Sheet): Drive's copy converts like an upload does."""
         if self.dry_run:
             self._record(
-                "copy_file", file_id=file_id, new_name=new_name, parent_id=parent_id
+                "copy_file", file_id=file_id, new_name=new_name, parent_id=parent_id,
+                mime_type=mime_type,
             )
-            return {"id": "drive-copy-mock", "name": new_name}
+            return {"id": "drive-copy-mock", "name": new_name,
+                    "webViewLink": "https://docs.google.com/document/d/drive-copy-mock/edit"}
+        body: dict[str, Any] = {"name": new_name, "parents": [parent_id]}
+        if mime_type:
+            body["mimeType"] = mime_type
         resp = self._request(
             "POST",
             f"https://www.googleapis.com/drive/v3/files/{file_id}/copy",
             headers=self._headers(),
-            params={"fields": "id,name", "supportsAllDrives": "true"},
-            json={"name": new_name, "parents": [parent_id]},
+            params={"fields": "id,name,webViewLink", "supportsAllDrives": "true"},
+            json=body,
         )
         return resp.json()
 

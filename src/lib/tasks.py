@@ -29,7 +29,8 @@ log = get_logger("tasks", "dispatch")
 def _registry() -> dict[str, tuple[str, Callable[..., Any]]]:
     """name -> (Hebrew label for failure messages, callable). Imported lazily."""
     from .. import sign_page
-    from ..automations import campaign_summary, clickup_to_claude, social_prep, strategy_bot
+    from ..automations import (campaign_summary, client_templates, clickup_to_claude,
+                               social_prep, strategy_bot)
 
     return {
         "social_prep": ("דוח הכנה לרשתות", social_prep.run),
@@ -38,6 +39,7 @@ def _registry() -> dict[str, tuple[str, Callable[..., Any]]]:
         "file_contract": ("תיוק ההסכם החתום", sign_page.file_contract),
         # Comments its own failures on the task (it has a task_id, not a client_id).
         "clickup_to_claude": ("משימה ל-Claude", clickup_to_claude.run),
+        "client_templates": ("העתקת תבניות ללקוח", client_templates.run),
     }
 
 

@@ -138,7 +138,13 @@ def route(
             except Exception:
                 idempotency.release(once)  # let a retry finish the job
                 raise
-        return {"ignored": f"no automation for {event} -> {sub}"}
+        # Any other change may be the תבניות field: the job copies what Dror picked
+        # and is missing (in the background: Drive copies take seconds each). It
+        # skips a client with no folder yet, whose picks wait for onboarding above.
+        from .lib import tasks
+
+        return {"templates": tasks.dispatch("client_templates", client_id=task_id, dry_run=dry_run),
+                "sub_status": sub}
 
     return {"ignored": f"no automation for event {event}"}
 
