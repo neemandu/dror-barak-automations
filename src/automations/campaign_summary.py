@@ -44,7 +44,8 @@ NAME = "campaign_summary"
 # Hebrew tokenizes poorly and the model returns a summary PLUS 3–5 recommendations;
 # 1500 truncated it mid-recommendation, and complete() never checks stop_reason —
 # so a cut-off line reached Dror silently. 8000 is comfortable headroom.
-_MAX_TOKENS = 8000
+# Thinking counts toward max_tokens even when its text is not returned.
+_MAX_TOKENS = 16000
 
 _SYSTEM = (
     "You are a paid-media analyst writing the monthly campaign report for a client "
@@ -92,7 +93,7 @@ def _analysis(summary: dict[str, Any], client: dict[str, Any], account: dict[str
         "לפי קמפיין:",
         json.dumps(summary.get("campaigns", []), ensure_ascii=False, indent=2),
     ])
-    text = ai.complete(user, system=_SYSTEM, max_tokens=_MAX_TOKENS)
+    text = ai.complete(user, system=_SYSTEM, max_tokens=_MAX_TOKENS, thinking=True)
     analysis, sep, recommendations = text.partition("\n---\n")
     if not sep:
         # A missing separator must degrade, never lose the prose: the metrics table

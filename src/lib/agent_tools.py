@@ -89,7 +89,13 @@ DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "gmail_read",
-        "description": "Read one email by message id: headers and plain-text body.",
+        "description": (
+            "Read one email by the message id gmail_search returned: its From, To, Cc, "
+            "Subject and Date, its thread_id (pass it to gmail_create_draft to reply in "
+            "the same conversation), and its plain-text body. An HTML-only email "
+            "returns its short snippet instead; a long body is cut at 40,000 "
+            "characters. Attachments are not returned."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {"message_id": {"type": "string"}},
@@ -108,7 +114,10 @@ DEFINITIONS: list[dict[str, Any]] = [
             "properties": {
                 "to": {"type": "string", "description": "Recipient address(es), comma-separated."},
                 "subject": {"type": "string"},
-                "body": {"type": "string", "description": "Plain-text body."},
+                "body": {"type": "string", "description": (
+                    "Plain-text body, from the greeting to the last line of content. "
+                    "Dror's branded layout and his signature (name, title, phone, "
+                    "site) are added automatically, so do not write a sign-off block.")},
                 "cc": {"type": "string"},
                 "thread_id": {"type": "string"},
             },

@@ -82,7 +82,7 @@ def analyze_profiles(
     def one(item: tuple[str, str]) -> tuple[str, str]:
         role, url = item
         return role, _from_source_line(ai.complete(_prompt(role, url, focus), system=_SYSTEM,
-                                                   max_tokens=3000, web=True))
+                                                   max_tokens=16000, web=True, thinking=True))
 
     with ThreadPoolExecutor(max_workers=min(4, len(items))) as pool:
         return dict(pool.map(one, items))

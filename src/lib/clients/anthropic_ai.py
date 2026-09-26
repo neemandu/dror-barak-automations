@@ -89,6 +89,7 @@ class AnthropicClient(BaseClient):
         if tools:
             params["tools"] = tools
         response = self._sdk.messages.create(**params)
+        _log_usage(self.model, response)
         return response.model_dump(mode="json", exclude_none=True)
 
     def complete(
@@ -129,6 +130,7 @@ class AnthropicClient(BaseClient):
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         response = self._sdk.messages.create(messages=messages, **params)
+        _log_usage(self.model, response)
         for _ in range(MAX_CONTINUATIONS):
             if response.stop_reason != "pause_turn":
                 break
@@ -139,7 +141,26 @@ class AnthropicClient(BaseClient):
 
         if response.stop_reason == "refusal":
             raise RuntimeError("Claude declined this request (stop_reason=refusal)")
+        if response.stop_reason == "max_tokens":
+            # A truncated strategy or report must not reach Dror as if complete.
+            raise RuntimeError(f"Claude's reply was cut off at max_tokens={max_tokens}")
         return text_style.humanize(final_text(response.content))
+
+
+def _log_usage(model: str, response: Any) -> None:
+    """One log line per call with its token counts: the basis for knowing what
+    each automation costs before tuning any of them."""
+    from ..logging_setup import get_logger
+
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    get_logger("anthropic", "usage").info("claude_usage", extra={
+        "model": model, "stop_reason": getattr(response, "stop_reason", None),
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
+        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", None),
+    })
 
 
 _TOOL_BLOCKS = {"server_tool_use", "web_search_tool_result", "web_fetch_tool_result"}
