@@ -94,13 +94,16 @@ _DATE_LINE = re.compile(r"^\d{1,2} ב\S+ \d{4}$")
 
 
 def without_title(text: str) -> str:
-    lines = text.strip().splitlines()
-    if len(lines) >= 2 and lines[0].strip():
+    """``text`` without leading title blocks (a title line, then "הוכן עבור ..." or
+    a date). Repeated: a version that already copied one would otherwise pass it on."""
+    text = text.strip()
+    while True:
+        lines = text.splitlines()
         rest = [ln for ln in lines[1:] if ln.strip()]
-        if rest and (rest[0].strip().startswith("הוכן עבור") or _DATE_LINE.match(rest[0].strip())):
-            cut = lines.index(rest[0], 1) + 1
-            return "\n".join(lines[cut:]).strip()
-    return text.strip()
+        if not (lines and lines[0].strip() and rest and
+                (rest[0].strip().startswith("הוכן עבור") or _DATE_LINE.match(rest[0].strip()))):
+            return text
+        text = "\n".join(lines[lines.index(rest[0], 1) + 1:]).strip()
 
 
 def as_plain_text(markdown: str) -> str:

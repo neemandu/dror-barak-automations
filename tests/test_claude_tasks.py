@@ -269,3 +269,24 @@ def test_a_revision_reads_an_earlier_version_without_its_title_block():
     assert task_docs.without_title(no_client) == "רעיון אחד"
     plain = "טקסט בלי כותרת"
     assert task_docs.without_title(plain) == plain
+
+
+def test_a_copied_title_is_stripped_however_many_times_it_was_copied():
+    doc = ("משימה - גרסה 3\nהוכן עבור X   ·   26 בספטמבר 2026\n"
+           "משימה - גרסה 2\nהוכן עבור X   ·   26 בספטמבר 2026\n\n"
+           "התוכן עצמו")
+    assert task_docs.without_title(doc) == "התוכן עצמו"
+
+
+def test_a_new_version_is_saved_without_a_copied_title(monkeypatch):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    saved = []
+    monkeypatch.setattr(task_docs, "save", lambda name, md, **kw: saved.append(md) or
+                        {"id": "D", "url": "https://docs.google.com/document/d/D/edit"})
+    monkeypatch.setattr(AnthropicClient, "create_message", lambda *a, **k: {
+        "stop_reason": "end_turn", "content": [{"type": "text", "text":
+            "3 מודעות - גרסה 2\nהוכן עבור X   ·   26 בספטמבר 2026\n\n# מודעה 1\nטקסט"}]})
+    _Board(monkeypatch)
+    bot.run("t1", dry_run=True)
+    assert saved == ["# מודעה 1\nטקסט"]

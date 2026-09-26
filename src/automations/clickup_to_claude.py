@@ -438,7 +438,9 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
             messages = [{"role": "user", "content": prompt}]
         tools = Toolbox(dry_run=dry_run, log=log_write,
                         meta_account=(client or {}).get("meta_ad_account"))
-        draft = _agent_loop(ai, tools, messages, job=worker.job)
+        # The Doc puts its own title block on top; one the model copied from an
+        # earlier version would make it two.
+        draft = task_docs.without_title(_agent_loop(ai, tools, messages, job=worker.job))
 
         version = versions(all_threads) + 1
         name = f"{task.get('name', '') or task_id} - גרסה {version}"
