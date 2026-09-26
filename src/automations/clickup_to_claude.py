@@ -412,7 +412,10 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
         task = clickup.get_task(task_id)
         # A button press or a "קלוד" on a task with no employee still asks for work:
         # the copywriter takes it.
-        worker = workers.worker_of(task) or workers.DEFAULT
+        worker = workers.worker_of(task, clickup) or workers.DEFAULT
+        if not worker.active:
+            post(f"⏸️ הסוכן {worker.name} כבוי כרגע (המשימה שלו ברשימת סוכנים סגורה).")
+            return {"ignored": f"{worker.name} is switched off"}
         _move(clickup, task, workers.STATUS_WORKING, auto)
         client_id = linked_client_id(task)
         if client_id:

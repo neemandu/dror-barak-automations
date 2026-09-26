@@ -186,7 +186,9 @@ two names must be exact:
 | Field name | Type | Points at |
 |---|---|---|
 | `לקוח` | **Relationship** → tasks in `לקוחות` | The client this work is for |
-| `עובד` | **Dropdown**: `כותב תוכן`, `אנליסט רשתות`, `מנהל קמפיינים`, `עוזר אישי` | Which bot does the task. **Empty = a task for a person**, no bot touches it. The option names must match `src/lib/workers.py` exactly. |
+| `עובד` | **Relationship** → tasks in `סוכנים` | Which agent does the task. **Empty = a task for a person**, no bot touches it. |
+
+**The `סוכנים` list** (same space): one task per agent. Its name is the agent's name, its description is the agent's instructions (read on every run), and `complete` switches it off. A `עובד` dropdown instead of the Relationship still works, with the four built-in employees of `src/lib/workers.py`.
 
 **Dror's inbox view:** + View → List, named `לבדיקה של דרור`, filtered on that
 status, grouped by `לקוח`, pinned. Everything a bot finished and is waiting for

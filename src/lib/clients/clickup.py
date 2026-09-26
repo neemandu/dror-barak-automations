@@ -40,6 +40,15 @@ class ClickUpClient(BaseClient):
         )
         return resp.json()
 
+    def list_tasks(self, list_id: str) -> list[dict[str, Any]]:
+        """The open and closed tasks of a list (first page: up to 100)."""
+        if self.dry_run:
+            self._record("list_tasks", list_id=list_id)
+            return []
+        resp = self._request("GET", f"{self.base_url}/list/{list_id}/task", headers=self._headers(),
+                             params={"include_closed": "true"})
+        return resp.json().get("tasks", [])
+
     def list_comments(self, task_id: str) -> list[dict[str, Any]]:
         """The task's comments, oldest first (ClickUp returns newest first)."""
         if self.dry_run:

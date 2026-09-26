@@ -279,3 +279,78 @@ def test_a_decorated_field_name_is_still_found():
                                "type_config": {"options": OPTIONS}}]}
     assert client_templates.picked(task) == ["מעקב פאנלים"]
     assert workers.worker_of(task).name == "אנליסט רשתות"
+
+
+# ------------------------------------------------------------ agents from the סוכנים list
+
+AGENT_TASKS = {
+    "A1": {"id": "A1", "name": "אדריכל הוובינרים", "text_content": "בונה וובינרים ממירים.",
+           "status": {"status": "to do", "type": "open"}},
+    "A2": {"id": "A2", "name": "אדריכל האסטרטגיה", "text_content": "בונה אסטרטגיה.",
+           "status": {"status": "to do", "type": "open"}},
+    "OFF": {"id": "OFF", "name": "סוכן כבוי", "text_content": "x",
+            "status": {"status": "complete", "type": "closed"}},
+}
+
+
+def task_for_agent(agent_id):
+    value = [{"id": agent_id, "name": AGENT_TASKS[agent_id]["name"]}] if agent_id else []
+    return {"id": "t1", "name": "משימה", "description": "",
+            "custom_fields": [{"id": "f", "name": "עובד", "type": "list_relationship",
+                               "type_config": {"subcategory_id": "AGENTS"}, "value": value}]}
+
+
+class _Agents:
+    """ClickUp with the agents list; get_task serves agents and the work task."""
+
+    def __init__(self, monkeypatch, work_task):
+        self.work = work_task
+        self.comments, self.statuses = [], []
+        me = self
+        monkeypatch.setattr(ClickUpClient, "get_task",
+                            lambda s, tid: AGENT_TASKS.get(tid) or me.work)
+        monkeypatch.setattr(ClickUpClient, "list_tasks", lambda s, lid: list(AGENT_TASKS.values()))
+        monkeypatch.setattr(ClickUpClient, "list_comments", lambda s, tid: [])
+        monkeypatch.setattr(ClickUpClient, "comment", lambda s, tid, text: me.comments.append(text) or {})
+        monkeypatch.setattr(ClickUpClient, "set_status", lambda s, tid, st: me.statuses.append(st) or {})
+
+
+def test_the_agent_is_read_from_its_task_in_the_agents_list(monkeypatch):
+    _Agents(monkeypatch, task_for_agent("A1"))
+    worker = workers.worker_of(task_for_agent("A1"), ClickUpClient(dry_run=True))
+    assert worker.name == "אדריכל הוובינרים" and worker.job == "בונה וובינרים ממירים."
+    assert worker.active and worker.agent_id == "A1"
+    assert workers.worker_of(task_for_agent(None), ClickUpClient(dry_run=True)) is None
+
+
+def test_the_agents_own_instructions_reach_claude(monkeypatch):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    _Agents(monkeypatch, task_for_agent("A2"))
+    systems = []
+    real = AnthropicClient.create_message
+    monkeypatch.setattr(AnthropicClient, "create_message",
+                        lambda self, m, **kw: systems.append(kw["system"]) or real(self, m, **kw))
+    out = bot.run("t1", dry_run=True)
+    assert out["worker"] == "אדריכל האסטרטגיה" and "בונה אסטרטגיה." in systems[0]
+
+
+def test_a_switched_off_agent_does_not_work_and_says_so_once(env, monkeypatch):
+    board = _Agents(monkeypatch, task_for_agent("OFF"))
+    route = lambda: lambda_handler.route({"event": "taskUpdated", "task_id": "t1"},  # noqa: E731
+                                         dry_run=True, source="tasks")
+    monkeypatch.setattr(lambda_handler, "_comment", lambda tid, msg, dry_run: board.comments.append(msg))
+    assert "switched off" in route()["ignored"]
+    route()
+    assert env == [] and len(board.comments) == 1 and "כבוי" in board.comments[0]
+
+
+def test_switching_between_agents_hands_over_each_time(env, monkeypatch):
+    board = _Agents(monkeypatch, task_for_agent("A1"))
+    route = lambda: lambda_handler.route({"event": "taskUpdated", "task_id": "t1"},  # noqa: E731
+                                         dry_run=True, source="tasks")
+    route()                                   # -> webinars
+    route()                                   # a later update: nothing
+    board.work = task_for_agent("A2"); route()  # -> strategy
+    board.work = task_for_agent("A1"); route()  # -> back to webinars
+    assert env == ["t1", "t1", "t1"]

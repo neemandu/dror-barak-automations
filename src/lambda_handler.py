@@ -189,16 +189,23 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         from .lib import workers
         from .lib.clients.clickup import ClickUpClient
 
-        task = ClickUpClient(dry_run=dry_run).get_task(task_id)
+        clickup = ClickUpClient(dry_run=dry_run)
+        task = clickup.get_task(task_id)
         from .lib import reminder_tasks
 
         if str(task.get("name") or "").startswith(reminder_tasks.PREFIX):
             return {"ignored": "a signing follow-up task, sent by the reminder job"}
         if event == "taskUpdated" and not workers.has_field(task):
             return {"ignored": "update on a list without the עובד field"}
-        worker = workers.worker_of(task)
+        worker = workers.worker_of(task, clickup)
         if worker is None:
             return {"ignored": "no employee on this task (a task for a person)"}
+        if not worker.active:
+            # Said once per (task, agent), not on every later update.
+            if idempotency.claim(idempotency.guard("agent_off", task_id, worker.name)):
+                _comment(task_id, f"⏸️ הסוכן {worker.name} כבוי כרגע (המשימה שלו ברשימת סוכנים "
+                                  f"סגורה), אז הוא לא התחיל לעבוד. מדליקים אותו מחדש שם.", dry_run)
+            return {"ignored": f"{worker.name} is switched off"}
         once = idempotency.guard("clickup_to_claude", task_id, worker.name)
         if not idempotency.claim(once):
             return {"ignored": f"this task is already with {worker.name}"}
@@ -207,7 +214,7 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         except Exception:
             idempotency.release(once)  # let ClickUp's retry hand it over
             raise
-        for other in workers.WORKERS:
+        for other in workers.names(task, clickup):
             if other != worker.name:
                 idempotency.release(idempotency.guard("clickup_to_claude", task_id, other))
         return {**out, "worker": worker.name}
