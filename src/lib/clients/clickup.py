@@ -94,6 +94,14 @@ class ClickUpClient(BaseClient):
         resp = self._request("GET", f"{self.base_url}/user", headers=self._headers())
         return str((resp.json().get("user") or {}).get("id") or "")
 
+    def update_task(self, task_id: str, **fields: Any) -> dict[str, Any]:
+        """Change a task's own fields (``due_date``, ``name``, ``description``...)."""
+        if self.dry_run:
+            return self._record("update_task", task_id=task_id, **fields)
+        resp = self._request("PUT", f"{self.base_url}/task/{task_id}",
+                             headers=self._headers(), json=fields)
+        return resp.json()
+
     def set_status(self, task_id: str, status: str) -> dict[str, Any]:
         """Move the task to ``status`` (a status name that exists on its list)."""
         if self.dry_run:
@@ -138,15 +146,19 @@ class ClickUpClient(BaseClient):
         description: str | None = None,
         custom_fields: list[dict[str, Any]] | None = None,
         status: str | None = None,
+        due_date: int | None = None,
     ) -> dict[str, Any]:
-        """Create a task in a list. ``custom_fields`` is ``[{"id","value"}]``."""
+        """Create a task in a list. ``custom_fields`` is ``[{"id","value"}]``;
+        ``due_date`` is epoch milliseconds."""
         if self.dry_run:
             self._record(
                 "create_task",
                 list_id=list_id,
                 name=name,
+                description=description,
                 custom_fields=custom_fields,
                 status=status,
+                due_date=due_date,
             )
             return {"id": "clickup-task-mock", "url": "https://app.clickup.com/t/mock"}
         body: dict[str, Any] = {"name": name}
@@ -156,6 +168,9 @@ class ClickUpClient(BaseClient):
             body["custom_fields"] = custom_fields
         if status:
             body["status"] = status
+        if due_date is not None:
+            body["due_date"] = due_date
+            body["due_date_time"] = False
         resp = self._request(
             "POST",
             f"{self.base_url}/list/{list_id}/task",

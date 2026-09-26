@@ -520,6 +520,9 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         f"טביעת אצבע: {audit['contract_sha256'][:16]}…\n"
         f"IP: {audit.get('ip') or 'לא נרשמה'}",
     )
+    from .lib import reminder_tasks
+
+    reminder_tasks.close_on_signed(client_id)  # before the record holding its id goes
     signing.clear_pending(client_id)  # no more reminders: they signed
     _notify_dror(client, pdf_bytes, audit)
     copy_to = _send_client_copy(client, fields, pdf_bytes)

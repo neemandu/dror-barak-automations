@@ -184,11 +184,17 @@ def mark_pending(client_id: str) -> None:
     """
     from . import idempotency
 
-    _put_pending(f"signpending:{client_id}", {
+    previous = get_pending(client_id) or {}
+    record: dict[str, Any] = {
         "client_id": client_id,
         "issued_at": int(time.time()),
         "reminders_sent": 0,
-    })
+    }
+    # A re-sent contract keeps its follow-up task (reminder_tasks moves its date),
+    # rather than opening a second one next to it.
+    if previous.get("reminder_task_id"):
+        record["reminder_task_id"] = previous["reminder_task_id"]
+    _put_pending(f"signpending:{client_id}", record)
 
 
 def get_pending(client_id: str) -> Optional[dict[str, Any]]:
@@ -199,6 +205,14 @@ def bump_reminders(client_id: str, count: int) -> None:
     rec = get_pending(client_id) or {"client_id": client_id, "issued_at": int(time.time())}
     rec["reminders_sent"] = count
     _put_pending(f"signpending:{client_id}", rec)
+
+
+def set_reminder_task(client_id: str, task_id: str) -> None:
+    """Remember the ClickUp task that holds this client's follow-up email."""
+    rec = get_pending(client_id)
+    if rec is not None:
+        rec["reminder_task_id"] = task_id
+        _put_pending(f"signpending:{client_id}", rec)
 
 
 def clear_pending(client_id: str) -> None:

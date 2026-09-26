@@ -59,6 +59,8 @@ ACTION_LABELS: dict[str, str] = {
     "signed": "ההסכם נחתם",
     "reminder_sent": "נשלחה תזכורת ללקוח",
     "reminder_failed": "תזכורת לא נשלחה",
+    "reminder_cancelled": "התזכורת בוטלה (המשימה נסגרה)",
+    "reminder_task_failed": "משימת התזכורת לא נפתחה ב-ClickUp",
     "reminders_done": "סבב התזכורות הסתיים",
     "no_pending_record": "אין חתימה שממתינה",
     # questionnaire

@@ -65,10 +65,19 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
     asked_on_page = contract.missing_for(fields)
 
     delivered = _deliver(crm, client, url, dry_run=dry_run) if email else ""
-    # Start the reminder clock. If the client doesn't sign, sign_reminders chases
-    # them at 2 and 4 days. Signing clears this record.
+    # Start the reminder clock, and open the follow-up as a task Dror can see and
+    # edit (reminder_tasks): sent automatically on its due date if they have not
+    # signed. Signing clears the record and closes the task.
     if not dry_run:
         signing.mark_pending(client_id)
+        try:
+            from ..lib import reminder_tasks
+
+            task_id = reminder_tasks.open_task(client_id, {**client, "id": client_id})
+            if task_id:
+                signing.set_reminder_task(client_id, task_id)
+        except Exception as exc:  # noqa: BLE001 - the quote is sent; the fallback template still reminds
+            auto.log_action("reminder_task_failed", "error", client_id=client_id, detail=str(exc))
         # A new quote is a new contract: an earlier signature no longer answers for
         # the link, and the one-signature guard opens for this one.
         contract_store.supersede(client_id)

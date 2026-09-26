@@ -269,7 +269,7 @@ def inline_images() -> dict[str, bytes]:
     return {BAND_CID: BAND_PATH.read_bytes()}
 
 
-def render(name: str, **params: Any) -> dict[str, Any]:
+def render(name: str, body: str | None = None, **params: Any) -> dict[str, Any]:
     """Return ``{"subject", "html", "text", "inline"}`` for a template.
 
     Both parts are produced: some clients refuse HTML, and a contract link that
@@ -284,7 +284,9 @@ def render(name: str, **params: Any) -> dict[str, Any]:
 
     try:
         subject = template.subject.format(**params)
-        text = template.body.format(**params)
+        # ``body``: text Dror wrote himself (the follow-up task's description), in
+        # place of the template's. Taken as is, never formatted: it may hold braces.
+        text = body.strip() if body else template.body.format(**params)
     except KeyError as exc:
         raise TemplateError(f"Template '{name}' is missing parameter {exc}.") from None
 

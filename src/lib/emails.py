@@ -132,7 +132,7 @@ def send_template(
     **params: Any,
 ) -> dict[str, Any]:
     """Render a template from :mod:`email_templates` and send it."""
-    rendered = email_templates.render(name, **params)
+    rendered = email_templates.render(name, **params)  # a ``body=`` override passes through
     return send(
         to,
         rendered["subject"],

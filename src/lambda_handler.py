@@ -184,6 +184,10 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         from .lib.clients.clickup import ClickUpClient
 
         task = ClickUpClient(dry_run=dry_run).get_task(task_id)
+        from .lib import reminder_tasks
+
+        if str(task.get("name") or "").startswith(reminder_tasks.PREFIX):
+            return {"ignored": "a signing follow-up task, sent by the reminder job"}
         if event == "taskUpdated" and not workers.has_field(task):
             return {"ignored": "update on a list without the עובד field"}
         worker = workers.worker_of(task)

@@ -137,6 +137,9 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   approval; scheduled on the 1st with a self-invoke fan-out
   (`src/scheduled.py::campaign_report_handler`). Blocked on AWS — see above.
 - [x] **T8 — Strategy bot.** `src/automations/strategy_bot.py`; notifies Dror by email.
+- [x] **Signing follow-up as a task (26.9).** One email, 3 days after the contract,
+  from a `תזכורת חתימה` task on משימות whose description is the text and due date is
+  the day: automatic, but Dror edits, moves or closes it. `src/lib/reminder_tasks.py`.
 - [x] **T9 — משימות → Claude agent.** `src/automations/clickup_to_claude.py`. Every
   answer is a version: a branded Google Doc in the client's `משימות` folder, a PDF on
   the task, and a comment. Feedback is a reply in Claude's thread; the revision comes

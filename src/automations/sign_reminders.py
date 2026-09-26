@@ -3,8 +3,13 @@
 Trigger: scheduled daily (EventBridge).
 
 Dror sends a quote; if the client hasn't signed after **3 days**, this sends them
-**one** follow-up in Dror's own words (``sign_reminder``) with the signing link,
-then stops (Dror's call, 25.9: one follow-up, not a chase).
+**one** follow-up with the signing link, then stops (Dror's call, 25.9).
+
+The follow-up is a task on the משימות list (:mod:`src.lib.reminder_tasks`), opened
+when the contract went out: its **due date** is when it is sent and its
+**description** is the text, so Dror changes either in ClickUp and closing the
+task cancels it. It is sent automatically, no approval. A contract sent before
+the task existed falls back to the fixed ``sign_reminder`` text at 3 days.
 
 How it knows who to chase: every client currently in secondary status
 ``נשלחה הצעת מחיר`` (quote sent, not yet signed). Signing moves them to ``חתם``,
@@ -72,6 +77,10 @@ def run(*, dry_run: bool = False, now: float | None = None) -> dict[str, Any]:
             auto.log_action("no_pending_record", "skipped", client_id=client_id)
             continue
 
+        if pending.get("reminder_task_id"):
+            reminded += _from_task(auto, crm, client, pending, to, now, dry_run)
+            continue
+
         number = _due(pending, now)
         if number is None:
             continue
@@ -101,6 +110,52 @@ def run(*, dry_run: bool = False, now: float | None = None) -> dict[str, Any]:
 
     auto.log_action("reminders_done", detail=f"{reminded}/{len(clients)} chased")
     return {"unsigned": len(clients), "reminded": reminded}
+
+
+def _from_task(auto: Automation, crm: CrmClient, client: dict[str, Any],
+               pending: dict[str, Any], to: str, now: float, dry_run: bool) -> int:
+    """Send the follow-up the client's task holds, if it is due. Returns 0 or 1."""
+    from ..lib import reminder_tasks
+    from ..lib.clients.clickup import ClickUpClient
+
+    client_id = str(client["id"])
+    if int(pending.get("reminders_sent", 0)) >= MAX_REMINDERS:
+        return 0
+    clickup = ClickUpClient(dry_run=dry_run)
+    task_id = str(pending["reminder_task_id"])
+    try:
+        task = reminder_tasks.fetch(clickup, task_id)
+        if task is None or reminder_tasks.is_closed(task):
+            # Dror closed or deleted it: that is his "don't send". Once, then quiet.
+            if not dry_run:
+                signing.bump_reminders(client_id, MAX_REMINDERS)
+            auto.log_action("reminder_cancelled", "skipped", client_id=client_id,
+                            detail="המשימה נסגרה או נמחקה, התזכורת לא נשלחה")
+            return 0
+        due = reminder_tasks.due_ms(task)
+        if due is None or now * 1000 < due:
+            return 0
+        body = reminder_tasks.body_of(task)
+        if not to or not body:
+            reason = "אין ללקוח מייל" if not to else "תיאור המשימה ריק"
+            clickup.comment(task_id, f"❌ התזכורת לא נשלחה: {reason}.")
+            if not dry_run:
+                signing.bump_reminders(client_id, MAX_REMINDERS)
+            auto.log_action("reminder_failed", "error", client_id=client_id, detail=reason)
+            return 0
+        emails.send_template("sign_reminder", to, body=body,
+                             client_name=client.get("first_name") or client.get("name") or "",
+                             cta_url=signing.sign_url(client_id), dry_run=dry_run)
+        if not dry_run:
+            signing.bump_reminders(client_id, 1)
+        reminder_tasks.close(clickup, task_id, f"✅ התזכורת נשלחה אל {to}.")
+        crm.append_automation_log(client_id, f"⏰ תזכורת חתימה נשלחה ל־{to} (מהמשימה ב-משימות)")
+        auto.log_action("reminder_sent", client_id=client_id, detail=f"from task → {to}",
+                        url=f"https://app.clickup.com/t/{task_id}")
+        return 1
+    except Exception as exc:  # noqa: BLE001 - one client must not stop the rest
+        auto.log_action("reminder_failed", "error", client_id=client_id, detail=str(exc))
+        return 0
 
 
 def main() -> None:
