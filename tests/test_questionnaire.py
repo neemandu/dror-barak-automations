@@ -219,39 +219,37 @@ def test_the_preview_never_submits():
     assert "data-preview" in page and 'action="#"' in page and "תצוגה מקדימה" in page
 
 
-def test_the_answers_themselves_go_on_the_clickup_task(monkeypatch):
-    """Dror works in ClickUp: the answers are a comment on the client's task, not only a
-    link to a Doc he has to open."""
+def test_the_answers_pdf_goes_on_the_clickup_task(monkeypatch):
+    """Dror works in ClickUp: the answers are on the client's task as the PDF of their
+    Doc, and the comment is one line."""
     from src import questionnaire_page
     from src.lib import tasks
+    from src.lib.clients.clickup import ClickUpClient
+    from src.lib.clients.crm import CrmClient
+
+    attached, posted = [], []
+    monkeypatch.setattr(tasks, "dispatch", lambda name, **kw: None)
+    monkeypatch.setattr(ClickUpClient, "attach", lambda self, tid, data, name, content_type="application/pdf":
+                        attached.append((tid, name, data[:4])))
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: posted.append(msg))
+    defn = store.get_definition(store.default_id())
+    questionnaire_page.handle_post(signing.make_token("c1"), _full_answers(defn), dry_run=True)
+
+    assert attached and attached[0][0] == "c1" and attached[0][2] == b"%PDF"
+    assert attached[0][1].isascii() and attached[0][1].startswith("questionnaire-answers-")
+    assert posted == [f"📋 השאלון מולא: {defn['title']}. התשובות מצורפות למשימה כ-PDF."]
+
+
+def test_without_the_pdf_the_comment_links_to_the_doc(monkeypatch):
+    from src import questionnaire_page
+    from src.lib import tasks
+    from src.lib.clients.clickup import ClickUpClient
     from src.lib.clients.crm import CrmClient
 
     posted = []
     monkeypatch.setattr(tasks, "dispatch", lambda name, **kw: None)
-    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: posted.append((cid, msg)))
+    monkeypatch.setattr(ClickUpClient, "attach", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("ClickUp down")))
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: posted.append(msg))
     defn = store.get_definition(store.default_id())
-    form = _full_answers(defn)
-    questionnaire_page.handle_post(signing.make_token("c1"), form, dry_run=True)
-
-    text = "\n".join(m for cid, m in posted if cid == "c1")
-    assert text.startswith("📋 השאלון מולא:")
-    first_q = next(q for _s, q in qn.questions(defn))
-    assert f"• {first_q['label']}: {form[first_q['key']][0]}" in text
-    assert "🔹 " in text, "grouped by section"
-
-
-def test_the_comment_keeps_the_clients_words_skips_blanks_and_splits_when_long():
-    snap = [{"key": "a", "label": "שם העסק", "section": "פרטי העסק"},
-            {"key": "b", "label": "אתר", "section": "פרטי העסק"},
-            {"key": "c", "label": "סיפור", "section": "העסק שלך"}]
-    short = qn.to_comments(snap, {"a": "מכללה — עם מקף", "b": ""}, title="שאלון", doc_url="https://docs/x")
-    assert len(short) == 1
-    assert "• שם העסק: מכללה — עם מקף" in short[0], "the client's text verbatim"
-    assert "אתר" not in short[0] and "https://docs/x" in short[0]
-    cut = qn.to_comments(snap, {"a": "x" * 3000}, title="שאלון")
-    assert "(ההמשך במסמך)" in cut[0], "a very long answer is cut here, whole in the Doc"
-    many = [{"key": f"k{i}", "label": f"שאלה {i}", "section": "חלק"} for i in range(8)]
-    long = qn.to_comments(many, {f"k{i}": "y" * 1400 for i in range(8)}, title="שאלון")
-    assert len(long) == 2 and long[1].startswith("📋 השאלון, המשך:")
-    assert all(len(c) <= qn.COMMENT_LIMIT for c in long)
-    assert sum(c.count("• שאלה") for c in long) == 8, "nothing lost in the split"
+    questionnaire_page.handle_post(signing.make_token("c1"), _full_answers(defn), dry_run=True)
+    assert "התשובות בדרייב: https://docs.google.com/document/d/doc-mock/edit" in posted[0]

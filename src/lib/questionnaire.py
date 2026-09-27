@@ -307,45 +307,6 @@ def as_text(snap: list[dict[str, Any]], answers: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-#: A comment longer than this is split (at a section, else at a question): ClickUp
-#: takes long comments, but one wall of text is harder to read than a few.
-COMMENT_LIMIT = 8000
-#: One answer longer than this is cut in the comment; the full text is in the Doc.
-ANSWER_LIMIT = 1500
-
-
-def to_comments(snap: list[dict[str, Any]], answers: dict[str, Any], *, title: str,
-                doc_url: str = "") -> list[str]:
-    """The answers as ClickUp comments on the client's task: every answered question
-    under its section, so Dror reads them where he works, with the Doc's link.
-
-    The answers are the client's words, verbatim (a long answer is cut here, whole
-    in the Doc); blanks are omitted, as in the Doc.
-    """
-    head = f"📋 השאלון מולא: {title}" + (f"\nהתשובות גם כמסמך בדרייב: {doc_url}" if doc_url else "")
-    parts: list[str] = [head]
-    current = None
-    for q in snap:
-        value = display(answers.get(q["key"]))
-        if not value:
-            continue
-        if len(value) > ANSWER_LIMIT:
-            value = value[:ANSWER_LIMIT].rstrip() + "… (ההמשך במסמך)"
-        if q.get("section") != current:
-            current = q.get("section")
-            parts.append(f"\n🔹 {current}")
-        parts.append(f"• {q['label']}: {value}")
-    comments, chunk = [], ""
-    for part in parts:
-        if chunk and len(chunk) + len(part) + 1 > COMMENT_LIMIT:
-            comments.append(chunk)
-            chunk = "📋 השאלון, המשך:\n" + part.lstrip("\n")
-        else:
-            chunk = f"{chunk}\n{part}" if chunk else part
-    comments.append(chunk)
-    return comments
-
-
 def to_document_blocks(snap: list[dict[str, Any]], answers: dict[str, Any]) -> list[dict[str, Any]]:
     """The answers as document blocks (:mod:`branded_doc`): a heading per section,
     then each answered question with its answer.
