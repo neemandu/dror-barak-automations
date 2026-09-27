@@ -510,6 +510,10 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     # rejects non-ASCII filenames outright.
     attached = crm.attach_file(client_id, "signed_contract", pdf_bytes, f"signed-contract-{client_id}.pdf")
 
+    # What the client told us when signing, onto the task, before the status: `חתם`
+    # starts onboarding, which emails the questionnaire to the address ClickUp holds.
+    details = _write_back(crm, client, fields)
+
     # Only now advance the status: `חתם` is what triggers onboarding, and it must
     # not fire for a contract we failed to store.
     crm.update_fields(client_id, sub_status="signed")
@@ -517,7 +521,8 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         client_id,
         f"✍️ ההסכם נחתם על ידי הלקוח\n"
         f"מסמך: {link}\n"
-        f"טביעת אצבע: {audit['contract_sha256'][:16]}…\n"
+        + "".join(f"{line}\n" for line in details)
+        + f"טביעת אצבע: {audit['contract_sha256'][:16]}…\n"
         f"IP: {audit.get('ip') or 'לא נרשמה'}",
     )
     from .lib import reminder_tasks
@@ -532,6 +537,50 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
                                  link=link, copy_sent_to=copy_to, error="")
     log.info("signed", extra={"client_id": client_id, "link": link, "sha256": audit["contract_sha256"]})
     return {"link": link, "attached": bool(attached), "copy_sent_to": copy_to}
+
+
+def _e164(phone: str) -> str:
+    """ClickUp's Phone field wants +972…; clients type 050-…"""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if phone.strip().startswith("+"):
+        return "+" + digits
+    if digits.startswith("972"):
+        return "+" + digits
+    return "+972" + digits[1:] if digits.startswith("0") else "+" + digits
+
+
+def _write_back(crm: Any, client: dict[str, Any], fields: dict[str, str]) -> list[str]:
+    """Put what the client gave on the signing page where Dror works. Returns the
+    lines for the signing comment.
+
+    ClickUp has fields for the email and the phone: an empty one is filled (the
+    questionnaire goes to that address right after), a different one is left as
+    Dror set it and the difference is said. ID and address have no field, so they
+    go in the comment; they are in the signed PDF either way.
+    """
+    client_id = str(client.get("id") or "")
+    lines = []
+    ident, address = str(fields.get("client_business_id") or ""), str(fields.get("client_address") or "")
+    if ident or address:
+        lines.append("פרטים מההסכם: " + " · ".join(x for x in (f"ת.ז / ח.פ {ident}" if ident else "",
+                                                             f"כתובת {address}" if address else "") if x))
+    updates: dict[str, str] = {}
+    for key, field, label in (("client_email", "email", "מייל"), ("client_phone", "phone", "טלפון")):
+        given, known = str(fields.get(key) or "").strip(), str(client.get(field) or "").strip()
+        if not given:
+            continue
+        if not known:
+            updates[field] = _e164(given) if field == "phone" else given
+        elif (_e164(given) != _e164(known)) if field == "phone" else (given.casefold() != known.casefold()):
+            lines.append(f"{label} שהלקוח מסר: {given} (ב-ClickUp נשאר {known})")
+    if updates:
+        try:
+            crm.update_fields(client_id, **updates)
+            lines.append("נשמר ב-ClickUp מההסכם: " + ", ".join(
+                {"email": "מייל", "phone": "טלפון"}[k] for k in updates))
+        except Exception as exc:  # noqa: BLE001 - the contract is filed either way
+            log.warning("write_back_failed", extra={"client_id": client_id, "error": str(exc)})
+    return lines
 
 
 def _contracts_folder(folder_id: str) -> str:

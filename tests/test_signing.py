@@ -277,10 +277,11 @@ class _Crm:
         return {"ok": True}
 
     def update_fields(self, cid, **f):
-        self.calls.append(("status", f))
+        self.calls.append(("status", f) if "sub_status" in f else ("fields", f))
 
     def append_automation_log(self, cid, text):
         self.calls.append("comment")
+        self.calls.append(("comment-text", text))
 
 
 def _sign_only(monkeypatch, client_id):
@@ -514,3 +515,34 @@ def test_a_link_minted_without_the_code_table_still_opens_on_the_server(monkeypa
     token = signing.questionnaire_url("42").split("t=", 1)[1]
     assert "." in token, "without the table, the link must be self-contained"
     assert signing.resolve(token) == "42"
+
+
+def test_what_the_client_gave_reaches_clickup_before_the_status(monkeypatch):
+    """Onboarding emails the questionnaire to ClickUp's address the moment the status
+    is חתם: an address given only on the signing page must be there first."""
+    from src import sign_page
+
+    calls = []
+    _sign_only(monkeypatch, "c1")
+    _filing_fakes(monkeypatch, calls)
+    sign_page.file_contract("c1")
+    fields = next(c for c in calls if isinstance(c, tuple) and c[0] == "fields")
+    assert fields[1] == {"email": "a@b.co", "phone": "+972501234567"}
+    assert calls.index(fields) < calls.index(("status", {"sub_status": "signed"}))
+    text = next(c[1] for c in calls if isinstance(c, tuple) and c[0] == "comment-text")
+    assert "ת.ז / ח.פ 514111111" in text and "כתובת הרצל 1" in text and "נשמר ב-ClickUp מההסכם: מייל, טלפון" in text
+
+
+def test_a_different_address_in_clickup_is_kept_and_the_difference_said(monkeypatch):
+    from src import sign_page
+
+    calls = []
+    _sign_only(monkeypatch, "c1")
+    _filing_fakes(monkeypatch, calls)
+    monkeypatch.setattr(_Crm, "get_client", lambda self, cid: {"id": cid, "name": "מכללת אלפא", "first_name": "אבי",
+                                                               "email": "office@alpha.co", "phone": "+972501234567"})
+    sign_page.file_contract("c1")
+    assert not [c for c in calls if isinstance(c, tuple) and c[0] == "fields"], "Dror's data is not overwritten"
+    text = next(c[1] for c in calls if isinstance(c, tuple) and c[0] == "comment-text")
+    assert "מייל שהלקוח מסר: a@b.co (ב-ClickUp נשאר office@alpha.co)" in text
+    assert "טלפון שהלקוח מסר" not in text, "the same phone in another format is not a difference"
