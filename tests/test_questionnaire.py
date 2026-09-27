@@ -219,37 +219,46 @@ def test_the_preview_never_submits():
     assert "data-preview" in page and 'action="#"' in page and "תצוגה מקדימה" in page
 
 
-def test_the_answers_pdf_goes_on_the_clickup_task(monkeypatch):
-    """Dror works in ClickUp: the answers are on the client's task as the PDF of their
-    Doc, and the comment is one line."""
+def _submit(monkeypatch, *, field: bool, task_attach_fails: bool = False):
     from src import questionnaire_page
     from src.lib import tasks
     from src.lib.clients.clickup import ClickUpClient
     from src.lib.clients.crm import CrmClient
 
-    attached, posted = [], []
+    seen = {"field": [], "task": [], "comments": []}
     monkeypatch.setattr(tasks, "dispatch", lambda name, **kw: None)
-    monkeypatch.setattr(ClickUpClient, "attach", lambda self, tid, data, name, content_type="application/pdf":
-                        attached.append((tid, name, data[:4])))
-    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: posted.append(msg))
+    monkeypatch.setattr(CrmClient, "attach_file", lambda self, cid, key, data, name:
+                        seen["field"].append((cid, key, name, data[:4])) or {"id": "a1"} if field
+                        else {"skipped": "no questionnaire_answers field on the list"})
+
+    def attach(self, tid, data, name, content_type="application/pdf"):
+        if task_attach_fails:
+            raise RuntimeError("ClickUp down")
+        seen["task"].append((tid, name))
+
+    monkeypatch.setattr(ClickUpClient, "attach", attach)
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: seen["comments"].append(msg))
     defn = store.get_definition(store.default_id())
     questionnaire_page.handle_post(signing.make_token("c1"), _full_answers(defn), dry_run=True)
-
-    assert attached and attached[0][0] == "c1" and attached[0][2] == b"%PDF"
-    assert attached[0][1].isascii() and attached[0][1].startswith("questionnaire-answers-")
-    assert posted == [f"📋 השאלון מולא: {defn['title']}. התשובות מצורפות למשימה כ-PDF."]
+    return seen
 
 
-def test_without_the_pdf_the_comment_links_to_the_doc(monkeypatch):
-    from src import questionnaire_page
-    from src.lib import tasks
-    from src.lib.clients.clickup import ClickUpClient
-    from src.lib.clients.crm import CrmClient
+def test_the_answers_pdf_goes_in_its_own_column_like_the_signed_contract(monkeypatch):
+    seen = _submit(monkeypatch, field=True)
+    cid, key, name, head = seen["field"][0]
+    assert (cid, key, head) == ("c1", "questionnaire_answers", b"%PDF")
+    assert name.isascii() and name.startswith("questionnaire-answers-")
+    assert not seen["task"] and not seen["comments"], "the column says it: no comment"
 
-    posted = []
-    monkeypatch.setattr(tasks, "dispatch", lambda name, **kw: None)
-    monkeypatch.setattr(ClickUpClient, "attach", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("ClickUp down")))
-    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: posted.append(msg))
-    defn = store.get_definition(store.default_id())
-    questionnaire_page.handle_post(signing.make_token("c1"), _full_answers(defn), dry_run=True)
-    assert "התשובות בדרייב: https://docs.google.com/document/d/doc-mock/edit" in posted[0]
+
+def test_until_the_column_exists_the_pdf_is_attached_to_the_task(monkeypatch):
+    seen = _submit(monkeypatch, field=False)
+    assert seen["task"] and seen["task"][0][0] == "c1" and not seen["comments"]
+
+
+def test_a_pdf_that_cannot_be_attached_is_logged_not_commented(monkeypatch, tmp_path):
+    from src.lib import run_log
+
+    seen = _submit(monkeypatch, field=False, task_attach_fails=True)
+    assert not seen["comments"]
+    assert any(e.get("action") == "questionnaire_pdf_failed" for e in run_log.read_all())

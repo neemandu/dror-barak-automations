@@ -51,6 +51,9 @@ ALIASES: dict[str, list[str]] = {
         "נתיב לגוגל דרייב", "תיקיית גוגל דרייב", "גוגל דרייב",
     ],
     "signed_contract": ["signed contract", "contract", "חוזה חתום", "חוזה"],
+    # The questionnaire answers' PDF, an Attachment field like the signed contract.
+    "questionnaire_answers": ["questionnaire answers", "questionnaire", "תשובות שאלון", "תשובות לשאלון",
+                              "תשובות השאלון", "שאלון", "שאלון מולא"],
     "recordings_path": ["recordings", "נתיב הקלטות", "הקלטות"],
     # The Meta ad account for the monthly campaign report (T7), the act_ id.
     # NOTE: normalize() casefolds, so a "Meta" the user typed arrives as "meta" —

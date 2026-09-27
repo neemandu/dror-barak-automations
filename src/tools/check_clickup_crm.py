@@ -107,6 +107,8 @@ MISSING_MEANS = {
     "price_strategy": "Currency. Without both price fields, the contract prices strategy alone, from the monthly price",
     "price_campaigns": "Currency. Without it, a contract never carries a campaigns line",
     "service_type": "shown on the client card and given to the strategy and the campaign report",
+    "questionnaire_answers": "Attachment, like חוזה חתום. Until it exists the answers PDF is "
+                             "attached to the task itself",
 }
 
 #: Actions whose button lives on another list, not on the clients list checked here.

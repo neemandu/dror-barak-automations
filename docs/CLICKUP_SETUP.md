@@ -124,6 +124,7 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 | `סוג שירות` | Text | Strategy bot, campaign report |
 | `תיקיית Drive` / `נתיב לגוגל דרייב` | **URL** | Onboarding writes the client's folder here |
 | `חוזה חתום` | **URL** | The signed contract link |
+| `תשובות שאלון` | **Attachment** | The questionnaire answers' PDF (until it exists, it goes to the task's attachments) |
 | `נתיב הקלטות` | Text | Meeting recordings |
 | `סטטוס Morning` | Text | Historical — Morning is out of scope; nothing writes it |
 | `מזהה Morning` / `מזהה מורנינג` | Text | Historical, same |

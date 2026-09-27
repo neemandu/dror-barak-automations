@@ -421,20 +421,25 @@ def _date(iso: Any) -> str:
     return f"{text[8:10]}.{text[5:7]}.{text[0:4]}" if len(text) == 10 else text
 
 
-def _attach_answers_pdf(client_id: str, doc: dict[str, str], auto: Any, *, dry_run: bool) -> bool:
-    """The answers Doc as a PDF on the client's task. Best-effort: the answers are
-    stored and in Drive either way, and the comment links there instead."""
+def _attach_answers_pdf(crm: Any, client_id: str, doc: dict[str, str], auto: Any, *, dry_run: bool) -> bool:
+    """The answers Doc as a PDF in the task's `תשובות שאלון` field, like the signed
+    contract in `חוזה חתום`; on the task's attachments until that field exists.
+    Best-effort: the answers are stored, in Drive and on the dashboard either way."""
     if not doc.get("id"):
         return False
     try:
         from datetime import date
 
         from .lib import task_docs
-        from .lib.clients.clickup import ClickUpClient
 
         data = b"%PDF-dry-run" if dry_run else task_docs.pdf_of(doc["id"])
         # ClickUp refuses a filename that is not ASCII.
-        ClickUpClient(dry_run=dry_run).attach(client_id, data, f"questionnaire-answers-{date.today():%Y-%m-%d}.pdf")
+        name = f"questionnaire-answers-{date.today():%Y-%m-%d}.pdf"
+        if "skipped" not in crm.attach_file(client_id, "questionnaire_answers", data, name):
+            return True
+        from .lib.clients.clickup import ClickUpClient
+
+        ClickUpClient(dry_run=dry_run).attach(client_id, data, name)
         return True
     except Exception as exc:  # noqa: BLE001
         auto.log_action("questionnaire_pdf_failed", "error", client_id=client_id, detail=str(exc))
@@ -467,11 +472,9 @@ def _finalise(client_id: str, client: dict[str, Any], defn: dict[str, Any],
         auto.log_action("questionnaire_doc_failed", "error", client_id=client_id, detail=str(exc))
 
     questionnaire_store.record_answer(client_id, name, defn, answers, doc_url=doc["url"])
-    # The answers on the task itself, as the PDF of the same Doc: Dror works in ClickUp.
-    attached = _attach_answers_pdf(client_id, doc, auto, dry_run=dry_run)
-    crm.append_automation_log(client_id, f"📋 השאלון מולא: {title}. " + (
-        "התשובות מצורפות למשימה כ-PDF." if attached else
-        f"התשובות בדרייב: {doc['url']}" if doc["url"] else "התשובות שמורות בדשבורד, בלשונית התשובות."))
+    # The answers on the task, as the PDF of the same Doc, in their own column (no
+    # comment: the column says it). Dror works in ClickUp.
+    _attach_answers_pdf(crm, client_id, doc, auto, dry_run=dry_run)
     auto.log_action("questionnaire_answered", client_id=client_id,
                     detail=str(defn.get("title") or ""), url=doc["url"] or None)
 
