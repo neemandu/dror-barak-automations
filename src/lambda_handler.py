@@ -123,6 +123,13 @@ def route(
         return lead_to_contacts.run(task_id, dry_run=dry_run)
 
     if event in ("taskUpdated", "taskStatusUpdated"):
+        # The phone is usually typed after the task is made: save it when it
+        # appears (once per number; see lead_to_contacts). Best-effort: a Contacts
+        # failure must not stop onboarding or the templates below.
+        try:
+            lead_to_contacts.run(task_id, dry_run=dry_run, on_update=True)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("contact_not_saved", extra={"client_id": task_id, "error": str(exc)})
         sub = _sub_status_of(task_id, dry_run)
         if sub == SUB_SIGNED:
             # Layer 2: distinct events can mean the same thing. Moving a client
