@@ -29,7 +29,9 @@ Every answer is a version, and each version is:
 
 * a branded **Google Doc** in the client's Drive folder (:mod:`src.lib.task_docs`),
   named ``<task> - גרסה N``;
-* a **PDF copy** attached to the task (ClickUp attaches files, not Drive links);
+* a **PDF copy** attached to the task, only when Dror asks for one: in the task, in
+  his note, or a reply that is just "PDF" (which attaches the current version with
+  no new run; ClickUp attaches files, not Drive links);
 * a **comment** with the Doc's link and the text (a preview if it is long). The
   first answer opens a thread; revisions are replies in it.
 
@@ -108,7 +110,8 @@ _SYSTEM = (
     "as a comment on the task, so write only the deliverable itself, in Markdown "
     "(headings, lists, tables render in the Doc), with no chat framing such as "
     "'here is' or 'I created'. If you left a Gmail draft, add one short line at the "
-    "end saying so.\n\n"
+    "end saying so. When Dror asks for a PDF, the system attaches a PDF copy of the "
+    "Doc to the task; just write the deliverable.\n\n"
     "When Dror gives feedback on an earlier version, write the full revised "
     "deliverable, not only the changes."
 )
@@ -241,6 +244,45 @@ def thread_of(all_threads: list[dict[str, Any]], comment_id: Optional[str],
 
 
 # ------------------------------------------------------------- actions
+
+
+_PDF = re.compile(r"[בכהל]?-?(?<![A-Za-z])pdf(?![A-Za-z])|פי ?די ?אף|פידיאף", re.IGNORECASE)
+# Words around "PDF" in a reply that asks for nothing else ("תצרף PDF בבקשה").
+_PDF_FILLER = {"תצרף", "צרף", "תצרפי", "תוסיף", "הוסף", "תוסיפי", "שלח", "תשלח", "תעשה", "תכין",
+               "תן", "תני", "לי", "את", "זה", "זו", "בבקשה", "גם", "קובץ", "כקובץ", "של", "המסמך",
+               "מסמך", "אפשר", "רוצה", "please", "attach", "send", "me", "a", "the", "as", "file"}
+
+
+def wants_pdf(text: str) -> bool:
+    """Dror asked for a PDF: the task or his note says so. Versions are Google Docs;
+    a PDF is attached to the task only on request."""
+    return bool(_PDF.search(text or ""))
+
+
+def pdf_only(text: str) -> bool:
+    """A note that asks for the PDF of the current version and nothing else."""
+    if not wants_pdf(text):
+        return False
+    rest = _PDF.sub(" ", text)
+    words = [w.strip(string.punctuation + "׳״?!.,") for w in rest.split()]
+    return all(not w or w.lower() in _PDF_FILLER for w in words)
+
+
+def attach_latest(clickup: ClickUpClient, task_id: str, thread: dict[str, Any],
+                  auto: Automation, dry_run: bool) -> dict[str, Any]:
+    """Attach the PDF of the thread's latest version, with no new run."""
+    root = str(thread["root"]["id"])
+    latest = next((c for c in reversed([thread["root"], *thread["replies"]]) if _is_draft(c)), None)
+    doc_id = task_docs.doc_id_in(_text(latest)) if latest else None
+    if not doc_id:
+        clickup.reply(root, "❌ לא מצאתי בשרשור הזה גרסה עם מסמך Google שאפשר להפוך ל-PDF.")
+        return {"ignored": "no Doc to export"}
+    found = re.search(r"גרסה (\d+)", _text(latest))
+    version = int(found.group(1)) if found else versions([thread])
+    attached = _attach_pdf(clickup, task_id, doc_id, version, auto, dry_run)
+    if attached:
+        clickup.reply(root, f"🤖 ה-PDF של גרסה {version} מצורף למשימה (claude-v{version}.pdf).")
+    return {"attached": attached, "version": version}
 
 
 def is_approval(text: str) -> bool:
@@ -399,6 +441,8 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
         feedback = instruction
     if feedback and thread is None and all_threads:
         thread = all_threads[-1]
+    if feedback and thread is not None and pdf_only(feedback):
+        return attach_latest(clickup, task_id, thread, auto, dry_run)
 
     crm = CrmClient(dry_run=dry_run)
     ai = AnthropicClient(dry_run=dry_run)
@@ -470,7 +514,9 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
             pass
         raise
 
-    attached = _attach_pdf(clickup, task_id, doc["id"], version, auto, dry_run)
+    # The Doc is the deliverable; a PDF copy only when Dror asked for one.
+    asked = wants_pdf(f"{task.get('name', '')}\n{task.get('description') or ''}\n{feedback}")
+    attached = _attach_pdf(clickup, task_id, doc["id"], version, auto, dry_run) if asked else False
     auto.log_action("draft_revised" if thread is not None else "draft_posted",
                     client_id=task_id, detail=f"{worker.name}: {name}", url=doc["url"])
     return {"task": task.get("name", ""), "client": (client or {}).get("name"),

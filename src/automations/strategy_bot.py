@@ -113,7 +113,6 @@ def _deliver_as_task(crm: CrmClient, client: dict[str, Any], strategy: str,
                            subfolder=kind.subfolder, dry_run=dry_run)
     review_tasks.post_version(clickup, task_id,
                               bot._comment_body(version, saved["url"], strategy, workers.STRATEGIST.name))
-    bot._attach_pdf(clickup, task_id, saved["id"], version, Automation(NAME, dry_run=dry_run), dry_run)
     review_tasks.to_review(clickup, task_id)
     return task_id, saved
 

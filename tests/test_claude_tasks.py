@@ -74,13 +74,13 @@ def _person(cid, text):
 # ------------------------------------------------------------ versions
 
 
-def test_a_new_task_gets_version_1_as_a_doc_a_pdf_and_a_top_level_comment(monkeypatch, read_log):
+def test_a_new_task_gets_version_1_as_a_doc_and_a_top_level_comment(monkeypatch, read_log):
     board = _Board(monkeypatch)
     out = bot.run("t1", dry_run=True)
     assert out["version"] == 1 and not out["revised"]
     assert len(board.posted) == 1 and board.replied == []
     assert board.posted[0].startswith("🤖 Claude: גרסה 1 · כותב תוכן\nhttps://docs.google.com/document/d/")
-    assert board.attached == ["claude-v1.pdf"]
+    assert board.attached == []  # a PDF only when Dror asks for one
     entry = next(e for e in read_log() if e["action"] == "draft_posted")
     assert entry["url"].startswith("https://docs.google.com/document/d/")
 
@@ -92,7 +92,7 @@ def test_a_reply_in_claudes_thread_is_feedback_answered_in_the_thread(monkeypatc
     assert out["revised"] and out["version"] == 2
     assert board.posted == [] and board.replied[0][0] == "C1"
     assert board.replied[0][1].startswith("🤖 Claude: גרסה 2")
-    assert board.attached == ["claude-v2.pdf"]
+    assert board.attached == []
     assert any(e["action"] == "draft_revised" for e in read_log())
 
 
@@ -151,7 +151,7 @@ def test_a_linked_client_is_in_the_prompt(monkeypatch):
 
 
 def test_a_failed_pdf_does_not_lose_the_answer(monkeypatch, read_log):
-    board = _Board(monkeypatch)
+    board = _Board(monkeypatch, task={"id": "t1", "name": "3 מודעות", "description": "כולל PDF"})
     monkeypatch.setattr(ClickUpClient, "attach", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("413")))
     out = bot.run("t1", dry_run=True)
     assert out["attached"] is False and len(board.posted) == 1
@@ -290,3 +290,45 @@ def test_a_new_version_is_saved_without_a_copied_title(monkeypatch):
     _Board(monkeypatch)
     bot.run("t1", dry_run=True)
     assert saved == ["# מודעה 1\nטקסט"]
+
+
+# ------------------------------------------------------------ PDF on request
+
+
+@pytest.mark.parametrize("text,wanted,only", [
+    ("PDF", True, True),
+    ("תצרף PDF בבקשה", True, True),
+    ("אפשר ה-PDF?", True, True),
+    ("קצר יותר ותצרף PDF", True, False),
+    ("כתוב 3 מודעות, וצרף כ-PDF", True, False),
+    ("pdfs", False, False),
+    ("קצר יותר", False, False),
+])
+def test_what_counts_as_asking_for_a_pdf(text, wanted, only):
+    assert bot.wants_pdf(text) is wanted and bot.pdf_only(text) is only
+
+
+def test_a_task_that_asks_for_a_pdf_gets_one(monkeypatch):
+    board = _Board(monkeypatch, task={"id": "t1", "name": "סיכום פגישה", "description": "תכין גם PDF"})
+    out = bot.run("t1", dry_run=True)
+    assert out["attached"] and board.attached == ["claude-v1.pdf"]
+
+
+def test_feedback_that_asks_for_a_pdf_revises_and_attaches(monkeypatch):
+    root = {**_draft("C1", 1), "reply_count": 1}
+    board = _Board(monkeypatch, top=[root], replies={"C1": [_person("R1", "קצר יותר ותצרף PDF")]})
+    out = bot.run("t1", comment="קצר יותר ותצרף PDF", comment_id="R1", dry_run=True)
+    assert out["version"] == 2 and board.attached == ["claude-v2.pdf"]
+
+
+def test_a_reply_asking_only_for_the_pdf_attaches_it_without_a_run(monkeypatch):
+    from src.lib.clients.anthropic_ai import AnthropicClient
+
+    root = {**_draft("C1", 1), "reply_count": 2}
+    board = _Board(monkeypatch, top=[root],
+                   replies={"C1": [_draft("R1", 2), _person("R2", "תצרף PDF")]})
+    monkeypatch.setattr(AnthropicClient, "create_message", lambda *a, **k: pytest.fail("billed Opus"))
+    out = bot.run("t1", comment="תצרף PDF", comment_id="R2", dry_run=True)
+    assert out == {"attached": True, "version": 2}
+    assert board.attached == ["claude-v2.pdf"]
+    assert board.replied[-1][1].startswith("🤖") and "גרסה 2" in board.replied[-1][1]

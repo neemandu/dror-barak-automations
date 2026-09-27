@@ -138,7 +138,7 @@ def test_the_strategy_arrives_as_a_version_on_its_task(monkeypatch, lists, answe
     assert out["task_id"] and board.created[0]["name"] == "אסטרטגיה: מכללת דוגמה"
     root = board.top[-1]["comment_text"]
     assert root.startswith(f"{bot.DRAFT_PREFIX} גרסה 1 · {workers.STRATEGIST.name}")
-    assert board.attached == ["claude-v1.pdf"]
+    assert board.attached == []  # the Doc is the strategy; a PDF on request
     assert workers.STATUS_REVIEW in board.statuses
     assert no_email_to_dror == []  # the task is the notice, not an email
 
