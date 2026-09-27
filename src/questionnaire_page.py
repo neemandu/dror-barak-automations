@@ -447,7 +447,12 @@ def _finalise(client_id: str, client: dict[str, Any], defn: dict[str, Any],
         auto.log_action("questionnaire_doc_failed", "error", client_id=client_id, detail=str(exc))
 
     questionnaire_store.record_answer(client_id, name, defn, answers, doc_url=doc["url"])
-    crm.append_automation_log(client_id, "📋 השאלון מולא" + (f" - התשובות בדרייב:\n{doc['url']}" if doc["url"] else ""))
+    # The answers themselves on the task, not only a link: Dror works in ClickUp.
+    try:
+        for comment in questionnaire.to_comments(snap, answers, title=title, doc_url=doc["url"]):
+            crm.append_automation_log(client_id, comment)
+    except Exception as exc:  # noqa: BLE001 - the answers are stored and in Drive either way
+        auto.log_action("questionnaire_comment_failed", "error", client_id=client_id, detail=str(exc))
     auto.log_action("questionnaire_answered", client_id=client_id,
                     detail=str(defn.get("title") or ""), url=doc["url"] or None)
 
