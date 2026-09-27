@@ -499,6 +499,12 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
         doc = task_docs.save(name, draft, client=client, crm=crm,
                               subfolder=kind.subfolder if kind else "", dry_run=dry_run)
         root = post(_comment_body(version, doc["url"], draft, worker.name))
+        if kind is review_tasks.STRATEGY and client_id:
+            # The revised strategy in the client's strategy column too (client_files).
+            from ..lib import client_files
+
+            client_files.attach_doc(crm, client_id, "strategy_pdf", doc.get("id", ""),
+                                    tag=f"v{version}", auto=auto, dry_run=dry_run)
         for made in tools.drafts:
             card = card_text(made)
             clickup.reply(root, card) if root else clickup.comment(task_id, card)

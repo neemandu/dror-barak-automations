@@ -329,9 +329,26 @@ def handle_action(
         if not idempotency.claim(once):
             return {"ok": True, "skipped": f"{action.key} already ran for this client"}
 
+    # Pressed again while the last press is fresh (a send) or still running (a
+    # build): the real work is not repeated. Said on the task, answered 200.
+    press = actions.press_key(action.key, task_id)
+    window = actions.PRESS_WINDOW_S.get(action.key)
+    if window and not idempotency.claim(press, ttl=window):
+        idempotency.complete(key)
+        note = (f"⏳ {action.label}: נשלח לפני פחות מ-{window // 60} דקות, אז הלחיצה הזו לא שלחה שוב. "
+                f"אם באמת צריך לשלוח שוב, אפשר ללחוץ שוב בעוד כמה דקות."
+                if action.key in actions.SENDS else
+                f"⏳ {action.label}: עדיין בעבודה מהלחיצה הקודמת, אז הלחיצה הזו לא הריצה שוב. "
+                f"התוצאה תופיע כאן כשתסתיים.")
+        _comment(task_id, note, dry_run)
+        log.info("press_ignored", extra={"action": action.key, "task_id": task_id})
+        return {"ok": False, "action": action.key, "refused": "pressed again too soon"}
+
     try:
         result = action.run(task_id, dry_run)
     except actions.Refused as exc:
+        if window:
+            idempotency.release(press)  # nothing happened: pressing again after the fix must work
         # Declined for a reason a retry will not change (no email, no price): say
         # so once and answer 200, or ClickUp calls again four times and each call
         # fails and comments the same way. Pressing again after the fix is a new press.
@@ -344,6 +361,8 @@ def handle_action(
         # Anything else may be a blip (Drive, SMTP, ClickUp): give the claim back and
         # answer an error, so ClickUp's retry can do the work.
         idempotency.release(key)
+        if window:
+            idempotency.release(press)
         # Dror pressed a button and is waiting. Silence would leave him wondering
         # whether the quote went out; say so where he pressed it.
         _comment(task_id, f"❌ {action.label} נכשל: {exc}", dry_run)

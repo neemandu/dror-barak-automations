@@ -89,6 +89,9 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
             title="אסטרטגיה שיווקית", subtitle=deliverables.prepared_for(name), dry_run=dry_run)
         _notify_dror(auto, client_id, name, saved["url"], dry_run=dry_run)
 
+    from ..lib import client_files
+
+    client_files.attach_doc(crm, client_id, "strategy_pdf", saved.get("id", ""), auto=auto, dry_run=dry_run)
     where = f"\nלבדיקה ותיקונים: {task_url(task_id)}" if task_id else ""
     crm.append_automation_log(client_id, f"🤖 טיוטת האסטרטגיה מוכנה לבדיקה\n{saved['url']}{where}")
     auto.log_action(

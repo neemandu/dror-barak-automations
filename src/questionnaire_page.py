@@ -432,9 +432,10 @@ def _attach_answers_pdf(crm: Any, client_id: str, doc: dict[str, str], auto: Any
 
         from .lib import task_docs
 
+        from .lib import client_files
+
         data = b"%PDF-dry-run" if dry_run else task_docs.pdf_of(doc["id"])
-        # ClickUp refuses a filename that is not ASCII.
-        name = f"questionnaire-answers-{date.today():%Y-%m-%d}.pdf"
+        name = client_files.file_name("questionnaire_answers")
         if "skipped" not in crm.attach_file(client_id, "questionnaire_answers", data, name):
             return True
         from .lib.clients.clickup import ClickUpClient

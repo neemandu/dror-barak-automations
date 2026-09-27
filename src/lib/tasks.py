@@ -80,3 +80,13 @@ def run(name: str, args: dict[str, Any], *, dry_run: bool = False) -> Any:
             except Exception:  # noqa: BLE001 - the run-log already has it
                 pass
         raise
+    finally:
+        # A build started by a button frees the button when it is done (actions.PRESS_WINDOW_S).
+        if args.get("client_id"):
+            try:
+                from . import actions, idempotency
+
+                if name in actions.PRESS_WINDOW_S and name not in actions.SENDS:
+                    idempotency.release(actions.press_key(name, str(args["client_id"])))
+            except Exception:  # noqa: BLE001 - the window still expires on its own
+                pass

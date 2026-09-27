@@ -81,7 +81,10 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
         # the link, and the one-signature guard opens for this one.
         contract_store.supersede(client_id)
         idempotency.release(idempotency.guard("signed_contract", client_id))
-    crm.update_fields(client_id, sub_status=SUB_QUOTE_SENT)
+    import time
+
+    # The date in its own column (when the list has one): a second press is not a surprise.
+    crm.update_fields(client_id, sub_status=SUB_QUOTE_SENT, quote_sent_at=int(time.time() * 1000))
     how = (f"נשלח ב{delivered}" if delivered else
            "הקישור נוצר בדשבורד, והשליחה ללקוח ידנית" if not email else
            "לא נשלח אוטומטית, יש לשלוח את הקישור ללקוח ידנית")

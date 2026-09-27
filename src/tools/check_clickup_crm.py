@@ -109,6 +109,11 @@ MISSING_MEANS = {
     "service_type": "shown on the client card and given to the strategy and the campaign report",
     "questionnaire_answers": "Attachment, like חוזה חתום. Until it exists the answers PDF is "
                              "attached to the task itself",
+    "strategy_pdf": "Attachment. Each strategy version's PDF goes here",
+    "campaign_report_pdf": "Attachment. Each month's campaign report PDF goes here",
+    "social_report_pdf": "Attachment. The social-media prep report's PDF goes here",
+    "quote_sent_at": "Date. Filled when the contract is sent, so a second press is not a surprise",
+    "questionnaire_sent_at": "Date. Filled when the questionnaire is sent",
 }
 
 #: Actions whose button lives on another list, not on the clients list checked here.

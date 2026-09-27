@@ -62,6 +62,12 @@ def send_link(auto: Automation, crm: CrmClient, client: dict[str, Any],
         questionnaire_store.record_sent(
             client_id, str(client.get("name") or client_id),
             questionnaire_store.definition_for_client(client_id)["id"])
+        try:  # the date in its own column, when the list has one
+            import time
+
+            crm.update_fields(client_id, questionnaire_sent_at=int(time.time() * 1000))
+        except Exception:  # noqa: BLE001 - the questionnaire went out; the date is a nicety
+            pass
         crm.append_automation_log(client_id, f"📋 שאלון האסטרטגיה נשלח ל־{to}")
         auto.log_action("questionnaire_sent", client_id=client_id, detail=to)
         return None

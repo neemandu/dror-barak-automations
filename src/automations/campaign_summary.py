@@ -178,6 +178,10 @@ def run(
         suffix = " - מתוקן" if feedback else ""
         saved = pdf.upload_pdf(pdf_bytes, f"דוח קמפיינים - {label}{suffix}.pdf", folder["id"])
         drive_url = saved.get("webViewLink") or drive_url
+        from ..lib import client_files
+
+        client_files.attach_pdf(crm, str(client["id"]), "campaign_report_pdf", pdf_bytes,
+                                tag=f"{month}{'-revised' if feedback else ''}", auto=auto)
 
     # To Dror for approval: as a task on משימות, where his "שלח" sends it to the
     # client and a reply revises it; by email when there is no such list, or the

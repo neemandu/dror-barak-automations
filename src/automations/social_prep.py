@@ -130,6 +130,9 @@ def run(
     saved = deliverables.save_markdown_doc(
         crm, client, report, file_name=f"דוח הכנה לרשתות - {name}",
         title="דוח הכנה: נוכחות דיגיטלית", subtitle=deliverables.prepared_for(name), dry_run=dry_run)
+    from ..lib import client_files
+
+    client_files.attach_doc(crm, client_id, "social_report_pdf", saved.get("id", ""), auto=auto, dry_run=dry_run)
     crm.append_automation_log(
         client_id, f"🔎 דוח ההכנה לרשתות מוכן ({len(analyses)} ערוצים)\n{saved['url']}")
     auto.log_action("prep_report_ready", client_id=client_id,

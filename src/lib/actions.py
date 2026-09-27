@@ -29,6 +29,18 @@ from __future__ import annotations
 from typing import Any, Callable, NamedTuple, Optional
 
 
+#: A second press of the same button for the same client inside this window is not
+#: run (a double click; the send is real). Sends keep the window; a build frees it
+#: when it finishes (src/lib/tasks.py), so only an overlapping run is refused.
+PRESS_WINDOW_S = {"send_quote": 10 * 60, "send_questionnaire": 10 * 60,
+                  "social_prep": 30 * 60, "strategy_bot": 30 * 60, "campaign_summary": 30 * 60}
+SENDS = {"send_quote", "send_questionnaire"}
+
+
+def press_key(action_key: str, task_id: str) -> str:
+    return f"press:{action_key}:{task_id}"
+
+
 class Refused(ValueError):
     """The action declined for a reason a retry will not fix: no email, no price.
 

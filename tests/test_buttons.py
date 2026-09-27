@@ -146,12 +146,55 @@ def test_a_retried_click_only_sends_once(ran):
     assert second["duplicate"] is True
 
 
-def test_a_second_deliberate_press_does_send_again(ran):
+def test_a_second_deliberate_press_does_send_again(ran, monkeypatch):
     # Dror revises the quote and presses again. This MUST work -- over-zealous
     # de-duplication would silently refuse to send the corrected quote.
+    import time as _time
+
+    from src.lib import idempotency
+
     lambda_handler.handle_action("send_quote", body(date="1750000000000"), TOKEN)
+    later = _time.time() + 11 * 60  # past the double-click window
+    monkeypatch.setattr(idempotency.time, "time", lambda: later)
     lambda_handler.handle_action("send_quote", body(date="1750000999999"), TOKEN)
     assert len(ran) == 2
+
+
+def test_a_double_click_does_not_send_twice(monkeypatch, ran):
+    comments = []
+    monkeypatch.setattr(lambda_handler, "_comment", lambda tid, msg, dry: comments.append(msg))
+    lambda_handler.handle_action("send_quote", body(date="1750000000000"), TOKEN)
+    second = lambda_handler.handle_action("send_quote", body(date="1750000004000"), TOKEN)
+    assert len(ran) == 1 and second["ok"] is False
+    assert "לא שלחה שוב" in comments[-1]
+
+
+def test_a_refused_press_can_be_pressed_again_at_once(monkeypatch):
+    """No email: Dror fills it in and presses again. That press must run."""
+    attempts = []
+
+    def once_refused(cid, dry):
+        attempts.append(cid)
+        if len(attempts) == 1:
+            raise actions.Refused("אין כתובת מייל ללקוח")
+        return {"ok": True}
+
+    monkeypatch.setitem(actions._RUNNERS, "send_questionnaire", once_refused)
+    monkeypatch.setattr(lambda_handler, "_comment", lambda *a, **k: None)
+    lambda_handler.handle_action("send_questionnaire", body(date="1750000000000"), TOKEN)
+    lambda_handler.handle_action("send_questionnaire", body(date="1750000060000"), TOKEN)
+    assert len(attempts) == 2
+
+
+def test_a_build_frees_its_button_when_it_finishes(monkeypatch):
+    from src.lib import idempotency, tasks
+
+    monkeypatch.setattr(tasks, "_registry", lambda: {"strategy_bot": ("בניית אסטרטגיה", lambda client_id, dry_run: {})})
+    press = actions.press_key("strategy_bot", "t1")
+    assert idempotency.claim(press, ttl=1800)
+    assert not idempotency.claim(press, ttl=1800), "while it runs, a second press is refused"
+    tasks.run("strategy_bot", {"client_id": "t1"}, dry_run=True)
+    assert idempotency.claim(press, ttl=1800), "done: the button works again"
 
 
 def test_different_clients_do_not_block_each_other(ran):

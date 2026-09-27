@@ -51,7 +51,8 @@ __all__ = [
 REQUIRED_FIELDS = ["phone", "sub_status", "monthly_price"]
 OPTIONAL_FIELDS = [
     "email", "price_strategy", "price_campaigns", "service_type", "drive_folder", "signed_contract",
-    "questionnaire_answers",
+    "questionnaire_answers", "strategy_pdf", "campaign_report_pdf", "social_report_pdf",
+    "quote_sent_at", "questionnaire_sent_at",
     "recordings_path", "meta_ad_account",
 ]
 

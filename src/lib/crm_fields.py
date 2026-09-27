@@ -51,6 +51,13 @@ ALIASES: dict[str, list[str]] = {
         "נתיב לגוגל דרייב", "תיקיית גוגל דרייב", "גוגל דרייב",
     ],
     "signed_contract": ["signed contract", "contract", "חוזה חתום", "חוזה"],
+    # The documents the system made, each an Attachment field (src/lib/client_files.py).
+    "strategy_pdf": ["strategy", "strategy pdf", "אסטרטגיה", "האסטרטגיה", "מסמך אסטרטגיה"],
+    "campaign_report_pdf": ["campaign report", "דוח קמפיין", "דוח קמפיינים", "דוחות קמפיין"],
+    "social_report_pdf": ["social report", "דוח רשתות", "דוח הכנה", "דוח הכנה לרשתות"],
+    # When each send went out, filled by the system (Date fields).
+    "quote_sent_at": ["quote sent at", "חוזה נשלח", "הצעה נשלחה", "תאריך שליחת חוזה"],
+    "questionnaire_sent_at": ["questionnaire sent at", "שאלון נשלח", "תאריך שליחת שאלון"],
     # The questionnaire answers' PDF, an Attachment field like the signed contract.
     "questionnaire_answers": ["questionnaire answers", "questionnaire", "תשובות שאלון", "תשובות לשאלון",
                               "תשובות השאלון", "שאלון", "שאלון מולא"],

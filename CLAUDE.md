@@ -107,7 +107,14 @@ Dror's decision, not something a status change should trigger.
 will not fix (no email, no price), raise `actions.Refused`: the webhook answers 200 with
 the reason and comments once. Any other exception answers an error, and ClickUp retries
 the call four times (after 5, 10, 20 and 40 minutes), which is right for a blip and wrong
-for a refusal: each retry fails and comments again.
+for a refusal: each retry fails and comments again. A second press of the same button
+for the same client is not run inside `actions.PRESS_WINDOW_S` (10 minutes for a send;
+for a build, until it finishes), since the buttons really send.
+
+**A client's documents live in their own columns.** Each PDF the system makes for a client
+(questionnaire answers, strategy versions, campaign reports, the social prep report) goes
+into its Attachment field on the task through `src\lib\client_files.py`, like the signed
+contract in `חוזה חתום`; a missing column is skipped, never an error.
 
 **Both statuses matter, and they answer different questions.** The *secondary*
 status drives the funnel; the **primary** status is what `list_active_clients`
