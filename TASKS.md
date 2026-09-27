@@ -27,6 +27,9 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   `gmail.compose` works but `gmail.readonly` is refused (checked 25.9, still
   refused after 10 min). The bot asks for both in one token, so until that line is
   added it can neither read mail nor leave drafts. `docs/GOOGLE_SETUP.md` step 5b.
+- [ ] **The `בנה דוח רשתות` button on `לקוחות`.** The other four buttons exist and
+  answered ClickUp's test with a valid token (26–27.9); this one is missing
+  (`check_clickup_crm` lists them).
 - [ ] **The `הרץ שוב` button on `משימות`** (optional; a bare `קלוד` comment does the
   same). ClickUp UI only: `docs/CLICKUP_SETUP.md` step 2.
 - [ ] **`DriveTemplateIds`** — the parameter exists since 16.9 but is empty, so
@@ -70,9 +73,8 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   it, then `push_stack_params ManyChatFlowOnboarding`.
 - [ ] **Rework `whatsapp_templates.py`.** Free-text bodies are no longer possible;
   it becomes a map of approved template names → variables.
-- [ ] **File the signed contract into the `חוזים` subfolder.** Onboarding gives every
-  client folder four subfolders, but the signing page runs *before* it and drops the
-  signed PDF in the folder root. Small and cosmetic.
+- [x] **File the signed contract into the `חוזים` subfolder (24.9).** The filing makes
+  the subfolders itself when signing comes before onboarding.
 - [x] **Retire dead code from replaced systems (25.9).** Green API and Fillout
   clients, the WhatsApp `daily_summary`, the Morning field aliases / subject /
   mock fields, the stale token-request email, and the unauthenticated local
