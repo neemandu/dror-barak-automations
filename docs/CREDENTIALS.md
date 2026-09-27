@@ -42,8 +42,9 @@ register the webhook. Used to prove inbound webhooks are really from ClickUp.
 → `CLICKUP_WEBHOOK_SECRET`
 
 > **The clients list does not exist yet.** The workspace is still the default
-> ClickUp template. ClickUp's API cannot create custom fields, so the list is built
-> by hand in the UI once — **`docs/CLICKUP_SETUP.md` is the checklist**. No field
+> ClickUp template. The list is built once — **`docs/CLICKUP_SETUP.md` is the
+> checklist** (`python -m src.tools.setup_clickup_fields --apply` creates the optional
+> columns; buttons still need the UI). No field
 > ids are needed in `.env`: the code matches fields and statuses by name.
 >
 > Verify the setup any time with `python -m src.tools.check_clickup_crm`.

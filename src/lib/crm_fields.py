@@ -1,10 +1,10 @@
 """Mapping between Dror's client model and whatever ClickUp actually contains.
 
-ClickUp custom fields **cannot be created through the API** — the public API only
-reads fields and sets values on fields that already exist. So the clients list is
-built by hand in the ClickUp UI, and this module's job is to recognise what was
-built: it matches fields, statuses and dropdown options by *name*, in Hebrew or
-English, rather than by ids pasted into ``.env``.
+The clients list is built once (by hand in the UI, or its optional columns with
+``src/tools/setup_clickup_fields.py``, through an endpoint ClickUp's reference does
+not list), and this module's job is to recognise what was built: it matches fields,
+statuses and dropdown options by *name*, in Hebrew or English, rather than by ids
+pasted into ``.env``.
 
 That matters practically: the ids change if the list is ever rebuilt, and nobody
 has to copy them anywhere. It also means a renamed field degrades to "field not

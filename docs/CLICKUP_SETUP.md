@@ -137,9 +137,15 @@ Skip any and the automation that writes it logs a "skipped" line — nothing bre
 
 > **`מחיר אסטרטגיה` / `מחיר קמפיינים`** price each service on its own line of the
 > contract. A service without a price is left out of the contract (no "0 ₪" line).
-> Without either field, `מחיר חודשי` is the strategy line alone. ClickUp's API cannot
-> create fields, so these two are added by hand; the dashboard's **חוזים** screen
-> says whether they were found.
+> Without either field, `מחיר חודשי` is the strategy line alone. Add them by hand, or
+> with `python -m src.tools.setup_clickup_fields --apply --only price_strategy price_campaigns`;
+> the dashboard's **חוזים** screen says whether they were found.
+
+> **Creating columns through the API.** ClickUp's reference lists no endpoint for it,
+> but `POST /api/v2/list/{list_id}/field` with `{"name", "type"}` works (27.9.2026: the
+> six document and date columns were made with it). `setup_clickup_fields` uses it for
+> every optional column above that is missing: it shows the plan, and `--apply` creates
+> them. Buttons are the exception: their Automation cannot be made through the API.
 
 > **`חשבון מודעות Meta`** holds the ad account id, `act_` prefix or bare digits
 > (the code adds the prefix). A client without it is skipped from the monthly

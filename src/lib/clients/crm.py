@@ -8,8 +8,8 @@ automations, and the automations write their results back onto the task.
   * everything else (phone, price, Drive folder, contract link) → custom fields
   * the automation log → task **comments**, so it shows up where Dror already looks
 
-Custom fields cannot be created through ClickUp's API, so the list is built by
-hand in the UI once (see ``docs/CLICKUP_SETUP.md``) and everything here is matched
+The list is built once (``docs/CLICKUP_SETUP.md``; ``src/tools/setup_clickup_fields.py``
+creates the optional columns) and everything here is matched
 by *name* at runtime via :mod:`src.lib.crm_fields` — no field ids in ``.env``, and
 nothing to re-copy if the list is rebuilt.
 

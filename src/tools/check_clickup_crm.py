@@ -1,8 +1,8 @@
 """Check that the ClickUp clients list is set up for the automations.
 
-Custom fields cannot be created through ClickUp's API, so the list is built by
-hand in the UI once. This tool reports what is present and what is missing, so
-setup is a checklist rather than a guessing game.
+The list is built once (buttons by hand in the UI; the optional columns with
+``setup_clickup_fields``). This tool reports what is present and what is missing,
+so setup is a checklist rather than a guessing game.
 
 Read-only: it never writes to ClickUp.
 
