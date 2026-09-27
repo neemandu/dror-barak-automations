@@ -158,3 +158,15 @@ def ensure_subfolders(google: Any, folder_id: str, *, dry_run: bool = False) -> 
             "created": True,
         }
     return out
+
+
+def subfolder(folder_id: str, name: str) -> str:
+    """The id of the client's standard subfolder ``name`` (made if missing), or the
+    folder itself if Drive will not say: a document in the root beats no document."""
+    try:
+        from .clients.google import GoogleClient
+
+        subs = ensure_subfolders(GoogleClient(), folder_id)
+        return str((subs.get(name) or {}).get("id") or folder_id)
+    except Exception:  # noqa: BLE001
+        return folder_id

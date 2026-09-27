@@ -585,15 +585,8 @@ def _write_back(crm: Any, client: dict[str, Any], fields: dict[str, str]) -> lis
 
 def _contracts_folder(folder_id: str) -> str:
     """The client's `חוזים` subfolder (made here if onboarding has not run yet: signing
-    comes first); the folder itself if Drive will not say."""
-    try:
-        from .lib.clients.google import GoogleClient
-
-        subs = client_folder.ensure_subfolders(GoogleClient(), folder_id)
-        return str((subs.get("חוזים") or {}).get("id") or folder_id)
-    except Exception as exc:  # noqa: BLE001 - the root is a fine place for a contract; no place is not
-        log.warning("contracts_subfolder_unavailable", extra={"error": str(exc)})
-        return folder_id
+    comes first)."""
+    return client_folder.subfolder(folder_id, "חוזים")
 
 
 def refile_unfiled(*, dry_run: bool = False, older_than_s: int = 15 * 60) -> list[str]:

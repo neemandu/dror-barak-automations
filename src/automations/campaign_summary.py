@@ -176,7 +176,8 @@ def run(
         # Docs path; upload is still Drive. Guarded because neither is dry-run aware.
         pdf_bytes = pdf_chromium.render(document)
         suffix = " - מתוקן" if feedback else ""
-        saved = pdf.upload_pdf(pdf_bytes, f"דוח קמפיינים - {label}{suffix}.pdf", folder["id"])
+        saved = pdf.upload_pdf(pdf_bytes, f"דוח קמפיינים - {label}{suffix}.pdf",
+                               client_folder.subfolder(folder["id"], "דוחות קמפיין"))
         drive_url = saved.get("webViewLink") or drive_url
         from ..lib import client_files
 

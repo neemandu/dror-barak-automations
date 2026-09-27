@@ -37,6 +37,7 @@ def _registry() -> dict[str, tuple[str, Callable[..., Any]]]:
         "strategy_bot": ("בניית אסטרטגיה", strategy_bot.run),
         "campaign_summary": ("דוח קמפיין", campaign_summary.run),
         "file_contract": ("תיוק ההסכם החתום", sign_page.file_contract),
+        "strategy_final_pdf": ("ה-PDF הסופי של האסטרטגיה", strategy_bot.final_pdf),
         # Comments its own failures on the task (it has a task_id, not a client_id).
         "clickup_to_claude": ("משימה ל-Claude", clickup_to_claude.run),
         "client_templates": ("העתקת תבניות ללקוח", client_templates.run),

@@ -147,3 +147,38 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def final_pdf(task_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """When Dror closes a strategy's review task, the PDF of its latest version, as
+    the Doc reads now (his own edits included), goes into the client's strategy
+    column. Once per closing: reopening and closing again after more edits adds the
+    newer one. A task that is not closed, has no client or no version is left alone.
+    """
+    import re
+
+    from ..lib import client_files, idempotency
+    from . import clickup_to_claude as bot
+
+    clickup = ClickUpClient(dry_run=dry_run)
+    task = clickup.get_task(task_id)
+    if review_tasks.kind_of(task) is not review_tasks.STRATEGY or not review_tasks._closed(task):
+        return {"skipped": "not a closed strategy review task"}
+    client_id = bot.linked_client_id(task)
+    drafts = [c for t in bot.threads(clickup, task_id) for c in [t["root"], *t["replies"]] if bot._is_draft(c)]
+    latest = max(drafts, key=lambda c: int(c.get("date") or 0), default=None)
+    doc_id = task_docs.doc_id_in(bot._text(latest)) if latest else None
+    if not client_id or not doc_id:
+        return {"skipped": "no client or no version with a Doc"}
+    once = idempotency.guard("strategy_final_pdf", task_id, str(task.get("date_closed") or task.get("date_done") or ""))
+    if not idempotency.claim(once):
+        return {"skipped": "this closing was already filed"}
+    found = re.search(r"גרסה (\d+)", bot._text(latest))
+    auto = Automation(NAME, dry_run=dry_run)
+    attached = client_files.attach_doc(CrmClient(dry_run=dry_run), client_id, "strategy_pdf", doc_id,
+                                       tag=f"v{found.group(1) if found else 'final'}-final", auto=auto,
+                                       dry_run=dry_run)
+    if attached:
+        auto.log_action("strategy_final_attached", client_id=client_id,
+                        url=f"https://docs.google.com/document/d/{doc_id}/edit")
+    return {"attached": attached, "doc_id": doc_id}

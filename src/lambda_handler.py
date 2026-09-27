@@ -198,6 +198,8 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         from .lib import review_tasks
 
         if review_tasks.kind_of(task):
+            if event == "taskUpdated":
+                return _review_task_closed(task, task_id, dry_run)
             return {"ignored": "a review task the system opened; replies revise it"}
         if event == "taskUpdated" and not workers.has_field(task):
             return {"ignored": "update on a list without the עובד field"}
@@ -237,7 +239,23 @@ def _route_claude_task(payload: dict[str, Any], event: str, task_id: str,
         return tasks.dispatch("clickup_to_claude", task_id=task_id, comment=text,
                               comment_id=comment_id, dry_run=dry_run)
 
+    if event == "taskStatusUpdated":
+        # Only for the system's review tasks: a status change never hands a task to
+        # an employee (their hand-over is the עובד field, above).
+        from .lib.clients.clickup import ClickUpClient
+
+        return _review_task_closed(ClickUpClient(dry_run=dry_run).get_task(task_id), task_id, dry_run)
+
     return {"ignored": f"{event} on the tasks list"}
+
+
+def _review_task_closed(task: dict[str, Any], task_id: str, dry_run: bool) -> dict[str, Any]:
+    """Dror closed a strategy's review task: its final PDF goes into the client's column."""
+    from .lib import review_tasks, tasks
+
+    if review_tasks.kind_of(task) is review_tasks.STRATEGY and review_tasks._closed(task):
+        return tasks.dispatch("strategy_final_pdf", task_id=task_id, dry_run=dry_run)
+    return {"ignored": "not a closed strategy review task"}
 
 
 def _comment_of(payload: dict[str, Any]) -> tuple[str | None, str | None]:

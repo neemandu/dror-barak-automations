@@ -70,6 +70,7 @@ ACTION_LABELS: dict[str, str] = {
     "questionnaire_doc_failed": "מסמך התשובות לא נוצר",
     "questionnaire_pdf_failed": "ה-PDF של התשובות לא צורף למשימה",
     "pdf_column_failed": "ה-PDF לא נכנס לעמודה שלו ב-ClickUp",
+    "strategy_final_attached": "הגרסה הסופית של האסטרטגיה נכנסה לעמודה ב-ClickUp",
     "questionnaire_unanswered": "השאלון עדיין לא מולא",
     "questionnaire_reminders_done": "סבב התזכורות לשאלון הסתיים",
     "no_email": "אין ללקוח כתובת מייל",

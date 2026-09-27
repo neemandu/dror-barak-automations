@@ -48,7 +48,7 @@ NAME = "register_clickup_webhook"
 EVENTS = ["taskCreated", "taskUpdated", "taskStatusUpdated"]
 # The משימות list: a new task, an update (the עובד field set after creation hands
 # the task to a bot), and comments (feedback in Claude's thread).
-TASK_EVENTS = ["taskCreated", "taskUpdated", "taskCommentPosted"]
+TASK_EVENTS = ["taskCreated", "taskUpdated", "taskCommentPosted", "taskStatusUpdated"]
 
 
 def _headers() -> dict[str, str]:
