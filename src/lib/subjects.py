@@ -74,6 +74,7 @@ ACTION_LABELS: dict[str, str] = {
     "questionnaire_unanswered": "השאלון עדיין לא מולא",
     "questionnaire_reminders_done": "סבב התזכורות לשאלון הסתיים",
     "no_email": "אין ללקוח כתובת מייל",
+    "contact_exists": "הטלפון כבר היה באנשי הקשר, לא נשמר שוב",
     # onboarding and Drive
     "drive_folder_created": "נפתחה תיקיית לקוח",
     "drive_folder_reused": "תיקיית הלקוח כבר קיימת",

@@ -33,6 +33,30 @@ class GoogleClient(BaseClient):
         return {"Authorization": f"Bearer {google_auth.access_token()}"}
 
     # --- Contacts (People API) -------------------------------------------
+    def contact_phones(self) -> dict[str, str]:
+        """Every phone number in Dror's contacts: ``{number: contact resourceName}``,
+        numbers as the People API returns them (formats vary; compare with
+        :func:`src.automations.lead_to_contacts.phone_key`)."""
+        if self.dry_run:
+            self._record("contact_phones")
+            return {}
+        out: dict[str, str] = {}
+        page: Optional[str] = None
+        while True:
+            params = {"personFields": "phoneNumbers", "pageSize": "1000"}
+            if page:
+                params["pageToken"] = page
+            resp = self._request("GET", "https://people.googleapis.com/v1/people/me/connections",
+                                 headers=self._headers(), params=params).json()
+            for person in resp.get("connections") or []:
+                for number in person.get("phoneNumbers") or []:
+                    for value in (number.get("value"), number.get("canonicalForm")):
+                        if value:
+                            out[str(value)] = str(person.get("resourceName") or "")
+            page = resp.get("nextPageToken")
+            if not page:
+                return out
+
     def create_contact(
         self, name: str, phone: str, *, email: Optional[str] = None
     ) -> dict[str, Any]:

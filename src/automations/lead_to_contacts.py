@@ -7,7 +7,8 @@ never looked again.
 Action: save the lead's phone number to Google Contacts so Dror has it on his
 phone, and note it in the CRM automation log. Once per (client, phone number):
 the many other updates to the task save nothing, and a corrected number is saved
-as it is typed.
+as it is typed. A number already in Dror's contacts (he saved the lead himself,
+in any format: +972 or 0) is not saved again.
 
 Manual/dry-run:
     python -m src.automations.lead_to_contacts --client-id 42 --dry-run
@@ -34,6 +35,14 @@ def _digits(phone: str) -> str:
     return re.sub(r"\D", "", phone or "")
 
 
+def phone_key(phone: str) -> str:
+    """One number however it is written: ``+972-50-111-2222``, ``0501112222`` and
+    ``050 111 2222`` are the same contact. Israeli numbers differ only in the
+    prefix (``972`` or ``0``), so the last 9 digits identify one."""
+    digits = _digits(phone)
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
 def run(client_id: str, *, dry_run: bool = False, client: Optional[dict[str, Any]] = None,
         on_update: bool = False) -> dict[str, Any]:
     """Save the lead's phone to Google Contacts, once per number.
@@ -54,11 +63,19 @@ def run(client_id: str, *, dry_run: bool = False, client: Optional[dict[str, Any
             )
         return {"skipped": "no phone"}
 
-    once = idempotency.guard(NAME, client_id, _digits(phone))
+    once = idempotency.guard(NAME, client_id, phone_key(phone))
     if not idempotency.claim(once, ttl=_REMEMBER_SECONDS):
         return {"skipped": "this number is already in Google Contacts"}
+    google = GoogleClient(dry_run=dry_run)
     try:
-        contact = GoogleClient(dry_run=dry_run).create_contact(
+        # Dror may have saved this lead on his phone himself: a second contact
+        # with the same number is clutter, not help.
+        known = {phone_key(n): name for n, name in google.contact_phones().items()}
+        if phone_key(phone) in known:
+            auto.log_action("contact_exists", "skipped", client_id=client_id,
+                            detail=f"phone={phone}", contact=known[phone_key(phone)])
+            return {"skipped": "the number was already in Dror's contacts"}
+        contact = google.create_contact(
             name=lead.get("name", "Lead"), phone=phone, email=lead.get("email") or None
         )
     except Exception:
