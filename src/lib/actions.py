@@ -11,7 +11,7 @@ afterwards — and therefore no risk of our own cleanup firing the webhook again
 
 Wiring, per button (see docs/CLICKUP_SETUP.md):
 
-    Button field "שלח הצעת מחיר"
+    Button field "שלח חוזה ללקוח במייל"
       -> Automation: when button clicked -> Call webhook
          URL:    https://<api>/action?action=send_quote
          Header: X-Automation-Token: <AUTOMATION_TOKEN>
@@ -74,32 +74,32 @@ class Action(NamedTuple):
 ACTIONS: dict[str, Action] = {
     "send_quote": Action(
         key="send_quote",
-        label="שלח הצעת מחיר",
+        label="שלח חוזה ללקוח במייל",
         confirm="",
         # A revised quote is normal. Blocking the second send would be wrong.
         once_only=False,
     ),
     "send_questionnaire": Action(
         key="send_questionnaire",
-        label="שלח שאלון",
+        label="שלח שאלון ללקוח במייל",
         confirm="",
         once_only=False,  # clients lose links; resending is routine
     ),
     "social_prep": Action(
         key="social_prep",
-        label="בנה דוח רשתות",
+        label="בנה דוח רשתות (לא נשלח ללקוח)",
         confirm="⏳ דוח הרשתות בהכנה - הקישור יופיע כאן כשיסתיים (כמה דקות)",
         once_only=False,
     ),
     "strategy_bot": Action(
         key="strategy_bot",
-        label="בנה אסטרטגיה",
+        label="בנה אסטרטגיה (לא נשלח ללקוח)",
         confirm="⏳ האסטרטגיה בבנייה (כמה דקות). היא תגיע כמשימה במשימות, בסטטוס לבדיקה של דרור, והקישור יופיע גם כאן",
         once_only=False,
     ),
     "campaign_summary": Action(
         key="campaign_summary",
-        label="בנה דוח קמפיין",
+        label="בנה דוח קמפיין (לא נשלח ללקוח)",
         confirm="⏳ דוח הקמפיין בהכנה. הוא יגיע כמשימה במשימות, בסטטוס לבדיקה של דרור, עם טיוטת מייל ללקוח שנשלחת רק כשעונים שלח",
         once_only=False,
     ),

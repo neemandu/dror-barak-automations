@@ -31,12 +31,12 @@ run live.
 | Task | Module | Trigger | Manual / dry-run command |
 |---|---|---|---|
 | T1 | `lead_to_contacts` | Webhook: new ClickUp lead | `python -m src.automations.lead_to_contacts --client-id 42 --dry-run` |
-| T2 | `send_questionnaire` | Button `שלח שאלון` / manual (onboarding sends it first) | `python -m src.automations.send_questionnaire --client-id 42 --dry-run` |
-| T3 | `social_prep` | Questionnaire submitted / button `בנה דוח רשתות` | `python -m src.automations.social_prep --client-id 42 --dry-run` |
+| T2 | `send_questionnaire` | Button `שלח שאלון ללקוח במייל` / manual (onboarding sends it first) | `python -m src.automations.send_questionnaire --client-id 42 --dry-run` |
+| T3 | `social_prep` | Questionnaire submitted / button `בנה דוח רשתות (לא נשלח ללקוח)` | `python -m src.automations.social_prep --client-id 42 --dry-run` |
 | T4 | `send_quote` | Manual send + signing webhook | `python -m src.automations.send_quote --action send --client-id 42 --dry-run` |
 | T5 | `onboarding` | Webhook: status → signed | `python -m src.automations.onboarding --client-id 42 --dry-run` |
 | T7 | `campaign_summary` | Scheduled: 1st of month / manual | `python -m src.automations.campaign_summary --client-id 42 --dry-run` (or `--all`) |
-| T8 | `strategy_bot` | Button `בנה אסטרטגיה` / manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
+| T8 | `strategy_bot` | Button `בנה אסטרטגיה (לא נשלח ללקוח)` / manual | `python -m src.automations.strategy_bot --client-id 42 --dry-run` |
 | T9 | `clickup_to_claude` | Webhook: ClickUp task | `python -m src.automations.clickup_to_claude --task-id abc --dry-run` |
 | T10 | `daily_email` | Scheduled: daily (AWS `DailyEmailFunction`, 16:30 UTC) | `python -m src.automations.daily_email --dry-run` |
 | T11 | `dashboard` | Always on (AWS `DashboardFunction`; the `DashboardUrl` stack output) | `python -m src.dashboard --dry-run` |

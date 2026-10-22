@@ -5,7 +5,7 @@
   signature, drawn once here and placed in the provider's box of every contract.
 * ``/contracts/<id>``: that client's contract exactly as it will go out (their
   prices, Dror's signature, what the client will fill in), with a checklist of what
-  is missing before pressing שלח הצעת מחיר in ClickUp; once signed, the document
+  is missing before pressing שלח חוזה ללקוח במייל in ClickUp; once signed, the document
   exactly as signed, with its audit record and the PDF.
 
 Each row of the list carries the actions its state allows (send or a WhatsApp link;
@@ -450,7 +450,7 @@ def _setup_card(clients: list[dict[str, Any]], dry_run: bool) -> str:
         ("warn", "ב-ClickUp יש מחיר חודשי אחד",
          "בחוזה הוא מופיע כשורת האסטרטגיה בלבד. כדי לתמחר גם קמפיינים, מוסיפים ברשימת הלקוחות ב-ClickUp "
          "שני שדות מסוג Currency: ״מחיר אסטרטגיה״ ו״מחיר קמפיינים״."),
-        ("info", "שליחה", "מהמשימה ב-ClickUp, בכפתור ״שלח הצעת מחיר״. הלקוח מקבל מייל עם קישור אישי, "
+        ("info", "שליחה", "מהמשימה ב-ClickUp, בכפתור ״שלח חוזה ללקוח במייל״. הלקוח מקבל מייל עם קישור אישי, "
                           "ותזכורת אחת אחרי 3 ימים אם לא חתם."),
     ]
     return (f'<section class="card reveal" style="--i:2"><div class="card-head"><h2 class="card-title">הגדרות החוזה</h2></div>'
@@ -563,7 +563,7 @@ def preflight(client: dict[str, Any]) -> list[tuple[str, str, str]]:
     except contract.ContractError:
         p = {"total": 0, "split": False}
     if p["total"] <= 0:
-        rows.append(("err", "אין מחיר", "בלי מחיר ב-ClickUp, ״שלח הצעת מחיר״ לא ישלח את החוזה."))
+        rows.append(("err", "אין מחיר", "בלי מחיר ב-ClickUp, ״שלח חוזה ללקוח במייל״ לא ישלח את החוזה."))
     elif p["split"]:
         parts = [f'אסטרטגיה {p["strategy"]:,.0f} ₪' if p["has_strategy"] else "",
                  f'קמפיינים {p["campaigns"]:,.0f} ₪' if p["has_campaigns"] else ""]
@@ -620,7 +620,7 @@ def _send_card(client: dict[str, Any], s: dict[str, Any], *, again: bool) -> str
               f'{" disabled" if blockers or not email else ""}>{ui.icon("send", 15)}<span>{label}</span></button>'
             + f'<button type="button" class="btn btn-block" data-mode="link"{" disabled" if blockers else ""}>'
               f'{ui.icon("link", 15)}<span>יצירת קישור לשליחה ידנית</span></button>'
-            + '<p class="small muted" style="margin:0">כמו הכפתור ״שלח הצעת מחיר״ ב-ClickUp: הסטטוס עובר ל״נשלחה הצעת '
+            + '<p class="small muted" style="margin:0">כמו הכפתור ״שלח חוזה ללקוח במייל״ ב-ClickUp: הסטטוס עובר ל״נשלחה הצעת '
               'מחיר״, ולקוח שלא חותם מקבל תזכורת אחת אחרי 3 ימים.</p>'
             + '<div class="linkbox" id="linkbox" hidden></div></div></section>')
 
@@ -676,7 +676,7 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
         side = (_send_card(client, s, again=already)
                 + f'<section class="card reveal" style="--i:3"><div class="card-head"><h2 class="card-title">לפני השליחה</h2></div>'
                 f'{status}{_checks(preflight(client))}'
-                f'<div class="how">אפשר לשלוח גם מהמשימה ב-ClickUp, בכפתור ״שלח הצעת מחיר״. אם משנים שם מחיר או מייל, '
+                f'<div class="how">אפשר לשלוח גם מהמשימה ב-ClickUp, בכפתור ״שלח חוזה ללקוח במייל״. אם משנים שם מחיר או מייל, '
                 f'החוזה כאן מתעדכן תוך דקה.</div></section>')
         if problem:
             body = ""

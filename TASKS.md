@@ -31,9 +31,6 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   `gmail_read` when the read scope is not granted (`google_auth.can_mint`).
   Granting `gmail.readonly` in admin.google.com is now optional (`docs/GOOGLE_SETUP.md`
   step 5b): it only lets the agents read Dror's inbox.
-- [ ] **The `בנה דוח רשתות` button on `לקוחות`.** The other four buttons exist and
-  answered ClickUp's test with a valid token (26–27.9); this one is missing
-  (`check_clickup_crm` lists them).
 - [ ] **The `הרץ שוב` button on `משימות`** (optional; a bare `קלוד` comment does the
   same). ClickUp UI only: `docs/CLICKUP_SETUP.md` step 2.
 - [ ] **`DriveTemplateIds`** — the parameter exists since 16.9 but is empty, so
@@ -45,15 +42,16 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   `check_domain --request`, add the two Wix records (`docs/CREDENTIALS.md` §7a),
   `setup_domain --apply`, then push `SignBaseUrl`.
 
-## Manual ClickUp steps (UI only, the API cannot do them)
+## ClickUp UI steps
 
-- [ ] **Button labels say what they do.** Rename in ClickUp, e.g. `שלח הצעת מחיר` →
-  "שלח חוזה ללקוח במייל" (the automation behind it is unchanged; `docs/OPERATIONS.md` names the
-  buttons by their current labels, so update the table's `…` entries when renaming).
-- [ ] **Field descriptions** (ClickUp field → ⋯ → description): `סטטוס משני` ("`חתם` מפעיל
-  אונבורדינג ושולח ללקוח את השאלון. שאר הערכים לתיעוד בלבד"), `תבניות` ("סימון מעתיק את הקובץ
-  לתיקיית הלקוח"), each button (one line on what it sends).
-- [ ] **The `בנה דוח רשתות` button** on `לקוחות` and optional **`הרץ שוב`** on `משימות` (see above).
+- [x] **Button labels and field descriptions (22.10, done through the browser).** All five buttons on
+  `לקוחות` exist (the `בנה דוח רשתות` one too, so the old "missing button" item was stale) and are
+  renamed to say what they do: `שלח חוזה ללקוח במייל`, `שלח שאלון ללקוח במייל`, and
+  `בנה ... (לא נשלח ללקוח)` for the three builds. Their automations (Call webhook) were not touched.
+  Each button has a description; so do the status dropdown (only `חתם` acts) and `תבניות`.
+  `actions.ACTIONS[*].label`, the guide and the tests use the same names.
+- [ ] **`הרץ שוב` on `משימות`** stays open: its automation needs the `X-Automation-Token` header,
+  a secret that has to be entered by a person (`docs/CLICKUP_SETUP.md` step 2). Optional.
 
 ## Manual test list (production workspace: use a test task and your own contacts, clean up after)
 

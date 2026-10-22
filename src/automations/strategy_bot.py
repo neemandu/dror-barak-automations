@@ -1,6 +1,6 @@
 """T8 — Strategy bot.
 
-Trigger: the ``בנה אסטרטגיה`` button on the ClickUp task (run in the
+Trigger: the ``בנה אסטרטגיה (לא נשלח ללקוח)`` button on the ClickUp task (run in the
 background), or the CLI — once the client has answered the questionnaire.
 Action: from the client's questionnaire answers plus a live look at their
 digital presence (the social analysis from T3, with real web access), Claude

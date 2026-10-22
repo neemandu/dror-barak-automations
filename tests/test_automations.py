@@ -96,7 +96,7 @@ def test_strategy_is_written_from_the_answers(answered, prompts):
 
 
 def test_send_questionnaire_emails_the_link(read_log, monkeypatch):
-    # The `שלח שאלון` button: a client lost the link, Dror re-sends it. Same
+    # The `שלח שאלון ללקוח במייל` button: a client lost the link, Dror re-sends it. Same
     # function onboarding uses, so the two can never drift apart.
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
     monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")

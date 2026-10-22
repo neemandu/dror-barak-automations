@@ -1,7 +1,7 @@
 """T3 — Social-media prep report (AI).
 
 Trigger: the client submits the questionnaire (run in the background), or the
-``בנה דוח רשתות`` button.
+``בנה דוח רשתות (לא נשלח ללקוח)`` button.
 Action: for each profile link the client gave — found by the question's *role*,
 not its wording — Claude opens the page with web fetch/search and writes what it
 actually saw: positioning, recent content, three recommendations. The report is a

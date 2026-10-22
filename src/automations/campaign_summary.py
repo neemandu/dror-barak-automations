@@ -1,7 +1,7 @@
 """T7 — Monthly campaign summary.
 
 Trigger: scheduled on the 1st of each month (or manual per client, or the ClickUp
-``בנה דוח קמפיין`` button). Action: pull last month's real campaign numbers from
+``בנה דוח קמפיין (לא נשלח ללקוח)`` button). Action: pull last month's real campaign numbers from
 the Meta Ads API for the client's ad account, lay them into Dror's report template
 with AI recommendations, save the PDF to the client's Drive folder, and hand it to
 Dror for approval as a task on משימות (:mod:`src.lib.review_tasks`): ``דוח קמפיינים:

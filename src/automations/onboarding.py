@@ -247,10 +247,10 @@ def _message(client: dict[str, Any], name: str, result: dict[str, Any], *,
                        f"ושוב אחרי שבוע, ואם גם אז לא, אעדכן אותך.")
     elif not email:
         details.append("לא שלחתי את שאלון האסטרטגיה כי אין מייל במשימה. אחרי שתוסיף מייל "
-                       "אפשר ללחוץ על 'שלח שאלון'.")
+                       "אפשר ללחוץ על 'שלח שאלון ללקוח במייל'.")
     else:
         details.append(f"שליחת שאלון האסטרטגיה נכשלה ({result.get('questionnaire_problem')}). "
-                       f"אפשר ללחוץ על 'שלח שאלון' כדי לנסות שוב.")
+                       f"אפשר ללחוץ על 'שלח שאלון ללקוח במייל' כדי לנסות שוב.")
     if result.get("welcome_flow"):
         details.append("שלחתי הודעת וואטסאפ של ברוכים הבאים.")
     if not result.get("meta_ad_account"):

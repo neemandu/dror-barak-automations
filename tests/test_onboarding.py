@@ -222,7 +222,7 @@ def test_the_message_names_what_is_left_for_dror(captured, monkeypatch, read_log
     client_says(monkeypatch, email="", meta_ad_account="")
     onboarding.run("42", dry_run=True)
     text = captured["comments"][0]
-    assert "אין מייל במשימה" in text and "'שלח שאלון'" in text
+    assert "אין מייל במשימה" in text and "'שלח שאלון ללקוח במייל'" in text
     assert "חסר חשבון מודעות Meta" in text
 
 

@@ -34,7 +34,7 @@ class EmailTemplate(NamedTuple):
 
 
 TEMPLATES: dict[str, EmailTemplate] = {
-    # Sent when Dror presses `שלח הצעת מחיר`. The contract itself is at the link;
+    # Sent when Dror presses `שלח חוזה ללקוח במייל`. The contract itself is at the link;
     # the mail's job is to get it opened. The body is Dror's own wording.
     "sign_contract": EmailTemplate(
         subject="ההסכם והמפרט לחתימה",
@@ -147,7 +147,7 @@ TEMPLATES: dict[str, EmailTemplate] = {
             "\n"
             "{summary}\n"
             "\n"
-            "כשתהיה מוכן אפשר ללחוץ על 'בנה אסטרטגיה' במשימה."
+            "כשתהיה מוכן אפשר ללחוץ על 'בנה אסטרטגיה (לא נשלח ללקוח)' במשימה."
         ),
         cta="לתשובות",
         internal=True,

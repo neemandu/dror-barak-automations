@@ -273,7 +273,7 @@ def test_a_pdf_that_cannot_be_attached_is_logged_not_commented(monkeypatch, tmp_
 def test_dror_is_told_when_a_client_submits_the_questionnaire(monkeypatch, read_log):
     monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
     seen = _submit(monkeypatch, field=True)
-    assert len(seen["comments"]) == 1 and "בנה אסטרטגיה" in seen["comments"][0]
+    assert len(seen["comments"]) == 1 and "בנה אסטרטגיה (לא נשלח ללקוח)" in seen["comments"][0]
     assert "questionnaire_email_sent" in {e["action"] for e in read_log()}
 
 

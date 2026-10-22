@@ -1,6 +1,6 @@
 """T2 — Send (or re-send) the strategy questionnaire link.
 
-Trigger: the ``שלח שאלון`` button on the ClickUp task, or the CLI. Onboarding
+Trigger: the ``שלח שאלון ללקוח במייל`` button on the ClickUp task, or the CLI. Onboarding
 calls :func:`send_link` right after signing, so there is exactly one place that
 knows how a questionnaire goes out.
 
@@ -43,7 +43,7 @@ def send_link(auto: Automation, crm: CrmClient, client: dict[str, Any],
         auto.log_action("no_email", "error", client_id=client_id,
                         detail="client has no אימייל for the questionnaire")
         crm.append_automation_log(
-            client_id, f"⚠️ {reason}. ממלאים את שדה המייל ולוחצים שוב על 'שלח שאלון'.")
+            client_id, f"⚠️ {reason}. ממלאים את שדה המייל ולוחצים שוב על 'שלח שאלון ללקוח במייל'.")
         return reason
     try:
         url = signing.questionnaire_url(client_id)

@@ -505,7 +505,7 @@ def _tell_dror(auto: Any, crm: Any, client_id: str, name: str, doc: dict[str, st
               if social_started else "לא היו בשאלון קישורים לרשתות, אז לא הכנתי דוח רשתות.")
     text = f"השאלון של {name} התקבל. {where}\n{social}"
     try:
-        crm.append_automation_log(client_id, "היי,\n" + text + "\nכשתהיה מוכן אפשר ללחוץ על 'בנה אסטרטגיה'.")
+        crm.append_automation_log(client_id, "היי,\n" + text + "\nכשתהיה מוכן אפשר ללחוץ על 'בנה אסטרטגיה (לא נשלח ללקוח)'.")
     except Exception as exc:  # noqa: BLE001
         log.warning("questionnaire_comment_failed", extra={"client_id": client_id, "error": str(exc)})
     to = config.get("DROR_EMAIL")

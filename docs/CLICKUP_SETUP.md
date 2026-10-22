@@ -249,11 +249,11 @@ its text, then configure its Automation as **Call webhook**:
 
 | Button text | `?action=` | Does |
 |---|---|---|
-| `שלח הצעת מחיר` (or `שלח חוזה`, which the list has) | `send_quote` | Sends the quote with a signature link (the dashboard's contract page can too) |
-| `שלח שאלון` | `send_questionnaire` | Emails the strategy-questionnaire link again (onboarding sends it first) |
-| `בנה דוח רשתות` | `social_prep` | Builds the social-media prep report |
-| `בנה אסטרטגיה` | `strategy_bot` | Builds the full strategy into Drive |
-| `בנה דוח קמפיין` | `campaign_summary` | Builds the monthly campaign report |
+| `שלח חוזה ללקוח במייל` (or `שלח חוזה`, which the list has) | `send_quote` | Sends the quote with a signature link (the dashboard's contract page can too) |
+| `שלח שאלון ללקוח במייל` | `send_questionnaire` | Emails the strategy-questionnaire link again (onboarding sends it first) |
+| `בנה דוח רשתות (לא נשלח ללקוח)` | `social_prep` | Builds the social-media prep report |
+| `בנה אסטרטגיה (לא נשלח ללקוח)` | `strategy_bot` | Builds the full strategy into Drive |
+| `בנה דוח קמפיין (לא נשלח ללקוח)` | `campaign_summary` | Builds the monthly campaign report |
 
 The quickest way to add one: open the automation of the existing `שלח חוזה` button,
 note its URL and header, and create the new button's automation the same way,

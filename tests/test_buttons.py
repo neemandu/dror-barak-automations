@@ -238,7 +238,7 @@ def test_a_refusal_is_answered_once_not_retried(monkeypatch):
     assert first["ok"] is False and "מייל" in first["refused"], "answered, not raised: a 200"
     again = lambda_handler.handle_action("send_questionnaire", b, TOKEN)  # ClickUp's retry of the same press
     assert again.get("duplicate") and len(attempts) == 1
-    assert comments == ["⚠️ שלח שאלון: אין כתובת מייל ללקוח"]
+    assert comments == ["⚠️ שלח שאלון ללקוח במייל: אין כתובת מייל ללקוח"]
 
 
 def test_a_refusal_that_already_explained_itself_is_not_repeated(monkeypatch):

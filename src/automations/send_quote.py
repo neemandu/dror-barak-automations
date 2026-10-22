@@ -1,6 +1,6 @@
 """T4 — Send the quote/contract for signature.
 
-Trigger: the `שלח הצעת מחיר` button on the ClickUp task.
+Trigger: the `שלח חוזה ללקוח במייל` button on the ClickUp task.
 
 Creates a signed, expiring link to our own signing page (:mod:`src.sign_page`) and
 gets it to the client, then advances the secondary status to `נשלחה הצעת מחיר`.
