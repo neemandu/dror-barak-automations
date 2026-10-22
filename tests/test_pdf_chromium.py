@@ -15,6 +15,9 @@ import pytest
 
 from src.lib import pdf_chromium
 
+# The DevTools pipe driver is Lambda-only (Linux): it uses fcntl, which Windows lacks.
+linux_only = pytest.mark.skipif(not hasattr(os, "fork"), reason="drives Chromium over a pipe; Linux only")
+
 
 def _tar_br(files: dict[str, bytes]) -> bytes:
     buf = io.BytesIO()
@@ -101,6 +104,7 @@ def _fake_chromium(path, *, fail=False):
     return str(path)
 
 
+@linux_only
 def test_with_the_layer_chromium_is_driven_over_devtools(pack, tmp_path, monkeypatch):
     # Proves the pipe wiring (fds 3/4), the protocol loop — including an event that
     # arrives before the reply it races — the @page injection and the cleanup.
@@ -122,6 +126,7 @@ def test_a_document_with_its_own_page_box_is_left_alone():
     assert pdf_chromium._with_page_css(html, "A4") == html
 
 
+@linux_only
 def test_a_protocol_error_is_a_clear_chromium_error(tmp_path, monkeypatch):
     fake = _fake_chromium(tmp_path / "fake-chromium", fail=True)
     tmp = tmp_path / "tmp"; tmp.mkdir()
@@ -131,6 +136,7 @@ def test_a_protocol_error_is_a_clear_chromium_error(tmp_path, monkeypatch):
     assert list(tmp.glob("pdf-*")) == []
 
 
+@linux_only
 def test_a_browser_that_dies_is_reported_not_waited_for(tmp_path, monkeypatch):
     dead = tmp_path / "dead"; dead.write_text("#!/bin/sh\necho 'libnss3.so: cannot open shared object file' >&2\nexit 127\n"); dead.chmod(0o755)
     tmp = tmp_path / "tmp"; tmp.mkdir()

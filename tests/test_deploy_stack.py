@@ -48,7 +48,7 @@ def test_prune_drops_docs_and_tests_but_never_the_code(tmp_path):
                 "infra/template.yaml", "PIL/Image.py", "README.md", ".env.example"):
         f = fn / rel; f.parent.mkdir(parents=True, exist_ok=True); f.write_text("x" * 100)
     assert tool.prune_build(tmp_path) > 0
-    left = sorted(str(f.relative_to(fn)) for f in fn.rglob("*") if f.is_file())
+    left = sorted(f.relative_to(fn).as_posix() for f in fn.rglob("*") if f.is_file())
     assert left == [".env.example", "PIL/Image.py", "src/app.py", "templates/t.html"]
     assert tool.prune_build(tmp_path) == 0, "idempotent"
 
