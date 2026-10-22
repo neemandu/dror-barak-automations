@@ -89,6 +89,10 @@ def test_one_number_however_it_is_written(a, b):
 
 
 def test_a_number_dror_already_has_is_not_saved_again(saved, monkeypatch, read_log):
+    from src.lib.clients.crm import CrmClient
+
+    said = []
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: said.append(msg) or {})
     monkeypatch.setattr(GoogleClient, "contact_phones",
                         lambda self: {"+972 50-111-2222": "people/old", "03-5551234": "people/x"})
     out = lead_to_contacts.run("42", dry_run=True, client=_lead("0501112222"), on_update=True)
@@ -98,6 +102,7 @@ def test_a_number_dror_already_has_is_not_saved_again(saved, monkeypatch, read_l
     # and it is not looked up again on the next update
     monkeypatch.setattr(GoogleClient, "contact_phones", lambda self: pytest.fail("looked up twice"))
     lead_to_contacts.run("42", dry_run=True, client=_lead("0501112222"), on_update=True)
+    assert len(said) == 1 and "כבר שמור באנשי הקשר" in said[0], "said once, not on every edit"
 
 
 def test_a_new_number_is_saved_when_others_exist(saved, monkeypatch):

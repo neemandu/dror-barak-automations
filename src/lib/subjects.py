@@ -96,6 +96,8 @@ ACTION_LABELS: dict[str, str] = {
     "meta_account_present": "חשבון המודעות ב-Meta מחובר",
     "meta_account_missing": "חסר חשבון מודעות ב-Meta",
     "onboarding_done": "האונבורדינג הושלם",
+    "questionnaire_email_sent": "נשלח אליך מייל שהשאלון התקבל",
+    "questionnaire_email_failed": "המייל שהשאלון התקבל לא נשלח",
     "onboarding_email_sent": "נשלח אליך מייל על האונבורדינג",
     "onboarding_email_failed": "המייל על האונבורדינג לא נשלח",
     "summary_comment_failed": "סיכום האונבורדינג לא נכתב במשימה",

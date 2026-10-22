@@ -243,22 +243,42 @@ def _submit(monkeypatch, *, field: bool, task_attach_fails: bool = False):
     return seen
 
 
+def _no_answers_comment(seen) -> bool:
+    """The only comment on the task is the short "it arrived" notice, never the answers."""
+    return all(c.startswith("היי,") and "התקבל" in c for c in seen["comments"])
+
+
 def test_the_answers_pdf_goes_in_its_own_column_like_the_signed_contract(monkeypatch):
     seen = _submit(monkeypatch, field=True)
     cid, key, name, head = seen["field"][0]
     assert (cid, key, head) == ("c1", "questionnaire_answers", b"%PDF")
     assert name.isascii() and name.startswith("questionnaire-answers-")
-    assert not seen["task"] and not seen["comments"], "the column says it: no comment"
+    assert not seen["task"] and _no_answers_comment(seen), "the column says it: the answers are not posted as a comment"
 
 
 def test_until_the_column_exists_the_pdf_is_attached_to_the_task(monkeypatch):
     seen = _submit(monkeypatch, field=False)
-    assert seen["task"] and seen["task"][0][0] == "c1" and not seen["comments"]
+    assert seen["task"] and seen["task"][0][0] == "c1" and _no_answers_comment(seen)
 
 
 def test_a_pdf_that_cannot_be_attached_is_logged_not_commented(monkeypatch, tmp_path):
     from src.lib import run_log
 
     seen = _submit(monkeypatch, field=False, task_attach_fails=True)
-    assert not seen["comments"]
+    assert _no_answers_comment(seen), "no separate failure comment"
+    assert any("לא הצטרף למשימה" in c for c in seen["comments"]), "the notice does not claim a PDF it lacks"
     assert any(e.get("action") == "questionnaire_pdf_failed" for e in run_log.read_all())
+
+
+def test_dror_is_told_when_a_client_submits_the_questionnaire(monkeypatch, read_log):
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+    seen = _submit(monkeypatch, field=True)
+    assert len(seen["comments"]) == 1 and "בנה אסטרטגיה" in seen["comments"][0]
+    assert "questionnaire_email_sent" in {e["action"] for e in read_log()}
+
+
+def test_no_dror_email_still_leaves_the_notice_on_the_task(monkeypatch, read_log):
+    monkeypatch.setenv("DROR_EMAIL", "")
+    seen = _submit(monkeypatch, field=True)
+    assert len(seen["comments"]) == 1
+    assert "questionnaire_email_sent" not in {e["action"] for e in read_log()}

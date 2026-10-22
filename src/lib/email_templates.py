@@ -138,6 +138,20 @@ TEMPLATES: dict[str, EmailTemplate] = {
         cta="לתיקיית הלקוח",
         internal=True,
     ),
+    # Sent to Dror when a client submits the questionnaire: nobody pressed anything,
+    # so this is how he learns it arrived (src/questionnaire_page.py::_tell_dror).
+    "questionnaire_received": EmailTemplate(
+        subject="השאלון של {client_name} התקבל",
+        body=(
+            "היי דרור,\n"
+            "\n"
+            "{summary}\n"
+            "\n"
+            "כשתהיה מוכן אפשר ללחוץ על 'בנה אסטרטגיה' במשימה."
+        ),
+        cta="לתשובות",
+        internal=True,
+    ),
     # Sent to Dror when the strategy bot (T8) has saved a draft to Drive. Email
     # rather than WhatsApp: on the official Meta API Dror's own notifications
     # would each need an approved template and be billed.

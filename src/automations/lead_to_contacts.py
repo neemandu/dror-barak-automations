@@ -74,6 +74,9 @@ def run(client_id: str, *, dry_run: bool = False, client: Optional[dict[str, Any
         if phone_key(phone) in known:
             auto.log_action("contact_exists", "skipped", client_id=client_id,
                             detail=f"phone={phone}", contact=known[phone_key(phone)])
+            # Once per number (the claim above), so a field edit does not repeat it.
+            crm.append_automation_log(
+                client_id, f"הטלפון {phone} כבר שמור באנשי הקשר שלך, אז לא שמרתי אותו שוב.")
             return {"skipped": "the number was already in Dror's contacts"}
         contact = google.create_contact(
             name=lead.get("name", "Lead"), phone=phone, email=lead.get("email") or None
@@ -81,7 +84,7 @@ def run(client_id: str, *, dry_run: bool = False, client: Optional[dict[str, Any
     except Exception:
         idempotency.release(once)  # let the next update try again
         raise
-    crm.append_automation_log(client_id, f"Saved phone {phone} to Google Contacts")
+    crm.append_automation_log(client_id, f"שמרתי את הטלפון {phone} באנשי הקשר שלך ב-Google.")
     auto.log_action(
         "contact_saved",
         client_id=client_id,

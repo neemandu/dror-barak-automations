@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import ui
-from .lib import branded_doc, deliverables, questionnaire, questionnaire_store, signing
+from .lib import branded_doc, config, deliverables, questionnaire, questionnaire_store, signing
 from .lib.clients.crm import CrmClient
 from .lib.logging_setup import get_logger
 
@@ -475,12 +475,48 @@ def _finalise(client_id: str, client: dict[str, Any], defn: dict[str, Any],
     questionnaire_store.record_answer(client_id, name, defn, answers, doc_url=doc["url"])
     # The answers on the task, as the PDF of the same Doc, in their own column (no
     # comment: the column says it). Dror works in ClickUp.
-    _attach_answers_pdf(crm, client_id, doc, auto, dry_run=dry_run)
+    pdf_attached = _attach_answers_pdf(crm, client_id, doc, auto, dry_run=dry_run)
     auto.log_action("questionnaire_answered", client_id=client_id,
                     detail=str(defn.get("title") or ""), url=doc["url"] or None)
 
+    social_started = False
     if questionnaire.social_profiles(snap, answers):
         try:
             tasks.dispatch("social_prep", client_id=client_id, dry_run=dry_run)
+            social_started = True
         except Exception as exc:  # noqa: BLE001 - never fail the client's submission over it
             log.warning("social_prep_dispatch_failed", extra={"client_id": client_id, "error": str(exc)})
+    _tell_dror(auto, crm, client_id, name, doc, social_started, pdf_attached, dry_run=dry_run)
+
+
+def _tell_dror(auto: Any, crm: Any, client_id: str, name: str, doc: dict[str, str],
+               social_started: bool, pdf_attached: bool, *, dry_run: bool) -> None:
+    """The client filled the questionnaire on their own, so nobody pressed anything:
+    one message on the task and one email say what arrived and what started.
+    Never fails the client's submission."""
+    if not doc.get("url"):
+        where = "התשובות נשמרו, אבל מסמך התשובות בדרייב לא נוצר (פרטים בדוח היומי)."
+    elif pdf_attached:
+        where = "התשובות בעמודה 'תשובות שאלון' במשימה ובתיקיית 'אסטרטגיה' בדרייב."
+    else:
+        where = ("התשובות בתיקיית 'אסטרטגיה' בדרייב. ה-PDF שלהן לא הצטרף למשימה "
+                 "(פרטים בדוח היומי).")
+    social = ("התחלתי לבדוק ברקע את הרשתות שמילא, והדוח יגיע לתיקיית 'אסטרטגיה' בעוד כמה דקות."
+              if social_started else "לא היו בשאלון קישורים לרשתות, אז לא הכנתי דוח רשתות.")
+    text = f"השאלון של {name} התקבל. {where}\n{social}"
+    try:
+        crm.append_automation_log(client_id, "היי,\n" + text + "\nכשתהיה מוכן אפשר ללחוץ על 'בנה אסטרטגיה'.")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("questionnaire_comment_failed", extra={"client_id": client_id, "error": str(exc)})
+    to = config.get("DROR_EMAIL")
+    if not to:
+        return
+    try:
+        from .lib import emails
+
+        emails.send_template("questionnaire_received", to, client_name=name, summary=text,
+                             cta_url=doc.get("url") or f"https://app.clickup.com/t/{client_id}",
+                             dry_run=dry_run)
+        auto.log_action("questionnaire_email_sent", client_id=client_id, detail=to)
+    except Exception as exc:  # noqa: BLE001
+        auto.log_action("questionnaire_email_failed", "error", client_id=client_id, detail=str(exc))
