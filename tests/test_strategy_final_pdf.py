@@ -76,3 +76,58 @@ def test_a_subfolder_falls_back_to_the_folder(monkeypatch):
     monkeypatch.setattr(client_folder, "ensure_subfolders",
                         lambda g, fid, dry_run=False: (_ for _ in ()).throw(RuntimeError("Drive down")))
     assert client_folder.subfolder("f1", "דוחות קמפיין") == "f1"
+
+
+# --------------------------------------------------- the email to the client
+
+
+@pytest.fixture
+def delivery(fake, monkeypatch):
+    """The fake board, plus replies, the client's card, and Gmail drafts."""
+    from src.lib import agent_tools
+    from src.lib.clients.crm import CrmClient
+
+    state = {"replies": [], "drafts": [], "deleted": [], "email": "yossi@example.com"}
+
+    def reply(self, root, text):
+        state["replies"].append((root, text))
+
+    strategy_bot.ClickUpClient.reply = reply
+    monkeypatch.setattr(CrmClient, "get_client", lambda self, cid: {
+        "id": cid, "name": "מכללת אלפא", "first_name": "דנה", "email": state["email"]})
+    monkeypatch.setattr(agent_tools, "create_draft", lambda to, subject, body, **kw: (
+        state["drafts"].append({"to": to, "subject": subject, "body": body, **kw})
+        or {"id": "d1", "to": to, "subject": subject}))
+    monkeypatch.setattr(agent_tools, "delete_draft", lambda did: state["deleted"].append(did))
+    # the thread the versions live in needs ids for the lookup
+    monkeypatch.setattr(bot, "threads", lambda clickup, tid: [
+        {"root": {**_draft(1, "docA", 100), "id": "r1"}, "replies": [_draft(2, "docB", 200)]}])
+    return state
+
+
+def test_closing_prepares_the_email_to_the_client_and_sends_nothing(delivery):
+    out = strategy_bot.final_pdf("rt1", dry_run=True)
+    assert out["delivery"] == "drafted"
+    [draft] = delivery["drafts"]
+    assert draft["to"] == "yossi@example.com" and draft["attachments"][0][0].endswith(".pdf")
+    assert "—" not in draft["body"] and "–" not in draft["body"]
+    explain, card = [t for _, t in delivery["replies"]]
+    assert "לא נשלחת עד שתענה שלח" in explain
+    assert card.startswith(bot.CARD_PREFIX) and "[draft:d1]" in card
+    assert all(root == "r1" for root, _ in delivery["replies"]), "in the version's own thread"
+
+
+def test_a_client_without_email_gets_no_draft_and_dror_is_told(delivery):
+    delivery["email"] = ""
+    out = strategy_bot.final_pdf("rt1", dry_run=True)
+    assert out["delivery"] == "no_email" and delivery["drafts"] == []
+    assert "אין מייל בכרטיס הלקוח" in delivery["replies"][0][1]
+
+
+def test_a_failing_draft_does_not_undo_the_filed_pdf(delivery, monkeypatch):
+    from src.lib import agent_tools
+
+    monkeypatch.setattr(agent_tools, "create_draft",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gmail.compose refused")))
+    out = strategy_bot.final_pdf("rt1", dry_run=True)
+    assert out["attached"] and out["delivery"] == "failed"

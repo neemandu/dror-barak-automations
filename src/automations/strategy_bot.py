@@ -165,7 +165,8 @@ def final_pdf(task_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     if review_tasks.kind_of(task) is not review_tasks.STRATEGY or not review_tasks._closed(task):
         return {"skipped": "not a closed strategy review task"}
     client_id = bot.linked_client_id(task)
-    drafts = [c for t in bot.threads(clickup, task_id) for c in [t["root"], *t["replies"]] if bot._is_draft(c)]
+    all_threads = bot.threads(clickup, task_id)
+    drafts = [c for t in all_threads for c in [t["root"], *t["replies"]] if bot._is_draft(c)]
     latest = max(drafts, key=lambda c: int(c.get("date") or 0), default=None)
     doc_id = task_docs.doc_id_in(bot._text(latest)) if latest else None
     if not client_id or not doc_id:
@@ -181,4 +182,57 @@ def final_pdf(task_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     if attached:
         auto.log_action("strategy_final_attached", client_id=client_id,
                         url=f"https://docs.google.com/document/d/{doc_id}/edit")
-    return {"attached": attached, "doc_id": doc_id}
+    try:
+        delivery = _offer_to_client(clickup, auto, all_threads, latest, client_id, doc_id,
+                                    dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001 - the PDF is filed; the email draft is the extra
+        auto.log_action("strategy_delivery_failed", "error", client_id=client_id, detail=str(exc))
+        delivery = "failed"
+    return {"attached": attached, "doc_id": doc_id, "delivery": delivery}
+
+
+def _client_email(client: dict[str, Any]) -> tuple[str, str]:
+    """``(subject, body)`` of the email that takes the strategy to the client, in
+    Dror's voice. A draft: Dror can change it in Gmail before his "שלח"."""
+    first = client.get("first_name") or client.get("name") or ""
+    return (f"האסטרטגיה של {client.get('name') or first}",
+            f"היי {first},\n\n"
+            f"מצורפת האסטרטגיה שבנינו עבורך, עם הממצאים, הקהלים והצעדים הבאים.\n\n"
+            f"אשמח לעבור עליה יחד ולקבוע את ההמשך. אם יש שאלות, אני כאן.")
+
+
+def _offer_to_client(clickup: Any, auto: Automation, all_threads: list[dict[str, Any]],
+                     latest: dict[str, Any], client_id: str, doc_id: str, *, dry_run: bool) -> str:
+    """Closing the review means the strategy is approved: prepare the email that takes
+    it to the client, as a Gmail draft with the PDF behind a 📧 card in the version's
+    thread. Nothing is sent until Dror replies `שלח` there (his user only)."""
+    from ..lib import agent_tools
+    from . import clickup_to_claude as bot
+
+    ids = lambda t: {str(c.get("id")) for c in [t["root"], *t["replies"]]}  # noqa: E731
+    thread = next((t for t in all_threads if str(latest.get("id")) in ids(t)), None)
+    if thread is None:
+        return "no_thread"
+    root = str(thread["root"]["id"])
+    client = {**CrmClient(dry_run=dry_run).get_client(client_id), "id": client_id}
+    to = str(client.get("email") or "").strip()
+    if not to:
+        clickup.reply(root, "🤖 סגרת את האסטרטגיה, אבל אין מייל בכרטיס הלקוח, אז לא הכנתי טיוטה "
+                            "אליו. אחרי שתוסיף מייל אפשר לפתוח את המשימה ולסגור אותה שוב.")
+        auto.log_action("no_email", "skipped", client_id=client_id,
+                        detail="strategy approved but the client has no אימייל for the draft")
+        return "no_email"
+    stale = bot.pending_card(thread)
+    if stale and not dry_run:
+        agent_tools.delete_draft(stale["id"])  # closed again: the newer draft replaces it
+    pdf = b"%PDF-dry-run" if dry_run else task_docs.pdf_of(doc_id)
+    subject, body = _client_email(client)
+    name = str(client.get("name") or client_id)
+    draft = agent_tools.create_draft(to, subject, body, attachments=[(f"אסטרטגיה - {name}.pdf", pdf)],
+                                     dry_run=dry_run)
+    clickup.reply(root, "🤖 סגרת את האסטרטגיה, אז הכנתי טיוטת מייל ללקוח עם ה-PDF שלה. "
+                        "היא לא נשלחת עד שתענה שלח על הכרטיס שמתחת.")
+    clickup.reply(root, bot.card_text(draft))
+    auto.log_action("strategy_delivery_drafted", client_id=client_id, detail=to,
+                    url=agent_tools.DRAFTS_URL)
+    return "drafted"
