@@ -96,6 +96,48 @@ STRATEGIST = Worker(
     "זה מסמך, לא שיחה: בלי הקדמה, ובלי שאלה או הצעה להמשך בסוף.",
 )
 
+#: Added to the strategy agent's own instructions (Dror's, in ClickUp): they describe
+#: the work, this says how the result is delivered, which the agent's text does not.
+STRATEGY_DELIVERY = (
+    "\n\n---\n"
+    "אופן המסירה: המסמך נבנה אוטומטית מתשובות השאלון של הלקוח ומניתוח הנוכחות "
+    "הדיגיטלית שלו, והם חומרי הלקוח שלך. אין כאן מי שיענה על שאלה, לכן אל תשאל: התקדם עם "
+    "הנחות סבירות וסמן כל אחת במפורש כהנחה. כתוב Markdown: כותרות ברמה 2 לפרקים, טבלאות "
+    "Markdown, בלי כותרת ראשית למסמך, בלי הקדמה ובלי שאלה או הצעה להמשך בסוף."
+)
+
+STRATEGY_AGENT = "אדריכל האסטרטגיה"
+
+
+def strategist(clickup: Any = None) -> Worker:
+    """Who writes (and revises) a client's strategy: the strategy agent in the סוכנים
+    list, by its name (``STRATEGY_AGENT_NAME``, default :data:`STRATEGY_AGENT`), so
+    Dror's instructions there are the brief and an edit applies to the next strategy.
+    Falls back to the built-in :data:`STRATEGIST` when the list or the agent is not
+    there; an agent he closed stays off (``active`` is False)."""
+    from . import config
+
+    wanted = str(config.get("STRATEGY_AGENT_NAME") or STRATEGY_AGENT).strip()
+    try:
+        if clickup is None:
+            from .clients.clickup import ClickUpClient
+
+            clickup = ClickUpClient()
+        list_id = str(config.get("CLICKUP_AGENTS_LIST_ID") or "")
+        if not list_id:
+            field = next((f for f in clickup.get_list_fields(str(config.require("CLICKUP_TASKS_LIST_ID")))
+                          if crm_fields.field_key(str(f.get("name") or "")) == crm_fields.field_key(FIELD)), {})
+            list_id = str((field.get("type_config") or {}).get("subcategory_id") or "")
+        for task in clickup.list_tasks(list_id) if list_id else []:
+            if str(task.get("name") or "").strip() == wanted:
+                found = agent(str(task["id"]), clickup)
+                if found.job:
+                    return found._replace(job=found.job + STRATEGY_DELIVERY)
+    except Exception:  # noqa: BLE001 - the strategy must not depend on the agents list being reachable
+        pass
+    return STRATEGIST
+
+
 WORKERS: dict[str, Worker] = {w.name: w for w in (WRITER, SOCIAL, CAMPAIGNS, ASSISTANT)}
 
 #: Who does a task when the list has no ``עובד`` field at all (a workspace set up

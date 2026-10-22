@@ -32,9 +32,6 @@ from .social_prep import analyze_profiles
 
 NAME = "strategy_bot"
 
-# The brief is the strategist's, so a revision on the task follows the same one.
-_SYSTEM = workers.STRATEGIST.job
-
 # The strategy task's description: what a revision on it is asked to do. The
 # client's details and questionnaire answers come with it (the task's לקוח).
 _BRIEF = ("מסמך אסטרטגיה שיווקית מלא ללקוח, לפי תשובות השאלון שלו והנוכחות הדיגיטלית "
@@ -73,13 +70,20 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         f"# ניתוח הנוכחות הדיגיטלית\n{social_text}\n\n"
         "כתוב עכשיו את מסמך האסטרטגיה המלא."
     )
-    strategy = ai.complete(prompt, system=_SYSTEM, max_tokens=16000, thinking=True)
+    # The brief is the strategy agent's in ClickUp (read now, so Dror's edits apply);
+    # a revision on the task follows the same one.
+    strategist = workers.strategist()
+    if not strategist.active:
+        auto.log_action("strategist_off", "error", client_id=client_id,
+                        detail=f"הסוכן {strategist.name} כבוי ב-ClickUp")
+        raise RuntimeError(f"הסוכן {strategist.name} כבוי ברשימת הסוכנים. אפשר להפעיל אותו ולנסות שוב.")
+    strategy = ai.complete(prompt, system=strategist.job, max_tokens=16000, thinking=True)
 
     strategy = task_docs.without_title(strategy)
     task_id = None
     if review_tasks.enabled():
         try:
-            task_id, saved = _deliver_as_task(crm, client, strategy, dry_run=dry_run)
+            task_id, saved = _deliver_as_task(crm, client, strategy, strategist.name, dry_run=dry_run)
         except Exception as exc:  # noqa: BLE001 - the strategy must not be lost: email it
             auto.log_action("review_task_failed", "error", client_id=client_id, detail=str(exc))
             task_id = None
@@ -101,7 +105,7 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     return {"strategy": strategy, "saved": saved, "task_id": task_id}
 
 
-def _deliver_as_task(crm: CrmClient, client: dict[str, Any], strategy: str,
+def _deliver_as_task(crm: CrmClient, client: dict[str, Any], strategy: str, author: str,
                      *, dry_run: bool) -> tuple[str, dict[str, str]]:
     """The strategy as the next version on the client's strategy task in משימות,
     where Dror's replies revise it (:mod:`src.lib.review_tasks`)."""
@@ -115,7 +119,7 @@ def _deliver_as_task(crm: CrmClient, client: dict[str, Any], strategy: str,
     saved = task_docs.save(f"{name} - גרסה {version}", strategy, client=client, crm=crm,
                            subfolder=kind.subfolder, dry_run=dry_run)
     review_tasks.post_version(clickup, task_id,
-                              bot._comment_body(version, saved["url"], strategy, workers.STRATEGIST.name))
+                              bot._comment_body(version, saved["url"], strategy, author))
     review_tasks.to_review(clickup, task_id)
     return task_id, saved
 

@@ -73,6 +73,7 @@ ACTION_LABELS: dict[str, str] = {
     "strategy_final_attached": "הגרסה הסופית של האסטרטגיה נכנסה לעמודה ב-ClickUp",
     "strategy_delivery_drafted": "הוכנה טיוטת מייל ללקוח עם האסטרטגיה, מחכה ל'שלח'",
     "strategy_delivery_failed": "הכנת טיוטת המייל ללקוח עם האסטרטגיה נכשלה",
+    "strategist_off": "סוכן האסטרטגיה כבוי, האסטרטגיה לא נבנתה",
     "questionnaire_unanswered": "השאלון עדיין לא מולא",
     "questionnaire_reminders_done": "סבב התזכורות לשאלון הסתיים",
     "no_email": "אין ללקוח כתובת מייל",

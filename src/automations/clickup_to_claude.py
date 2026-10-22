@@ -485,6 +485,8 @@ def run(task_id: str, *, instruction: Optional[str] = None, comment: Optional[st
         # A button press or a "קלוד" on a task with no employee still asks for work:
         # the copywriter takes it.
         worker = workers.worker_of(task, clickup) if workers.has_field(task) else None
+        if worker is None and kind is review_tasks.STRATEGY:
+            worker = workers.strategist(clickup)  # Dror's strategy agent, as it reads now
         worker = worker or (kind.worker if kind else None) or workers.DEFAULT
         if not worker.active:
             post(f"⏸️ הסוכן {worker.name} כבוי כרגע (המשימה שלו ברשימת סוכנים סגורה).")
