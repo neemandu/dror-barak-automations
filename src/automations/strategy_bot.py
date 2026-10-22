@@ -93,7 +93,7 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
 
     client_files.attach_doc(crm, client_id, "strategy_pdf", saved.get("id", ""), auto=auto, dry_run=dry_run)
     where = f"\nלבדיקה ותיקונים: {task_url(task_id)}" if task_id else ""
-    crm.append_automation_log(client_id, f"🤖 טיוטת האסטרטגיה מוכנה לבדיקה\n{saved['url']}{where}")
+    crm.append_automation_log(client_id, f"היי, סיימתי לכתוב את טיוטת האסטרטגיה.\n{saved['url']}{where}")
     auto.log_action(
         "strategy_ready", client_id=client_id, url=saved["url"],
         detail=f"לפי שאלון מ-{str(response.get('answered_at', ''))[:10]}, {len(social)} ערוצים נותחו",
