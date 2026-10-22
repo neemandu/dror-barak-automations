@@ -212,6 +212,20 @@ def test_drors_send_sends_the_pending_email(monkeypatch, read_log):
     assert any(e["action"] == "client_email_sent" for e in read_log())
 
 
+def test_approving_on_a_closed_task_does_not_reopen_it(monkeypatch):
+    # The strategy's email is approved after Dror closed the review task. The approval
+    # must not move the task back to review (that would ask him to close it again,
+    # and the closing drafts a second email).
+    moves = []
+    thread = _Thread(monkeypatch, [_card("K1"), {"id": "A1", "comment_text": "שלח", "user": DROR}])
+    monkeypatch.setattr(ClickUpClient, "get_task", lambda s, tid: {
+        **task_with(2), "status": {"status": "complete", "type": "closed"}})
+    monkeypatch.setattr(ClickUpClient, "set_status", lambda s, tid, status: moves.append(status))
+    out = bot.run("t1", comment="שלח", comment_id="A1", dry_run=True)
+    assert out["sent"]["id"] == "dr1" and thread.replied[-1].startswith("✅")
+    assert moves == []
+
+
 def test_nobody_but_dror_can_approve_a_send(monkeypatch, read_log):
     thread = _Thread(monkeypatch, [_card("K1"), {"id": "A1", "comment_text": "שלח", "user": SOMEONE}])
     out = bot.run("t1", comment="שלח", comment_id="A1", dry_run=True)

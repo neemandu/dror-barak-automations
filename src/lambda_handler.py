@@ -396,6 +396,10 @@ def handle_action(
     idempotency.complete(key)
     if action.confirm:
         _comment(task_id, action.confirm, dry_run)
+    elif dry_run:
+        # The send comments for itself, but through a dry-run client that swallows it.
+        # A press with no visible result looks like a broken button (see _comment).
+        _comment(task_id, f"{action.label}: הושלם", dry_run)
     return {"ok": True, "action": action.key, "result": result}
 
 

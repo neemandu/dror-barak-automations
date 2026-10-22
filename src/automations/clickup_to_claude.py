@@ -76,6 +76,8 @@ DRAFT_PREFIX = "🤖 Claude:"
 #: Under every answer, in the ClickUp comment only (not in the Doc): how to go on,
 #: so nobody has to remember that a reply in the thread is feedback.
 ANSWER_FOOTER = "\n\n💬 לתיקון: עונים בשרשור מתחת לתגובה הזו. צריך PDF? עונים PDF."
+#: On a monthly report the PDF is already attached.
+REPORT_FOOTER = "\n\n💬 לתיקון: עונים בשרשור מתחת לתגובה הזו."
 CARD_PREFIX = "📧"
 SENT_PREFIX = "✅"
 
@@ -355,7 +357,7 @@ def _answer_text(comment: dict[str, Any], dry_run: bool) -> str:
         except Exception:  # noqa: BLE001 - the comment is still a fair record
             pass
     if text.startswith(DRAFT_PREFIX):
-        return text[len(DRAFT_PREFIX):].replace(ANSWER_FOOTER, "").strip()
+        return without_footer(text[len(DRAFT_PREFIX):]).strip()
     return text
 
 
@@ -394,12 +396,18 @@ def _load_client(crm: CrmClient, client_id: str) -> dict[str, Any]:
     return client
 
 
-def _comment_body(version: int, doc_url: str, draft: str, worker: str = "") -> str:
+def without_footer(text: str) -> str:
+    """An answer's comment text without the how-to-reply line (it is for Dror, not the model)."""
+    return text.replace(ANSWER_FOOTER, "").replace(REPORT_FOOTER, "")
+
+
+def _comment_body(version: int, doc_url: str, draft: str, worker: str = "",
+                  footer: str = ANSWER_FOOTER) -> str:
     plain = task_docs.as_plain_text(draft)
     if len(plain) > _FULL_COMMENT_CHARS:
         plain = plain[:_PREVIEW_CHARS].rstrip() + "\n\n[ההמשך במסמך]"
     signed = f" · {worker}" if worker else ""
-    return f"{DRAFT_PREFIX} גרסה {version}{signed}\n{doc_url}\n\n{plain}{ANSWER_FOOTER}"
+    return f"{DRAFT_PREFIX} גרסה {version}{signed}\n{doc_url}\n\n{plain}{footer}"
 
 
 def _move(clickup: ClickUpClient, task: dict[str, Any], status: str, auto: Automation) -> None:

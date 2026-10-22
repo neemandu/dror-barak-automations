@@ -243,7 +243,7 @@ def _message(client: dict[str, Any], name: str, result: dict[str, Any], *,
         details.append(f"שיתפתי את התיקייה עם {result['shared_with']}.")
 
     if result.get("questionnaire_sent"):
-        details.append(f"שלחתי ל{email} את שאלון האסטרטגיה. אם לא ימולא, אזכיר בעוד כשלושה ימים "
+        details.append(f"שלחתי אל {email} את שאלון האסטרטגיה. אם לא ימולא, אזכיר בעוד כשלושה ימים "
                        f"ושוב אחרי שבוע, ואם גם אז לא, אעדכן אותך.")
     elif not email:
         details.append("לא שלחתי את שאלון האסטרטגיה כי אין מייל במשימה. אחרי שתוסיף מייל "

@@ -288,7 +288,8 @@ def _deliver_as_task(report: _Report, *, task_id: Optional[str], thread_root: Op
             f"דוח הקמפיינים החודשי ל{report.label}, מנתוני Meta Ads של הלקוח.")
     all_threads = bot.threads(clickup, task_id)
     version = bot.versions(all_threads) + 1
-    text = (bot._comment_body(version, report.url, _as_text(report), "דוח קמפיינים")
+    text = (bot._comment_body(version, report.url, _as_text(report), "דוח קמפיינים",
+                              footer=bot.REPORT_FOOTER)
             + f"\n{review_tasks.month_tag(report.month)}")
     root = review_tasks.post_version(clickup, task_id, text, thread_root)
     try:
@@ -332,7 +333,7 @@ def revise(task: dict[str, Any], thread: Optional[dict[str, Any]], feedback: str
     previous = None
     if drafts:
         body = bot._text(drafts[-1]).split("\n\n", 1)[-1]
-        previous = review_tasks._MONTH_TAG.sub("", body).strip()
+        previous = bot.without_footer(review_tasks._MONTH_TAG.sub("", body)).strip()
     return run(client_id, month=month, dry_run=dry_run,
                feedback=feedback or None, previous=previous if feedback else None,
                task_id=str(task["id"]), thread_root=str(thread["root"]["id"]) if thread else None)

@@ -239,7 +239,7 @@ def test_no_dror_email_means_no_notification_but_the_comment_stays(captured, mon
     assert "onboarding_email_sent" not in {e["action"] for e in read_log()}
 
 
-def test_the_message_has_no_long_dashes_and_no_pronoun_for_the_client(captured):
+def test_the_message_has_no_long_dashes(captured):
     onboarding.run("42", dry_run=True)
     text = captured["comments"][0]
     assert "—" not in text and "–" not in text

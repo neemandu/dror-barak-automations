@@ -169,6 +169,10 @@ def test_every_answer_says_how_to_go_on_and_the_footer_stays_out_of_the_conversa
     body = bot._comment_body(1, DOC, "תשובה קצרה")
     assert body.endswith(bot.ANSWER_FOOTER) and "עונים בשרשור" in body and "PDF" in body
     assert "—" not in body and "–" not in body
+    # a monthly report already has its PDF attached: no "ask for a PDF" there
+    report = bot._comment_body(1, DOC, "דוח", footer=bot.REPORT_FOOTER)
+    assert "עונים בשרשור" in report and "PDF" not in report.split(DOC)[1]
+    assert bot.without_footer(report) == bot.without_footer(body).replace("תשובה קצרה", "דוח")
     # read back as Claude's earlier answer (when the Doc cannot be read) without the footer
     assert bot._answer_text({"comment_text": body}, dry_run=True) == bot._answer_text(
         {"comment_text": bot._comment_body(1, DOC, "תשובה קצרה").replace(bot.ANSWER_FOOTER, "")}, dry_run=True)
