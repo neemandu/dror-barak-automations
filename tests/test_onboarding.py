@@ -134,7 +134,7 @@ def test_the_client_gets_their_folder_at_onboarding(captured, monkeypatch, read_
     result = onboarding.run("42", dry_run=True)
     assert shared and shared[0][1] == result["shared_with"]
     assert "folder_shared" in {e["action"] for e in read_log()}
-    assert any("שותפה" in c for c in captured["comments"])
+    assert any("שיתפתי את התיקייה" in c for c in captured["comments"])
 
 
 def test_no_email_means_no_share_but_onboarding_goes_on(captured, monkeypatch, read_log):
@@ -190,11 +190,59 @@ def test_a_client_with_an_ad_account_is_not_nagged_about_meta(captured, read_log
     assert "meta_account_missing" not in actions
 
 
-def test_onboarding_leaves_a_summary_on_the_clickup_task(captured):
+def test_onboarding_leaves_one_message_on_the_clickup_task(captured):
     onboarding.run("42", dry_run=True)
-    summary = next(c for c in captured["comments"] if c.startswith("✅"))
+    # One story, not a comment per step: the templates, the share and the
+    # questionnaire do not comment on their own while onboarding runs them.
+    assert len(captured["comments"]) == 1
+    summary = captured["comments"][0]
+    assert summary.startswith("היי,") and summary.rstrip().endswith("בהצלחה!")
     assert "drive.google.com" in summary, "Dror opens the folder from the task"
     assert "לקוח פעיל" in summary
+    assert "שאלון האסטרטגיה" in summary
+
+
+def test_the_message_says_the_client_signed_when_they_signed_on_the_page(captured, monkeypatch):
+    from src.lib import contract_store
+
+    monkeypatch.setattr(contract_store, "get_signed", lambda cid: {"status": contract_store.FILED})
+    onboarding.run("42", dry_run=True)
+    assert "נחתם, אז סידרתי הכל" in captured["comments"][0]
+
+
+def test_the_message_says_so_when_dror_moved_the_status_himself(captured, monkeypatch):
+    from src.lib import contract_store
+
+    monkeypatch.setattr(contract_store, "get_signed", lambda cid: None)
+    onboarding.run("42", dry_run=True)
+    assert "העברת את" in captured["comments"][0] and "ל'חתם'" in captured["comments"][0]
+
+
+def test_the_message_names_what_is_left_for_dror(captured, monkeypatch, read_log):
+    client_says(monkeypatch, email="", meta_ad_account="")
+    onboarding.run("42", dry_run=True)
+    text = captured["comments"][0]
+    assert "אין מייל במשימה" in text and "'שלח שאלון'" in text
+    assert "חסר חשבון מודעות Meta" in text
+
+
+def test_dror_is_emailed_what_was_done(captured, monkeypatch, read_log):
+    monkeypatch.setenv("DROR_EMAIL", "dror@example.com")
+    onboarding.run("42", dry_run=True)
+    assert "onboarding_email_sent" in {e["action"] for e in read_log()}
+
+
+def test_no_dror_email_means_no_notification_but_the_comment_stays(captured, monkeypatch, read_log):
+    monkeypatch.setenv("DROR_EMAIL", "")
+    onboarding.run("42", dry_run=True)
+    assert len(captured["comments"]) == 1
+    assert "onboarding_email_sent" not in {e["action"] for e in read_log()}
+
+
+def test_the_message_has_no_long_dashes_and_no_pronoun_for_the_client(captured):
+    onboarding.run("42", dry_run=True)
+    text = captured["comments"][0]
+    assert "—" not in text and "–" not in text
 
 
 # ---------------------------------------------------------- whatsapp welcome

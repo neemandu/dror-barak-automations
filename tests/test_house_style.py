@@ -61,7 +61,7 @@ def test_no_long_dash_in_a_template_page(name):
 
 _PARAMS = dict(client_name="מכללת דוגמה", cta_url="https://x.example/a", signed_at="23.9.2026",
                fingerprint="abc", month_label="ספטמבר 2026", spend="1,000 ₪", leads="10",
-               cost_per_lead="100 ₪")
+               cost_per_lead="100 ₪", summary="ההסכם נחתם, אז סידרתי הכל:\n• תיקיית הלקוח מוכנה")
 _EMOJI = re.compile("[\U0001F300-\U0001FAFF☀-➿]")
 
 

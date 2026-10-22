@@ -119,8 +119,23 @@ TEMPLATES: dict[str, EmailTemplate] = {
             "תאריך החתימה: {signed_at}\n"
             "טביעת אצבע של המסמך: {fingerprint}\n"
             "\n"
-            "האונבורדינג יוצא לדרך אוטומטית."
+            "האונבורדינג יוצא לדרך אוטומטית, ואעדכן אותך במייל נוסף כשהכל מוכן."
         ),
+        internal=True,
+    ),
+    # Sent to Dror when onboarding finishes: the second half of the pair that starts
+    # with `signed_notification`. The summary is the same text as the comment on the
+    # client's task (src/automations/onboarding.py::_message).
+    "onboarding_done": EmailTemplate(
+        subject="{client_name}: הכל מוכן לעבודה",
+        body=(
+            "היי דרור,\n"
+            "\n"
+            "{summary}\n"
+            "\n"
+            "בהצלחה!"
+        ),
+        cta="לתיקיית הלקוח",
         internal=True,
     ),
     # Sent to Dror when the strategy bot (T8) has saved a draft to Drive. Email
