@@ -132,7 +132,9 @@ def strategist(clickup: Any = None) -> Worker:
             if str(task.get("name") or "").strip() == wanted:
                 found = agent(str(task["id"]), clickup)
                 if found.job:
-                    return found._replace(job=found.job + STRATEGY_DELIVERY)
+                    from . import strategy_examples
+
+                    return found._replace(job=found.job + strategy_examples.load() + STRATEGY_DELIVERY)
     except Exception:  # noqa: BLE001 - the strategy must not depend on the agents list being reachable
         pass
     return STRATEGIST

@@ -41,3 +41,28 @@ def test_falls_back_to_the_built_in_when_clickup_has_no_such_agent(monkeypatch):
             raise RuntimeError("down")
 
     assert workers.strategist(Broken()) is workers.STRATEGIST
+
+
+def test_examples_come_from_docs_in_the_examples_subfolder(monkeypatch):
+    from src.lib import strategy_examples as se
+
+    monkeypatch.setenv("DRIVE_TEMPLATES_FOLDER_ID", "TPL")
+
+    class G:
+        def list_folder(self, parent):
+            if parent == "TPL":
+                return [{"id": "F", "name": se.FOLDER, "mimeType": "application/vnd.google-apps.folder"}]
+            return [{"id": "D1", "name": "דוגמה א", "mimeType": se.DOC_MIME},
+                    {"id": "X", "name": "גיליון", "mimeType": "application/vnd.google-apps.spreadsheet"}]
+
+        def _headers(self):
+            return {}
+
+    class R:
+        content = "תוכן הדוגמה".encode()
+
+    monkeypatch.setattr(se, "request", lambda *a, **k: R())
+    text = se.load(G())
+    assert "דוגמה: דוגמה א" in text and "תוכן הדוגמה" in text and "גיליון" not in text
+    monkeypatch.setenv("DRIVE_TEMPLATES_FOLDER_ID", "")
+    assert se.load(G()) == ""
