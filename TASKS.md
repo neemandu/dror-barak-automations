@@ -5,7 +5,9 @@ complete + dry-run verified**; live runs additionally need the credentials in
 `docs/CREDENTIALS.md`. Last audited against production (run-log, Lambda metrics,
 ClickUp) on 2026-09-15.
 
-`python -m pytest` → 405 passing.
+`python -m pytest` → 649 passing, 4 failing on a Windows laptop (`test_deploy_stack` path
+separators, 3 in `test_pdf_chromium`); the same 4 fail on a clean checkout, so they are not from
+recent changes.
 
 ## Now — production is missing configuration, not code
 
@@ -42,6 +44,33 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   request timed out (no DNS record was ever added at Wix). Request again with
   `check_domain --request`, add the two Wix records (`docs/CREDENTIALS.md` §7a),
   `setup_domain --apply`, then push `SignBaseUrl`.
+
+## Manual ClickUp steps (UI only, the API cannot do them)
+
+- [ ] **Button labels say what they do.** Rename in ClickUp, e.g. `שלח הצעת מחיר` →
+  "שלח חוזה ללקוח במייל" (the automation behind it is unchanged; `docs/OPERATIONS.md` names the
+  buttons by their current labels, so update the table's `…` entries when renaming).
+- [ ] **Field descriptions** (ClickUp field → ⋯ → description): `סטטוס משני` ("`חתם` מפעיל
+  אונבורדינג ושולח ללקוח את השאלון. שאר הערכים לתיעוד בלבד"), `תבניות` ("סימון מעתיק את הקובץ
+  לתיקיית הלקוח"), each button (one line on what it sends).
+- [ ] **The `בנה דוח רשתות` button** on `לקוחות` and optional **`הרץ שוב`** on `משימות` (see above).
+
+## Manual test list (production workspace: use a test task and your own contacts, clean up after)
+
+1. New client task with only a name, then add a phone: one Hebrew "שמרתי את הטלפון" note, once.
+2. `שלח הצעת מחיר` to your own email: one comment naming the address and the price, plus a
+   `תזכורת חתימה` task. Press with the email field empty: the comment says nothing was sent.
+3. Sign on the page: "ההסכם נחתם" email, then the single onboarding message on the task and the
+   "הכל מוכן לעבודה" email; the wording says the client signed. Repeat with a task whose status
+   you set to `חתם` by hand: the wording says you moved it.
+4. Fill the questionnaire: the note on the task and the "התקבל" email; the social report starts.
+5. `בנה אסטרטגיה`, reply in the thread (revision), then **close the review task**: PDF in the
+   `אסטרטגיה` column, a draft and a 📧 card appear. Reply `שלח` **on the closed task**: this is
+   unverified (does `taskCommentPosted` fire on a closed task?), and it must not reopen the task.
+6. A `משימות` task with an `עובד`: the answer carries the "לתיקון: עונים בשרשור" line.
+7. **Does a comment the bot posts with Dror's own token notify him?** If not, the emails above
+   are the only real-time notice (they are sent either way).
+8. Only then: `git pull`, confirm, and `deploy_stack` to `dror-automations-dev`.
 
 ## Backlog
 
@@ -95,6 +124,14 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
   today; worth defining the step (a delivery email, a kickoff meeting, a status).
 
 ## Done
+
+- [x] **Dror is told what was done, in one voice (22.10).** Onboarding posts one first-person
+  message on the task and emails it ("ההסכם עם X נחתם, אז סידרתי הכל: …", saying whether the
+  client signed or Dror set `חתם`), a submitted questionnaire does the same, a send comments
+  once with recipient, price and follow-up (no more "✅ sent" when nothing went out), every
+  Claude answer ends with how to reply, and closing the strategy task also prepares the client's
+  email as a draft behind a 📧 card. `docs/OPERATIONS.md` has the "מה קורה כשאני..." table and
+  `tests/test_dror_ux.py` fails if a button is missing from it.
 
 - [x] **The strategy and the monthly report as review tasks (26.9).** Both arrive on
   משימות in `לבדיקה של דרור`, linked to the client (`src/lib/review_tasks.py`), with
