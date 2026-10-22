@@ -127,6 +127,9 @@ DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
+#: The tools that need gmail.readonly (the rest of Gmail needs gmail.compose only).
+MAIL_READ_TOOLS = {"gmail_search", "gmail_read"}
+
 # Offered only when the task's client has a Meta ad account, and bound to that
 # account: the model cannot name another one, so one client's numbers can never
 # end up in another client's work.
@@ -167,8 +170,13 @@ class Toolbox:
         # Drafts made in this run: each becomes an approval card on the task.
         self.drafts: list[dict[str, str]] = []
         self.meta_account = meta_account or None
-        self.definitions: list[dict[str, Any]] = DEFINITIONS + (
-            [META_DEFINITION] if self.meta_account else [])
+        # Reading mail needs gmail.readonly in the domain's delegation; drafts and
+        # approved sends need only gmail.compose. Without readonly the agent is not
+        # offered tools that would fail mid-run, and it works from Drive and the web.
+        reads_mail = dry_run or google_auth.can_mint(google_auth.GMAIL_READ_SCOPES)
+        self.definitions: list[dict[str, Any]] = [
+            d for d in DEFINITIONS if reads_mail or d["name"] not in MAIL_READ_TOOLS
+        ] + ([META_DEFINITION] if self.meta_account else [])
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """Run tool ``name``. Returns ``(text, is_error)``."""

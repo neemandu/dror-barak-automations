@@ -18,6 +18,37 @@ def test_nothing_can_send_mail_or_delete():
     assert not any(word in n for n in names for word in ("send", "delete", "share", "move"))
 
 
+def test_without_the_read_scope_the_agent_is_not_offered_mail_reading(monkeypatch):
+    # Drafts need only gmail.compose; search and read need gmail.readonly, which the
+    # domain may not have granted. The agent must not be handed tools that fail.
+    monkeypatch.setattr(agent_tools.google_auth, "can_mint",
+                        lambda scopes: scopes != agent_tools.google_auth.GMAIL_READ_SCOPES)
+    box = Toolbox()
+    names = {d["name"] for d in box.definitions}
+    assert "gmail_create_draft" in names and "drive_search" in names
+    assert not names & agent_tools.MAIL_READ_TOOLS
+    assert "Unknown tool" in box.run("gmail_search", {"query": "x"})[0]
+
+    monkeypatch.setattr(agent_tools.google_auth, "can_mint", lambda scopes: True)
+    assert agent_tools.MAIL_READ_TOOLS <= {d["name"] for d in Toolbox().definitions}
+
+
+def test_a_refused_scope_is_not_asked_for_again_for_a_few_minutes(monkeypatch):
+    from src.lib import google_auth
+
+    calls = []
+
+    def refuse(scopes=None, **kw):
+        calls.append(scopes)
+        raise google_auth.GoogleAuthError("unauthorized_client")
+
+    monkeypatch.setattr(google_auth, "access_token", refuse)
+    monkeypatch.setitem(google_auth._cache, "denied", {})
+    assert not google_auth.can_mint(google_auth.GMAIL_READ_SCOPES)
+    assert not google_auth.can_mint(google_auth.GMAIL_READ_SCOPES)
+    assert len(calls) == 1
+
+
 def test_a_draft_goes_out_in_the_house_style(monkeypatch):
     sent = {}
 

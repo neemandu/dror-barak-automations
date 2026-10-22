@@ -52,7 +52,10 @@ GMAIL_SCOPES = [
 ]
 
 _cache: dict[str, Any] = {"token": None, "expires_at": 0.0, "key_info": None,
-                          "tokens": {}}
+                          "tokens": {}, "denied": {}}
+
+#: How long a scope Google refused is not asked for again (see :func:`can_mint`).
+DENIED_FOR_S = 300
 
 
 class GoogleAuthError(RuntimeError):
@@ -167,6 +170,23 @@ def access_token(force_refresh: bool = False, scopes: Optional[list[str]] = None
     _cache["token"] = token
     _cache["expires_at"] = expires_at
     return token
+
+
+def can_mint(scopes: list[str]) -> bool:
+    """Whether Google grants a token for ``scopes`` (a delegation line may be missing).
+
+    A refusal is remembered for :data:`DENIED_FOR_S`, so a scope the admin never
+    granted costs one failed call per few minutes, not one per task.
+    """
+    key = " ".join(sorted(scopes))
+    if _cache["denied"].get(key, 0.0) > time.time():
+        return False
+    try:
+        access_token(scopes=scopes)
+        return True
+    except GoogleAuthError:
+        _cache["denied"][key] = time.time() + DENIED_FOR_S
+        return False
 
 
 def _mint(scopes: list[str]) -> tuple[str, float]:

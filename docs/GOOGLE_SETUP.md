@@ -116,13 +116,19 @@ This is admin-only, and the step that makes the rest work.
 https://www.googleapis.com/auth/contacts,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/forms.responses.readonly
 ```
 
-   For the משימות agent (#9) to read Dror's mail and leave drafts, add two more to
-   the same line. Without them everything else works; the agent says it cannot
-   reach Gmail:
+   For the system's emails to leave as Gmail drafts that Dror sends with `שלח` (the
+   משימות agents' emails, the monthly report's email to the client), add **one** more
+   to the same line. Without it everything else works, but no draft can be made:
 
 ```
-https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.compose
+https://www.googleapis.com/auth/gmail.compose
 ```
+
+   Reading Dror's mail is **optional**. Add `https://www.googleapis.com/auth/gmail.readonly`
+   only if the agents should search and read his inbox. Without it the agents are
+   simply not offered the mail-reading tools and work from Drive and the web;
+   drafts and approved sends are unaffected (each Gmail operation asks for its own
+   scope).
 
 7. **Authorize**
 

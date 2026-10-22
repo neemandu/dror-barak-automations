@@ -22,11 +22,13 @@ stack with `python -m src.tools.push_stack_params <ParameterName>`.
 - [ ] **`SmooveWebhookToken`.** Empty = the Smoove endpoint is open; anyone with the
   URL can create contacts and fire billed WhatsApp Flows. Generate one, deploy it,
   configure Smoove to send it as `X-Smoove-Token`.
-- [ ] **Gmail for the משימות bot: `gmail.readonly` is not granted.** In the
-  delegation entry for client id `109980814053882054300` (admin.google.com),
-  `gmail.compose` works but `gmail.readonly` is refused (checked 25.9, still
-  refused after 10 min). The bot asks for both in one token, so until that line is
-  added it can neither read mail nor leave drafts. `docs/GOOGLE_SETUP.md` step 5b.
+- [x] **Gmail drafts work with `gmail.compose` alone (22.10).** Verified live: a
+  compose-only token reads `drafts.list` (200) while `gmail.readonly` is still
+  refused for client id `109980814053882054300`. Each Gmail operation asks for its
+  own scope (since 25.9), and the agent is no longer offered `gmail_search` /
+  `gmail_read` when the read scope is not granted (`google_auth.can_mint`).
+  Granting `gmail.readonly` in admin.google.com is now optional (`docs/GOOGLE_SETUP.md`
+  step 5b): it only lets the agents read Dror's inbox.
 - [ ] **The `בנה דוח רשתות` button on `לקוחות`.** The other four buttons exist and
   answered ClickUp's test with a valid token (26–27.9); this one is missing
   (`check_clickup_crm` lists them).
