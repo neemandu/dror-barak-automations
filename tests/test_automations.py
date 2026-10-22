@@ -348,3 +348,26 @@ def test_the_tasks_agent_gives_up_after_max_turns(monkeypatch, read_log):
         clickup_to_claude.run("abc123", dry_run=True)
     assert next(e for e in read_log() if e["action"] == "draft_failed")["status"] == "error"
 
+
+
+def test_the_send_says_to_whom_for_how_much_and_what_comes_next(monkeypatch):
+    from src.lib.clients.crm import CrmClient
+
+    said = []
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: said.append(msg) or {})
+    send_quote.send("42", dry_run=True)
+    assert len(said) == 1
+    text = said[0]
+    assert text.startswith("היי, שלחתי את ההסכם לחתימה אל ") and "₪" in text and "קישור לחתימה:" in text
+    assert "—" not in text and "–" not in text
+
+
+def test_a_send_that_could_not_go_out_does_not_say_it_did(monkeypatch):
+    from src.lib.clients import crm as crm_mod
+    from src.lib.clients.crm import CrmClient
+
+    said = []
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: said.append(msg) or {})
+    monkeypatch.setattr(CrmClient, "get_client", lambda self, cid: {**crm_mod._fixture_client(cid), "email": ""})
+    send_quote.send("42", dry_run=True)
+    assert "לא שלחתי אותו ללקוח: אין מייל במשימה" in said[0] and "שלחתי את ההסכם" not in said[0]

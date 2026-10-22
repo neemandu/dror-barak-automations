@@ -73,6 +73,9 @@ MAX_TURNS = 16
 #: comment starting with one of these is never feedback.
 BOT_PREFIXES = ("🤖", "❌", "🧪", "📧", "✅")
 DRAFT_PREFIX = "🤖 Claude:"
+#: Under every answer, in the ClickUp comment only (not in the Doc): how to go on,
+#: so nobody has to remember that a reply in the thread is feedback.
+ANSWER_FOOTER = "\n\n💬 לתיקון: עונים בשרשור מתחת לתגובה הזו. צריך PDF? עונים PDF."
 CARD_PREFIX = "📧"
 SENT_PREFIX = "✅"
 
@@ -351,7 +354,9 @@ def _answer_text(comment: dict[str, Any], dry_run: bool) -> str:
             return task_docs.text_of(doc_id)
         except Exception:  # noqa: BLE001 - the comment is still a fair record
             pass
-    return text[len(DRAFT_PREFIX):].strip() if text.startswith(DRAFT_PREFIX) else text
+    if text.startswith(DRAFT_PREFIX):
+        return text[len(DRAFT_PREFIX):].replace(ANSWER_FOOTER, "").strip()
+    return text
 
 
 def conversation(task_prompt: str, thread: dict[str, Any], feedback: str,
@@ -394,7 +399,7 @@ def _comment_body(version: int, doc_url: str, draft: str, worker: str = "") -> s
     if len(plain) > _FULL_COMMENT_CHARS:
         plain = plain[:_PREVIEW_CHARS].rstrip() + "\n\n[ההמשך במסמך]"
     signed = f" · {worker}" if worker else ""
-    return f"{DRAFT_PREFIX} גרסה {version}{signed}\n{doc_url}\n\n{plain}"
+    return f"{DRAFT_PREFIX} גרסה {version}{signed}\n{doc_url}\n\n{plain}{ANSWER_FOOTER}"
 
 
 def _move(clickup: ClickUpClient, task: dict[str, Any], status: str, auto: Automation) -> None:

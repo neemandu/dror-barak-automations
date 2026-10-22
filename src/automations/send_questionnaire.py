@@ -68,7 +68,9 @@ def send_link(auto: Automation, crm: CrmClient, client: dict[str, Any],
             crm.update_fields(client_id, questionnaire_sent_at=int(time.time() * 1000))
         except Exception:  # noqa: BLE001 - the questionnaire went out; the date is a nicety
             pass
-        crm.append_automation_log(client_id, f"📋 שאלון האסטרטגיה נשלח ל־{to}")
+        crm.append_automation_log(
+            client_id, f"היי, שלחתי את שאלון האסטרטגיה אל {to}. אם לא ימולא, אזכיר בעוד כשלושה ימים "
+                       f"ושוב אחרי שבוע, ואם גם אז לא, אעדכן אותך.")
         auto.log_action("questionnaire_sent", client_id=client_id, detail=to)
         return None
     except Exception as exc:  # noqa: BLE001

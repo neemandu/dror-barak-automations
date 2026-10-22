@@ -64,6 +64,7 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
     asked_on_page = contract.missing_for(fields)
 
     delivered = _deliver(crm, client, url, dry_run=dry_run) if email else ""
+    reminder_task = ""
     # Start the reminder clock, and open the follow-up as a task Dror can see and
     # edit (reminder_tasks): sent automatically on its due date if they have not
     # signed. Signing clears the record and closes the task.
@@ -75,6 +76,7 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
             task_id = reminder_tasks.open_task(client_id, {**client, "id": client_id})
             if task_id:
                 signing.set_reminder_task(client_id, task_id)
+                reminder_task = task_id
         except Exception as exc:  # noqa: BLE001 - the quote is sent; the fallback template still reminds
             auto.log_action("reminder_task_failed", "error", client_id=client_id, detail=str(exc))
         # A new quote is a new contract: an earlier signature no longer answers for
@@ -89,14 +91,39 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
            "הקישור נוצר בדשבורד, והשליחה ללקוח ידנית" if not email else
            "לא נשלח אוטומטית, יש לשלוח את הקישור ללקוח ידנית")
     crm.append_automation_log(
-        client_id,
-        f"📄 הצעת מחיר נשלחה לחתימה ({source})\n"
-        f"קישור לחתימה: {url}\n{how}",
-    )
+        client_id, _message(client, url, delivered=bool(delivered), email=email,
+                            price=contract.prices(client)["total"], reminder=bool(reminder_task)))
     auto.log_action("quote_sent", client_id=client_id, url=url, detail=f"{how} ({source})",
                     asks_client_for=asked_on_page, source=source)
     return {"url": url, "delivered": delivered, "to": str(client.get("email") or "") if delivered else "",
             "asks_client_for": asked_on_page}
+
+
+def _message(client: dict[str, Any], url: str, *, delivered: bool, email: bool, price: float,
+             reminder: bool) -> str:
+    """What the press (or the dashboard's send) did, as the one comment on the task.
+
+    Says who it went to and for how much, and what happens next, because the button
+    is Dror's only moment to catch a wrong price or address. Never claims a send
+    that did not happen.
+    """
+    from ..lib import reminder_tasks
+
+    to = str(client.get("email") or "").strip()
+    cost = f"{contract._shekels(price)} ₪"
+    link = f"קישור לחתימה: {url}"
+    if delivered:
+        lines = [f"היי, שלחתי את ההסכם לחתימה אל {to}, על סך {cost}.", link]
+        if reminder:
+            lines.append(f"אם לא ייחתם, תישלח תזכורת אחת בעוד {reminder_tasks.DAYS} ימים, מהמשימה "
+                         f"'{reminder_tasks.PREFIX}…' ב'משימות'. אפשר לערוך אותה או לסגור כדי לבטל.")
+        return "\n".join(lines)
+    if not email:
+        return "\n".join([f"היי, יצרתי את קישור החתימה (על סך {cost}) ולא שלחתי אותו, כמו שביקשת.",
+                          link, "את השליחה ללקוח אפשר לעשות ידנית."])
+    why = "אין מייל במשימה" if not to else f"השליחה אל {to} נכשלה"
+    return "\n".join([f"היי, יצרתי את קישור החתימה אבל לא שלחתי אותו ללקוח: {why}.", link,
+                      "אפשר להוסיף מייל וללחוץ שוב, או לשלוח את הקישור ידנית."])
 
 
 def _deliver(crm: CrmClient, client: dict[str, Any], url: str, *, dry_run: bool) -> str:

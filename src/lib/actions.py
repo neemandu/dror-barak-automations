@@ -59,7 +59,10 @@ class Refused(ValueError):
 class Action(NamedTuple):
     key: str  # the ?action= value
     label: str  # Hebrew — the button text Dror sees
-    confirm: str  # commented back on the task when it succeeds
+    # Commented back on the task when it succeeds. Empty for the two sends: they
+    # comment themselves (to whom, for how much), and a generic "✅ sent" on top
+    # would say so even when no email went out.
+    confirm: str
     # False when re-running is legitimate (a revised quote, a rebuilt report).
     # True would mean "never twice for this client, whatever is clicked".
     once_only: bool
@@ -72,14 +75,14 @@ ACTIONS: dict[str, Action] = {
     "send_quote": Action(
         key="send_quote",
         label="שלח הצעת מחיר",
-        confirm="✅ נשלחה הצעת מחיר ללקוח",
+        confirm="",
         # A revised quote is normal. Blocking the second send would be wrong.
         once_only=False,
     ),
     "send_questionnaire": Action(
         key="send_questionnaire",
         label="שלח שאלון",
-        confirm="✅ נשלח שאלון ללקוח",
+        confirm="",
         once_only=False,  # clients lose links; resending is routine
     ),
     "social_prep": Action(

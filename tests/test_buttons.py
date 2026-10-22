@@ -253,13 +253,24 @@ def test_a_refusal_that_already_explained_itself_is_not_repeated(monkeypatch):
 # --------------------------------------------------------------- feedback
 
 
-def test_success_is_reported_back_on_the_task(monkeypatch):
+def test_a_build_is_confirmed_on_the_task(monkeypatch):
+    monkeypatch.setitem(actions._RUNNERS, "strategy_bot", lambda c, d: {"ok": True})
+    said = []
+    monkeypatch.setattr(lambda_handler, "_comment",
+                        lambda tid, msg, dry: said.append((tid, msg)))
+    lambda_handler.handle_action("strategy_bot", body(), TOKEN)
+    assert said == [("t1", actions.ACTIONS["strategy_bot"].confirm)]
+
+
+def test_a_send_comments_for_itself_so_the_press_adds_no_generic_tick(monkeypatch):
+    # send_quote / send_questionnaire say to whom and for how much; a "✅ sent" on top
+    # would also appear when no email went out.
     monkeypatch.setitem(actions._RUNNERS, "send_quote", lambda c, d: {"ok": True})
     said = []
     monkeypatch.setattr(lambda_handler, "_comment",
                         lambda tid, msg, dry: said.append((tid, msg)))
-    lambda_handler.handle_action("send_quote", body(), TOKEN)
-    assert said == [("t1", "✅ נשלחה הצעת מחיר ללקוח")]
+    assert lambda_handler.handle_action("send_quote", body(), TOKEN)["ok"] is True
+    assert said == []
 
 
 def test_failure_is_reported_back_on_the_task(monkeypatch):
@@ -355,13 +366,13 @@ def test_dry_run_still_comments_but_says_it_was_a_test(monkeypatch):
     # The comment posts for real, so the live client needs its config present.
     monkeypatch.setenv("CLICKUP_API_TOKEN", "pk_test")
     monkeypatch.setenv("CLICKUP_LIST_ID", "123")
-    monkeypatch.setitem(actions._RUNNERS, "send_quote", lambda c, d: {"ok": True})
+    monkeypatch.setitem(actions._RUNNERS, "strategy_bot", lambda c, d: {"ok": True})
     said = []
     monkeypatch.setattr(
         "src.lib.clients.crm.CrmClient.append_automation_log",
         lambda self, tid, msg: said.append((self.dry_run, msg)),
     )
-    lambda_handler.handle_action("send_quote", body(), TOKEN, dry_run=True)
+    lambda_handler.handle_action("strategy_bot", body(), TOKEN, dry_run=True)
 
     assert len(said) == 1, "dry-run must still tell Dror what happened"
     posted_with_dry_run, msg = said[0]

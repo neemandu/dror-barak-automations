@@ -165,6 +165,15 @@ def test_a_long_answer_shows_a_preview_and_the_doc():
     assert "#" not in short.split(DOC)[1] and "**" not in short
 
 
+def test_every_answer_says_how_to_go_on_and_the_footer_stays_out_of_the_conversation():
+    body = bot._comment_body(1, DOC, "תשובה קצרה")
+    assert body.endswith(bot.ANSWER_FOOTER) and "עונים בשרשור" in body and "PDF" in body
+    assert "—" not in body and "–" not in body
+    # read back as Claude's earlier answer (when the Doc cannot be read) without the footer
+    assert bot._answer_text({"comment_text": body}, dry_run=True) == bot._answer_text(
+        {"comment_text": bot._comment_body(1, DOC, "תשובה קצרה").replace(bot.ANSWER_FOOTER, "")}, dry_run=True)
+
+
 # ------------------------------------------------------------ the loop
 
 

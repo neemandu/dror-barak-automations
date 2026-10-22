@@ -394,7 +394,8 @@ def handle_action(
         raise
 
     idempotency.complete(key)
-    _comment(task_id, action.confirm, dry_run)
+    if action.confirm:
+        _comment(task_id, action.confirm, dry_run)
     return {"ok": True, "action": action.key, "result": result}
 
 
