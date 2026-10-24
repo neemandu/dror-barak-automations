@@ -26,6 +26,7 @@ from typing import Any
 from ..lib import emails, signing
 from ..lib.clients.crm import SUB_IN_WORK, CrmClient
 from .base import Automation, build_arg_parser, run_cli
+from .sign_reminders import _NOT_CHASED
 
 NAME = "questionnaire_reminders"
 
@@ -86,8 +87,21 @@ def run(*, dry_run: bool = False, now: float | None = None) -> dict[str, Any]:
         number = _due(pending, now)
         if number is None:
             continue
+        label = _NOT_CHASED.get(str(client.get("status") or ""))
+        if label:
+            # Not sent, said once, and the chase ends here (not at the give-up,
+            # which would report it as an unanswered questionnaire). The button
+            # sends the link again and restarts it.
+            if not dry_run:
+                signing.clear_questionnaire_pending(client_id)
+            crm.append_automation_log(
+                client_id, f"היי, לא שלחתי תזכורת למילוי השאלון, כי הלקוח מסומן '{label}'. "
+                           "אם עדיין רוצים את השאלון, לוחצים 'שלח שאלון ללקוח במייל'.")
+            auto.log_action("questionnaire_reminder_skipped_inactive", "skipped",
+                            client_id=client_id, detail=f"הלקוח {label}")
+            continue
 
-        to = str(client.get("email") or "").strip()
+        to =str(client.get("email") or "").strip()
         if not to:
             auto.log_action("no_email", "skipped", client_id=client_id,
                             detail="client owes a questionnaire but has no אימייל")

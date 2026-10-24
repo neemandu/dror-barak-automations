@@ -174,6 +174,24 @@ def test_answering_the_questionnaire_stops_the_chase(monkeypatch, read_log):
     assert sent == []
 
 
+@pytest.mark.parametrize("status", ["paused", "finished"])
+def test_a_paused_or_finished_client_is_not_chased_for_the_questionnaire(monkeypatch, read_log, status):
+    from src.lib import emails
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(CrmClient, "list_by_sub_status", lambda self, s: [
+        {"id": "c1", "name": "מכללת אלפא", "email": "a@b.co", "status": status}])
+    said = []
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: said.append(msg) or {})
+    signing._put_pending("questpending:c1",
+                         {"client_id": "c1", "issued_at": int(time.time() - 4 * DAY), "reminders_sent": 0})
+    sent = []
+    monkeypatch.setattr(emails, "send_template", lambda name, to, **k: sent.append(name))
+    assert questionnaire_reminders.run(dry_run=True)["reminded"] == 0 and sent == []
+    assert said and "לא שלחתי תזכורת למילוי השאלון" in said[0]
+    assert any(e["action"] == "questionnaire_reminder_skipped_inactive" for e in read_log())
+
+
 def test_a_client_who_never_answers_is_escalated_once_then_left_alone(monkeypatch, read_log):
     from src.lib.clients.crm import CrmClient
 
