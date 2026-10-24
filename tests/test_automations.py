@@ -120,6 +120,23 @@ def test_send_questionnaire_fails_loudly_without_an_email(read_log, monkeypatch)
     assert "no_email" in _actions(read_log)
 
 
+def test_a_client_who_answered_is_warned_first_and_sent_on_the_second_press(read_log, monkeypatch, answered):
+    from src.lib.actions import Refused
+
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    with pytest.raises(Refused, match="כבר מילא את השאלון") as exc:
+        send_questionnaire.run("42", dry_run=True)
+    assert "לוחצים שוב תוך 10 דקות" in str(exc.value)
+    assert "questionnaire_resend_warned" in _actions(read_log)
+    assert "questionnaire_sent" not in _actions(read_log)
+
+    assert send_questionnaire.run("42", dry_run=True)["sent"] is True  # pressed again: meant
+    assert "questionnaire_sent" in _actions(read_log)
+    with pytest.raises(Refused):  # a later re-send asks again
+        send_questionnaire.run("42", dry_run=True)
+
+
 def test_send_quote_issues_a_signing_link(read_log, monkeypatch, not_signed_yet):
     # Fillout is gone: the quote is now a link to our own signing page, and the
     # page finalises the contract itself, so there is no `signed` half any more.

@@ -186,6 +186,22 @@ def test_a_refused_press_can_be_pressed_again_at_once(monkeypatch):
     assert len(attempts) == 2
 
 
+def test_the_questionnaire_button_warns_then_sends_on_the_second_press(monkeypatch):
+    """A client who already answered: the first press only warns, the second sends
+    (the warning frees the 10-minute press guard, or the second press would be refused)."""
+    from src.lib import questionnaire_store as store
+
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    store.record_answer("t1", "מכללת אלפא", store.get_definition(store.default_id()), {"goals": "x"})
+    comments = []
+    monkeypatch.setattr(lambda_handler, "_comment", lambda tid, msg, dry: comments.append(msg))
+    first = lambda_handler.handle_action("send_questionnaire", body(date="1750000000000"), TOKEN, dry_run=True)
+    assert first["ok"] is False and "כבר מילא" in comments[-1]
+    second = lambda_handler.handle_action("send_questionnaire", body(date="1750000060000"), TOKEN, dry_run=True)
+    assert second["ok"] is True and second["result"]["sent"] is True
+
+
 def test_a_build_frees_its_button_when_it_finishes(monkeypatch):
     from src.lib import idempotency, tasks
 

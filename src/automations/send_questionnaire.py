@@ -89,10 +89,41 @@ def run(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
         from ..lib.actions import Refused
 
         raise Refused("אין כתובת מייל ללקוח", commented=True)
+    confirm = _confirm_resend(auto, client_id)
     problem = send_link(auto, crm, {**client, "id": client_id}, dry_run=dry_run)
     if problem:
         raise RuntimeError(problem)  # the mail itself failed: worth ClickUp's retry
+    if confirm:
+        from ..lib import idempotency
+
+        idempotency.release(confirm)  # the next re-send asks again
     return {"sent": True, "to": client.get("email")}
+
+
+#: A client who already answered: the first press warns, a second press inside this
+#: window sends. A button cannot ask before it runs, so the warning is a press.
+CONFIRM_WINDOW_S = 10 * 60
+
+
+def _confirm_resend(auto: Automation, client_id: str) -> Optional[str]:
+    """Refuse the first press for a client who already answered; let the second through.
+
+    Returns the confirmation key to release after the send, or None when the client
+    has not answered."""
+    from ..lib import idempotency, questionnaire_store, signing
+    from ..lib.actions import Refused
+
+    answered = questionnaire_store.latest_answered(client_id)
+    if not answered:
+        return None
+    key = f"confirm:{NAME}:{client_id}"
+    if not idempotency.claim(key, ttl=CONFIRM_WINDOW_S):
+        return key  # warned a moment ago, and pressed again: meant
+    when = signing.local_time(str(answered.get("answered_at") or ""))
+    auto.log_action("questionnaire_resend_warned", "skipped", client_id=client_id,
+                    detail=f"answered {answered.get('answered_at')}")
+    raise Refused(f"הלקוח כבר מילא את השאלון ב-{when}, אז לא שלחתי. "
+                  f"אם בכל זאת לשלוח שוב, לוחצים שוב תוך {CONFIRM_WINDOW_S // 60} דקות.")
 
 
 def main() -> None:
