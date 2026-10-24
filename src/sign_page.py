@@ -37,7 +37,7 @@ from urllib.parse import parse_qs
 
 from . import ui
 from .lib import client_folder, config, contract, contract_store, idempotency, pdf, signing
-from .lib.clients.crm import CrmClient
+from .lib.clients.crm import SUB_IN_WORK, CrmClient
 from .lib.logging_setup import get_logger
 
 log = get_logger("sign", "page")
@@ -368,8 +368,7 @@ def _client_fields(client: dict[str, Any]) -> dict[str, str]:
 def _already_signed(client_id: str) -> Optional[dict[str, Any]]:
     """The client's signature on the contract currently offered, if they gave it.
     ``send_quote`` marks an earlier one superseded, so a new quote can be signed."""
-    rec = contract_store.get_signed(client_id)
-    return rec if rec and rec.get("status") in (contract_store.RECEIVED, contract_store.FILED) else None
+    return contract_store.current_signature(client_id)
 
 
 def handle_get(token: str, dry_run: bool = False) -> str:
@@ -515,8 +514,11 @@ def file_contract(client_id: str, *, dry_run: bool = False) -> dict[str, Any]:
     details = _write_back(crm, client, fields)
 
     # Only now advance the status: `חתם` is what triggers onboarding, and it must
-    # not fire for a contract we failed to store.
-    crm.update_fields(client_id, sub_status="signed")
+    # not fire for a contract we failed to store. A client already `בעבודה` (a new
+    # contract for an onboarded client) stays there: onboarding ran, and `חתם`
+    # would take them off the lists the daily jobs work from.
+    if client.get("sub_status") != SUB_IN_WORK:
+        crm.update_fields(client_id, sub_status="signed")
     crm.append_automation_log(
         client_id,
         f"✍️ ההסכם נחתם על ידי הלקוח\n"

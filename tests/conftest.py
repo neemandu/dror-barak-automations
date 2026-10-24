@@ -90,6 +90,17 @@ def isolated_run_log(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def not_signed_yet(monkeypatch):
+    """The dry-run sample client is past `חתם`, and a contract is refused for a client
+    who signed: make it one who has not, for the tests of the send itself."""
+    from src.lib.clients import crm as crm_mod
+
+    sample = crm_mod._fixture_client
+    monkeypatch.setattr(crm_mod, "_fixture_client",
+                        lambda cid: {**sample(cid), "sub_status": crm_mod.SUB_QUOTE_SENT})
+
+
+@pytest.fixture
 def read_log():
     from src.lib import run_log
 

@@ -758,7 +758,9 @@ def send_contract(client_id: str, body: dict[str, Any], *, dry_run: bool = False
     if not idempotency.claim(once, ttl=60):
         return 429, {"errors": ["החוזה נשלח לפני רגע. אפשר לשלוח שוב בעוד דקה."]}
     try:
-        out = send_quote.send(client_id, dry_run=dry_run, email=mode == "email", source="מהדשבורד")
+        # The page asked first (louder for a signed client, above), so this send is meant.
+        out = send_quote.send(client_id, dry_run=dry_run, email=mode == "email", source="מהדשבורד",
+                              new_contract=True)
     except Exception as exc:  # noqa: BLE001 - said on the page, logged by send_quote
         idempotency.release(once)
         return 502, {"errors": [f"השליחה נכשלה: {exc}"]}

@@ -234,6 +234,23 @@ def test_onboarding_runs_once_even_for_two_distinct_signed_events(monkeypatch, c
     assert "already ran" in json.dumps(second, ensure_ascii=False)
 
 
+def test_onboarding_stays_done_after_the_default_week(monkeypatch, crm_says):
+    # The default guard lasts a week; a client moved back to חתם months later
+    # would get a second questionnaire email.
+    from src.automations import onboarding
+    from src.lib import idempotency
+
+    crm_says("signed")
+    held = []
+    real = idempotency.claim
+    monkeypatch.setattr(idempotency, "claim", lambda key, **k: held.append(k.get("ttl")) or real(key, **k))
+    monkeypatch.setattr(onboarding, "run", lambda cid, dry_run=False: {})
+    a = payload(hist_id="h1")
+    lambda_handler.handle(a, sign(a))
+    assert lambda_handler.ONBOARDING_ONCE_S in held
+    assert lambda_handler.ONBOARDING_ONCE_S >= 5 * 365 * 24 * 60 * 60
+
+
 def test_failed_onboarding_can_be_retried(monkeypatch, crm_says):
     # The business guard must not permanently block a client whose first
     # onboarding attempt died halfway.

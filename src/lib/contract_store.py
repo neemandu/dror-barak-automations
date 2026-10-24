@@ -84,6 +84,13 @@ def get_signed(client_id: str) -> Optional[dict[str, Any]]:
     return questionnaire_store._store().get(SIGNED_PREFIX + client_id)
 
 
+def current_signature(client_id: str) -> Optional[dict[str, Any]]:
+    """The client's signature on the contract currently offered, if they gave it.
+    One a newer quote superseded does not count."""
+    rec = get_signed(client_id)
+    return rec if rec and rec.get("status") in (RECEIVED, FILED) else None
+
+
 def update_signed(client_id: str, **changes: Any) -> dict[str, Any]:
     rec = get_signed(client_id)
     if not rec:

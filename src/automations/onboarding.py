@@ -207,10 +207,9 @@ def _signed_on_page(client_id: str) -> bool:
     from ..lib import contract_store
 
     try:
-        rec = contract_store.get_signed(client_id)
+        return contract_store.current_signature(client_id) is not None
     except Exception:  # noqa: BLE001 - the wording is a nicety, never worth a failed onboarding
         return False
-    return bool(rec) and rec.get("status") != contract_store.SUPERSEDED
 
 
 def _message(client: dict[str, Any], name: str, result: dict[str, Any], *,

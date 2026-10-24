@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..lib import contract, contract_store, idempotency, signing
-from ..lib.clients.crm import SUB_QUOTE_SENT, CrmClient
+from ..lib.clients.crm import SUB_IN_WORK, SUB_QUOTE_SENT, SUB_SIGNED, CrmClient
 from ..lib.logging_setup import get_logger
 from .base import Automation, build_arg_parser, run_cli
 
@@ -33,7 +33,7 @@ _log = get_logger(NAME, "deliver")
 
 
 def send(client_id: str, *, dry_run: bool = False, email: bool = True,
-         source: str = "מ-ClickUp") -> dict[str, Any]:
+         source: str = "מ-ClickUp", new_contract: bool = False) -> dict[str, Any]:
     """Send a client their contract to sign.
 
     The ClickUp button and the dashboard's send button both land here, so a quote
@@ -41,10 +41,18 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
     emailing it (the dashboard's "copy the link", for Dror to send by WhatsApp);
     everything else (status, reminders, the log) is the same, because the client
     is being offered the contract either way.
+
+    A client who already signed is refused unless ``new_contract`` says a new one
+    is meant: sending marks the signature superseded, so a stray press on the
+    button would quietly undo it. Only the dashboard's contract page passes it,
+    after a confirmation that says the client signed.
     """
     auto = Automation(NAME, dry_run=dry_run)
     crm = CrmClient(dry_run=dry_run)
     client = crm.get_client(client_id)
+
+    if not new_contract:
+        _refuse_if_signed(auto, client_id, client, dry_run=dry_run)
 
     # Check the contract can actually be produced before sending anyone a link.
     # A client who opens it and finds "סך של  ₪" has been made to look at a
@@ -97,6 +105,26 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
                     asks_client_for=asked_on_page, source=source)
     return {"url": url, "delivered": delivered, "to": str(client.get("email") or "") if delivered else "",
             "asks_client_for": asked_on_page}
+
+
+def _refuse_if_signed(auto: Automation, client_id: str, client: dict[str, Any], *,
+                      dry_run: bool) -> None:
+    """Refuse a new contract for a client who signed: on our page (a current
+    signature) or otherwise (the task is already at `חתם` or `בעבודה`, e.g. after
+    a paper signature)."""
+    from ..lib.actions import Refused
+
+    on_page = None if dry_run else contract_store.current_signature(client_id)
+    if not on_page and client.get("sub_status") not in (SUB_SIGNED, SUB_IN_WORK):
+        return
+    name = str(client.get("name") or client_id)
+    when = f" ב-{signing.local_time(on_page['audit']['signed_at'])}" if on_page else ""
+    auto.log_action("quote_refused_signed", "skipped", client_id=client_id,
+                    detail=f"{name} כבר חתם{when}")
+    raise Refused(
+        f"ההסכם עם {name} כבר נחתם{when}, אז לא שלחתי חוזה חדש: שליחה הייתה מבטלת את "
+        "החתימה הקיימת. אם צריך חוזה חדש (מחיר או שירות שהשתנו), שולחים מדף החוזה "
+        "בדשבורד, 'שליחת חוזה חדש'.")
 
 
 def _message(client: dict[str, Any], url: str, *, delivered: bool, email: bool, price: float,

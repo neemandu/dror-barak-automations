@@ -341,6 +341,20 @@ def test_filing_stores_attaches_advances_and_sends_both_copies(monkeypatch):
     assert sign_page.file_contract("c1")["already"] and not calls
 
 
+def test_a_new_contract_for_a_client_in_work_keeps_them_in_work(monkeypatch):
+    # `חתם` would take an onboarded client off the lists the daily jobs work from.
+    from src import sign_page
+
+    calls = []
+    _sign_only(monkeypatch, "c1")
+    _filing_fakes(monkeypatch, calls)
+    monkeypatch.setattr(_Crm, "get_client", lambda self, cid: {
+        "id": cid, "name": "מכללת אלפא", "email": "", "sub_status": "in_work"})
+    sign_page.file_contract("c1")
+    assert not [c for c in calls if isinstance(c, tuple) and c[0] == "status"]
+    assert "attach" in calls
+
+
 def test_a_failed_filing_is_retried_without_a_second_upload(monkeypatch):
     from src import sign_page
     from src.lib import contract_store

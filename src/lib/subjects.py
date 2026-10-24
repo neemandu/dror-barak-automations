@@ -55,6 +55,7 @@ ACTION_LABELS: dict[str, str] = {
     "send_refused": "סירבנו לשלוח מייל: האישור לא היה שלך",
     # quotes and signing
     "quote_sent": "הצעת המחיר נשלחה לחתימה",
+    "quote_refused_signed": "לא נשלח חוזה: הלקוח כבר חתם",
     "no_price": "חסר מחיר להצעה",
     "signed": "ההסכם נחתם",
     "reminder_sent": "נשלחה תזכורת ללקוח",

@@ -31,6 +31,9 @@ from .lib.clients.crm import SUB_SIGNED
 from .lib.crm_fields import canonical_sub_status
 from .lib.logging_setup import get_logger
 
+#: Onboarding runs once per client, ever (ten years stands in for "ever").
+ONBOARDING_ONCE_S = 10 * 365 * 24 * 60 * 60
+
 log = get_logger("webhook", "lambda")
 
 
@@ -135,9 +138,10 @@ def route(
             # Layer 2: distinct events can mean the same thing. Moving a client
             # חתם -> בעבודה -> חתם is two real events, and layer 1 lets both
             # through. Onboarding creates a Drive folder and messages the client,
-            # so running it twice is not recoverable by retrying.
+            # so running it twice is not recoverable by retrying. Held for good, not
+            # the default week: a status bounce months later must not run it again.
             once = idempotency.guard("onboarding", task_id)
-            if not idempotency.claim(once):
+            if not idempotency.claim(once, ttl=ONBOARDING_ONCE_S):
                 log.info("onboarding_already_done", extra={"client_id": task_id})
                 return {"skipped": "onboarding already ran for this client"}
             try:

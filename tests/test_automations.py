@@ -120,7 +120,7 @@ def test_send_questionnaire_fails_loudly_without_an_email(read_log, monkeypatch)
     assert "no_email" in _actions(read_log)
 
 
-def test_send_quote_issues_a_signing_link(read_log, monkeypatch):
+def test_send_quote_issues_a_signing_link(read_log, monkeypatch, not_signed_yet):
     # Fillout is gone: the quote is now a link to our own signing page, and the
     # page finalises the contract itself, so there is no `signed` half any more.
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
@@ -146,7 +146,51 @@ def test_send_quote_refuses_without_a_price(read_log, monkeypatch):
     assert "no_price" in _actions(read_log)
 
 
-def test_send_quote_emails_the_client(read_log, monkeypatch):
+@pytest.mark.parametrize("sub_status", ["signed", "in_work"])
+def test_send_quote_refuses_a_client_who_signed(read_log, monkeypatch, sub_status):
+    # Sending marks the signature superseded: a stray press must not undo it.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    from src.lib.clients.crm import CrmClient
+    from src.lib import emails
+
+    sent = []
+    monkeypatch.setattr(emails, "send_template", lambda *a, **k: sent.append(a))
+    monkeypatch.setattr(CrmClient, "get_client", lambda self, cid: {
+        "id": cid, "name": "מכללה", "monthly_price": 4900, "email": "a@b.co", "sub_status": sub_status})
+    from src.lib.actions import Refused
+
+    with pytest.raises(Refused, match="כבר נחתם"):
+        send_quote.send("42", dry_run=True)
+    assert not sent
+    assert "quote_refused_signed" in _actions(read_log)
+    assert "quote_sent" not in _actions(read_log)
+
+
+def test_send_quote_refuses_a_signature_on_our_page(read_log, monkeypatch, not_signed_yet):
+    # Signed on the page while the task still reads `נשלחה הצעה` (the filing is behind).
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    from src.lib import contract_store
+
+    monkeypatch.setattr(contract_store, "current_signature",
+                        lambda cid: {"audit": {"signed_at": "2026-10-20T08:00:00Z"}})
+    from src.lib.actions import Refused
+
+    with pytest.raises(Refused, match="כבר נחתם"):
+        send_quote._refuse_if_signed(send_quote.Automation("send_quote", dry_run=True), "42",
+                                     {"name": "מכללה", "sub_status": "quote_sent"}, dry_run=False)
+
+
+def test_a_new_contract_for_a_signed_client_is_sent_when_meant(read_log, monkeypatch):
+    # The dashboard's 'שליחת חוזה חדש', after its louder confirmation.
+    monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
+    monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
+    sent = send_quote.send("42", dry_run=True, new_contract=True)
+    assert sent["url"]
+    assert "quote_sent" in _actions(read_log)
+
+
+def test_send_quote_emails_the_client(read_log, monkeypatch, not_signed_yet):
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
     monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
     sent = send_quote.send("42", dry_run=True)
@@ -167,7 +211,7 @@ def test_send_quote_survives_a_client_with_no_email(read_log, monkeypatch):
     assert sent["delivered"] == ""
 
 
-def test_send_quote_survives_a_broken_mail_server(read_log, monkeypatch):
+def test_send_quote_survives_a_broken_mail_server(read_log, monkeypatch, not_signed_yet):
     monkeypatch.setenv("SIGN_LINK_SECRET", "test-secret")
     monkeypatch.setenv("SIGN_BASE_URL", "https://sign.example/dev")
     from src.lib import emails
@@ -350,7 +394,7 @@ def test_the_tasks_agent_gives_up_after_max_turns(monkeypatch, read_log):
 
 
 
-def test_the_send_says_to_whom_for_how_much_and_what_comes_next(monkeypatch):
+def test_the_send_says_to_whom_for_how_much_and_what_comes_next(monkeypatch, not_signed_yet):
     from src.lib.clients.crm import CrmClient
 
     said = []
@@ -362,7 +406,7 @@ def test_the_send_says_to_whom_for_how_much_and_what_comes_next(monkeypatch):
     assert "—" not in text and "–" not in text
 
 
-def test_a_send_that_could_not_go_out_does_not_say_it_did(monkeypatch):
+def test_a_send_that_could_not_go_out_does_not_say_it_did(monkeypatch, not_signed_yet):
     from src.lib.clients import crm as crm_mod
     from src.lib.clients.crm import CrmClient
 

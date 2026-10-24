@@ -41,7 +41,7 @@ def test_a_doc_is_exported_to_pdf_for_its_column():
     assert not client_files.attach_doc(crm, "c1", "social_report_pdf", "", dry_run=True)
 
 
-def test_sending_the_contract_dates_its_column(monkeypatch):
+def test_sending_the_contract_dates_its_column(monkeypatch, not_signed_yet):
     from src.automations import send_quote
     from src.lib.clients.crm import CrmClient
 
