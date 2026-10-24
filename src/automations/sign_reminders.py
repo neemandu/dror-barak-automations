@@ -31,10 +31,13 @@ import time
 from typing import Any
 
 from ..lib import emails, signing
-from ..lib.clients.crm import SUB_QUOTE_SENT, CrmClient
+from ..lib.clients.crm import STATUS_FINISHED, STATUS_PAUSED, SUB_QUOTE_SENT, CrmClient
 from .base import Automation, build_arg_parser, run_cli
 
 NAME = "sign_reminders"
+
+#: A client Dror paused or finished is not asked to sign (Dror's call, 24.10).
+_NOT_CHASED = {STATUS_PAUSED: "מושהה", STATUS_FINISHED: "הסתיים"}
 
 DAY = 24 * 60 * 60
 # (reminder number, age in days): the schedule Dror asked for (25.9).
@@ -83,6 +86,8 @@ def run(*, dry_run: bool = False, now: float | None = None) -> dict[str, Any]:
 
         number = _due(pending, now)
         if number is None:
+            continue
+        if _skip_inactive(auto, crm, client, dry_run=dry_run):
             continue
         if not to:
             auto.log_action("no_email", "skipped", client_id=client_id,
@@ -135,6 +140,10 @@ def _from_task(auto: Automation, crm: CrmClient, client: dict[str, Any],
         due = reminder_tasks.due_ms(task)
         if due is None or now * 1000 < due:
             return 0
+        if _skip_inactive(auto, crm, client, dry_run=dry_run):
+            reminder_tasks.close(clickup, task_id, "⏸️ התזכורת לא נשלחה: הלקוח "
+                                 f"{_NOT_CHASED[client['status']]}.")
+            return 0
         body = reminder_tasks.body_of(task)
         if not to or not body:
             reason = "אין ללקוח מייל" if not to else "תיאור המשימה ריק"
@@ -156,6 +165,24 @@ def _from_task(auto: Automation, crm: CrmClient, client: dict[str, Any],
     except Exception as exc:  # noqa: BLE001 - one client must not stop the rest
         auto.log_action("reminder_failed", "error", client_id=client_id, detail=str(exc))
         return 0
+
+
+def _skip_inactive(auto: Automation, crm: CrmClient, client: dict[str, Any], *,
+                   dry_run: bool) -> bool:
+    """A due reminder for a paused or finished client: not sent, said once on the
+    task, and not tried again. True when skipped."""
+    label = _NOT_CHASED.get(str(client.get("status") or ""))
+    if not label:
+        return False
+    client_id = str(client["id"])
+    if not dry_run:
+        signing.bump_reminders(client_id, MAX_REMINDERS)
+    crm.append_automation_log(
+        client_id, f"היי, לא שלחתי את תזכורת החתימה, כי הלקוח מסומן '{label}'. "
+                   "אם עדיין רוצים חתימה, אפשר לשלוח את הקישור ידנית.")
+    auto.log_action("reminder_skipped_inactive", "skipped", client_id=client_id,
+                    detail=f"הלקוח {label}")
+    return True
 
 
 def main() -> None:

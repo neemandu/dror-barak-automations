@@ -145,6 +145,39 @@ def test_an_empty_text_is_reported_on_the_task_not_sent_blank(monkeypatch):
     assert sent == [] and cu.comments[-1].startswith("❌")
 
 
+@pytest.mark.parametrize("status", ["paused", "finished"])
+@pytest.mark.parametrize("with_task", [True, False])
+def test_a_paused_or_finished_client_is_not_asked_to_sign(monkeypatch, read_log, status, with_task):
+    from src.lib.clients.crm import CrmClient
+
+    cu = _ClickUp(monkeypatch, task=_task(-0.1))
+    _pending_client(monkeypatch, task_id="R1" if with_task else None)
+    if not with_task:
+        signing._put_pending("signpending:c1", {"client_id": "c1", "issued_at": int(time.time() - 3 * 86400),
+                                                "reminders_sent": 0})
+    monkeypatch.setattr(CrmClient, "list_by_sub_status", lambda self, s: [
+        {"id": "c1", "name": "רונית כהן", "email": "r@x.co", "status": status}])
+    said = []
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, msg: said.append(msg) or {})
+    sent = _sent(monkeypatch)
+    assert sign_reminders.run(dry_run=True)["reminded"] == 0 and sent == []
+    assert any(e["action"] == "reminder_skipped_inactive" for e in read_log())
+    assert said and "לא שלחתי את תזכורת החתימה" in said[0]
+    if with_task:
+        assert cu.statuses == ["complete"] and cu.comments[-1].startswith("⏸️")
+
+
+def test_an_active_client_is_still_reminded(monkeypatch):
+    from src.lib.clients.crm import CrmClient
+
+    _ClickUp(monkeypatch, task=_task(-0.1))
+    _pending_client(monkeypatch)
+    monkeypatch.setattr(CrmClient, "list_by_sub_status", lambda self, s: [
+        {"id": "c1", "name": "רונית כהן", "email": "r@x.co", "status": "lead"}])
+    sent = _sent(monkeypatch)
+    assert sign_reminders.run(dry_run=True)["reminded"] == 1 and sent
+
+
 def test_a_contract_from_before_the_task_still_gets_the_fixed_text(monkeypatch):
     _pending_client(monkeypatch, task_id=None)
     signing._put_pending("signpending:c1", {"client_id": "c1", "issued_at": int(time.time() - 3 * 86400),
