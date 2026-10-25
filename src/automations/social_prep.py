@@ -10,8 +10,9 @@ Google Doc in the client's ``אסטרטגיה`` folder, linked on the ClickUp ta
 It says what it could not see. Instagram and TikTok refuse automated visitors;
 an analysis of videos nobody opened would be fiction presented as research, so
 the prompt makes the source of every observation explicit. Instagram and YouTube
-are read from their official APIs when configured (:mod:`src.lib.social_sources`),
-and Claude is handed that data; otherwise, and for the other networks, the web.
+are read from their official APIs, TikTok and Facebook from a public page scraper
+(Apify), when configured (:mod:`src.lib.social_sources`), and Claude is handed that
+data; otherwise, and for the other networks, the web.
 
 The per-profile analysis (:func:`analyze_profiles`) is reused by the strategy
 bot (T8).
@@ -51,9 +52,11 @@ _PURPOSE = {
 
 
 def _prompt(role: str, url: str, focus: str, data: str = "", unavailable: str = "") -> str:
+    from ..lib.social_sources import SOURCE
+
     network = questionnaire.ROLES.get(role, role)
     if data:
-        how = ("אלה נתוני החשבון מהממשק הרשמי של הרשת, נכונים לעכשיו. נתח לפיהם (המספרים, "
+        how = (f"אלה נתוני החשבון מ{SOURCE.get(role, 'הממשק הרשמי של הרשת')}, נכונים לעכשיו. נתח לפיהם (המספרים, "
                "הכיתובים והתאריכים הם מה שראית בפועל); אין צורך לפתוח את הקישור. מותר לחפש "
                "ברשת הקשר נוסף על העסק.\n\n" f"<נתונים>\n{data}\n</נתונים>\n\n")
     else:
@@ -64,7 +67,8 @@ def _prompt(role: str, url: str, focus: str, data: str = "", unavailable: str = 
         f"רשת: {network}\nקישור: {url}\nמטרה: {_PURPOSE.get(focus, focus)}\n\n"
         + how +
         "כתוב ב-Markdown, בדיוק במבנה הזה, ופתח ישירות בשורת מקור המידע - בלי הקדמה:\n"
-        f"{_SOURCE_LINE} משפט אחד - נתונים מהממשק הרשמי, פתחת את הדף, מצאת מידע בחיפוש, "
+        f"{_SOURCE_LINE} משפט אחד - נתונים מהממשק הרשמי, נתונים מסריקה אוטומטית של הדף, "
+        "פתחת את הדף, מצאת מידע בחיפוש, "
         "או לא הצלחת לגשת (ואם לא, למה).\n"
         "### מיצוב\nפסקה אחת: למי הם מדברים, מה ההבטחה, מה הטון.\n"
         "### התוכן האחרון\nעד 5 פוסטים/סרטונים אחרונים שראית בפועל, שורה לכל אחד. "
@@ -101,7 +105,7 @@ def analyze_profiles(
 
 
 def _api_data(role: str, url: str, *, dry_run: bool) -> tuple[str, str]:
-    """``(data, why_not)`` from the network's official API (Instagram, YouTube).
+    """``(data, why_not)`` from the network's API or scraper (:data:`social_sources.WITH_API`).
 
     Networks with no such API return neither: the web is all there is, and the
     report needs no excuse for it."""

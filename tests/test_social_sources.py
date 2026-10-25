@@ -151,7 +151,103 @@ def test_without_api_data_the_report_reads_the_web_and_says_why(monkeypatch):
 
 
 def test_a_network_without_an_api_is_read_from_the_web_with_no_excuse(monkeypatch):
-    monkeypatch.setattr(social_sources, "profile_data", lambda *a: pytest.fail("no API for TikTok"))
+    monkeypatch.setattr(social_sources, "profile_data", lambda *a: pytest.fail("no API for LinkedIn"))
     ai = _AI()
-    social_prep.analyze_profiles({"tiktok": "https://tiktok.com/@a"}, ai)
+    social_prep.analyze_profiles({"linkedin": "https://linkedin.com/company/a"}, ai)
     assert "לא זמינים" not in ai.prompts[0] and "פתח את הקישור" in ai.prompts[0]
+
+
+def test_scraped_data_is_not_called_official(monkeypatch):
+    monkeypatch.setattr(social_sources, "profile_data", lambda role, url: "עוקבים: 10")
+    ai = _AI()
+    social_prep.analyze_profiles({"tiktok": "https://tiktok.com/@a", "instagram": "https://instagram.com/a"}, ai)
+    tiktok, instagram = sorted(ai.prompts, key=lambda p: "טיקטוק" not in p)
+    assert "מסריקה אוטומטית של הדף הציבורי" in tiktok and "מהממשק הרשמי של הרשת" not in tiktok
+    assert "מהממשק הרשמי של הרשת" in instagram
+
+
+# ----------------------------------------------------- TikTok and Facebook (Apify)
+
+
+class _Post:
+    """Fake ``requests``: ``answer(actor, payload)`` -> (status, JSON body)."""
+
+    def __init__(self, answer):
+        self.answer, self.calls = answer, []
+
+    def post(self, url, *, params, json, headers, timeout):
+        actor = url.split("/acts/")[1].split("/")[0]
+        self.calls.append((actor, json))
+        status, body = self.answer(actor, json)
+        return type("R", (), {"status_code": status, "json": lambda self: body})()
+
+
+def _apify(monkeypatch, answer):
+    monkeypatch.setenv("APIFY_TOKEN", "apify-token")
+    fake = _Post(answer)
+    monkeypatch.setattr(social_sources, "_requests", lambda: fake)
+    return fake
+
+
+@pytest.mark.parametrize("url,name", [
+    ("https://www.tiktok.com/@alpha.college?lang=he", "alpha.college"),
+    ("https://www.tiktok.com/@alpha/video/123", "alpha"),
+    ("@alpha", "alpha"),
+    ("https://vm.tiktok.com/ZMabc/", ""),  # a short link names no one
+])
+def test_the_tiktok_username_comes_out_of_any_link(url, name):
+    assert social_sources.tiktok_username(url) == name
+
+
+def test_tiktok_profile_and_videos_newest_first_with_the_pinned_one_marked(monkeypatch):
+    author = {"name": "alpha", "nickName": "אלפא", "fans": 900, "following": 10, "heart": 5000,
+              "video": 30, "signature": "קורסים", "bioLink": "alpha.co.il"}
+    videos = [{"authorMeta": author, "createTime": 1, "createTimeISO": "2026-01-01T00:00:00Z", "isPinned": True,
+               "playCount": 9, "diggCount": 1, "commentCount": 0, "shareCount": 0, "webVideoUrl": "u1", "text": "ישן"},
+              {"authorMeta": author, "createTime": 2, "createTimeISO": "2026-10-01T00:00:00Z",
+               "playCount": 800, "diggCount": 40, "commentCount": 3, "shareCount": 2, "webVideoUrl": "u2", "text": "חדש"}]
+    fake = _apify(monkeypatch, lambda actor, payload: (201, videos))
+    text = social_sources.profile_data("tiktok", "https://www.tiktok.com/@alpha")
+    assert fake.calls == [(social_sources.TIKTOK_ACTOR, {"profiles": ["alpha"], "resultsPerPage": 12})]
+    assert "עוקבים: 900" in text and "לייקים בסך הכל: 5000" in text
+    assert text.index("2026-10-01 | 800") < text.index("2026-01-01 (נעוץ) | 9")
+
+
+def test_facebook_page_and_posts(monkeypatch):
+    def answer(actor, payload):
+        assert payload["startUrls"] == [{"url": "https://www.facebook.com/alpha"}]
+        if actor == social_sources.FACEBOOK_PAGE_ACTOR:
+            return 201, [{"title": "מכללת אלפא", "categories": ["Education"], "followers": 4200,
+                          "intro": "קורסים", "website": "alpha.co.il"}]
+        return 201, [{"time": "2026-10-20T10:00:00.000Z", "isVideo": True, "likes": 50, "comments": 4,
+                      "shares": 2, "viewsCount": 1000, "url": "p1", "text": "וובינר"}]
+
+    _apify(monkeypatch, answer)
+    text = social_sources.profile_data("facebook", "fb.com/alpha")
+    assert "דף: מכללת אלפא (Education)" in text and "עוקבים: 4200" in text
+    assert "2026-10-20 | וידאו | 50 | 4 | 2 | 1000 | p1 | וובינר" in text
+
+
+@pytest.mark.parametrize("status,body,why", [
+    (201, [], "לא נמצא"),
+    (201, [{"error": "not_found"}], "לא נמצא"),
+    (402, {}, "נגמר הקרדיט"),
+    (400, {}, "נכשלה"),
+])
+def test_a_failed_scrape_says_why(monkeypatch, status, body, why):
+    fake = _apify(monkeypatch, lambda actor, payload: (status, body))
+    with pytest.raises(social_sources.Unavailable, match=why):
+        social_sources.facebook("https://www.facebook.com/alpha")
+    assert len(fake.calls) == 1, "no retry and no posts run after the page failed: each run is billed"
+
+
+def test_no_apify_token_means_no_scrape(monkeypatch):
+    monkeypatch.delenv("APIFY_TOKEN", raising=False)
+    monkeypatch.setattr(social_sources, "_requests", lambda: pytest.fail("no token, no run"))
+    with pytest.raises(social_sources.Unavailable, match="אין טוקן Apify"):
+        social_sources.tiktok("https://www.tiktok.com/@alpha")
+
+
+def test_a_link_outside_facebook_is_not_scraped():
+    with pytest.raises(social_sources.Unavailable, match="לא מוביל לפייסבוק"):
+        social_sources.facebook_page_url("https://example.com/alpha")

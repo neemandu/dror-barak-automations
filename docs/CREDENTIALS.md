@@ -200,6 +200,17 @@ day) covers thousands of reports.
 
 → `YOUTUBE_API_KEY` (stack parameter `YoutubeApiKey`)
 
+### 5d. Apify (TikTok and Facebook pages)
+
+No official API reads another account's TikTok or Facebook Page, so the report runs
+public page scrapers on Apify: `clockworks/free-tiktok-scraper`,
+`apify/facebook-pages-scraper` and `apify/facebook-posts-scraper`. Sign up at
+apify.com (free plan, a monthly usage credit) → **Settings → API & Integrations →
+Personal API token**. A profile read costs about $0.03-0.04; a failed or
+out-of-credit run falls back to the web and says so. Usage: Apify → Billing.
+
+→ `APIFY_TOKEN` (stack parameter `ApifyToken`)
+
 ## 6. Anthropic — the AI features
 
 `console.anthropic.com` → **Settings → API Keys → Create Key**. Starts with

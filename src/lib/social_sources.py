@@ -11,10 +11,13 @@ official read API we can use, the data comes from it instead:
   found through the pages the token can see. A personal (non-business) account
   cannot be read this way.
 * **YouTube**: the YouTube Data API with ``YOUTUBE_API_KEY``.
+* **TikTok** and **Facebook**: no official API reads another account, so a public
+  page scraper on Apify (``APIFY_TOKEN``) reads what any visitor sees. Each run is
+  billed (a few cents) and is not retried: a failed run falls back to the web.
 
 :func:`profile_data` returns the data as plain text for the prompt, or raises
 :class:`Unavailable` with a reason in Hebrew; the report then falls back to the web
-and says why. Facebook, TikTok and LinkedIn have no such API for other accounts.
+and says why. :data:`SOURCE` names where the data came from. LinkedIn has neither.
 """
 
 from __future__ import annotations
@@ -24,10 +27,17 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from . import config
-from .http import HttpError, request
+from .http import HttpError, _requests, request
 
 YOUTUBE = "https://www.googleapis.com/youtube/v3"
-WITH_API = ("instagram", "youtube")
+APIFY = "https://api.apify.com/v2"
+TIKTOK_ACTOR = "clockworks~free-tiktok-scraper"
+FACEBOOK_PAGE_ACTOR = "apify~facebook-pages-scraper"
+FACEBOOK_POSTS_ACTOR = "apify~facebook-posts-scraper"
+WITH_API = ("instagram", "youtube", "tiktok", "facebook")
+_OFFICIAL = "הממשק הרשמי של הרשת"
+_SCRAPED = "סריקה אוטומטית של הדף הציבורי (מה שכל מבקר רואה)"
+SOURCE = {"instagram": _OFFICIAL, "youtube": _OFFICIAL, "tiktok": _SCRAPED, "facebook": _SCRAPED}
 _RECENT = 12  # posts/videos read per profile
 
 
@@ -41,6 +51,10 @@ def profile_data(role: str, url: str) -> str:
         return instagram(url)
     if role == "youtube":
         return youtube(url)
+    if role == "tiktok":
+        return tiktok(url)
+    if role == "facebook":
+        return facebook(url)
     raise Unavailable("לרשת הזו אין ממשק רשמי לקריאת חשבונות של אחרים")
 
 
@@ -184,6 +198,100 @@ def youtube(url: str) -> str:
         lines.append(f"- {str(v['snippet'].get('publishedAt', ''))[:10]} | {v.get('contentDetails', {}).get('duration', '')} | "
                      f"{s.get('viewCount', '?')} | {s.get('likeCount', '?')} | {s.get('commentCount', '?')} | "
                      f"{_one_line(v['snippet'].get('title'), 150)}")
+    return "\n".join(lines)
+
+
+# ------------------------------------------------- TikTok and Facebook (Apify)
+
+
+def _apify(actor: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Run an Apify actor and return its dataset items. One attempt: a run is billed."""
+    token = config.get("APIFY_TOKEN")
+    if not token:
+        raise Unavailable("אין טוקן Apify במערכת")
+    try:
+        resp = _requests().post(f"{APIFY}/acts/{actor}/run-sync-get-dataset-items",
+                                params={"timeout": "150"}, json=payload,
+                                headers={"Authorization": f"Bearer {token}"}, timeout=170)
+    except Exception as exc:  # noqa: BLE001 - network or timeout: the web fallback takes over
+        raise Unavailable(f"הסריקה ב-Apify לא הסתיימה ({type(exc).__name__})") from exc
+    if resp.status_code == 402:
+        raise Unavailable("נגמר הקרדיט החודשי ב-Apify")
+    if resp.status_code >= 400:
+        raise Unavailable(f"הסריקה ב-Apify נכשלה ({resp.status_code})")
+    items = resp.json()
+    return [i for i in items if isinstance(i, dict) and not i.get("error")] if isinstance(items, list) else []
+
+
+def tiktok_username(url: str) -> str:
+    """``https://www.tiktok.com/@alpha?lang=he`` (or a video of it, or ``@alpha``) -> ``alpha``."""
+    raw = url.strip()
+    if "/" not in raw and "." not in raw:
+        return raw.lstrip("@")
+    parts = [p for p in urlparse(raw if "//" in raw else f"https://{raw}").path.split("/") if p]
+    return parts[0][1:] if parts and parts[0].startswith("@") else ""
+
+
+def tiktok(url: str) -> str:
+    username = tiktok_username(url)
+    if not username:
+        raise Unavailable("לא זוהה שם משתמש בקישור (קישור מקוצר או לא לפרופיל)")
+    videos = _apify(TIKTOK_ACTOR, {"profiles": [username], "resultsPerPage": _RECENT})
+    if not videos:
+        raise Unavailable("החשבון לא נמצא, פרטי, או בלי סרטונים")
+    a = videos[0].get("authorMeta") or {}
+    lines = [
+        f"חשבון: @{a.get('name', username)} ({a.get('nickName') or ''})",
+        f"עוקבים: {a.get('fans', '?')} · עוקב אחרי: {a.get('following', '?')} "
+        f"· לייקים בסך הכל: {a.get('heart', '?')} · סרטונים: {a.get('video', '?')}",
+        f"ביו: {_one_line(a.get('signature'))}",
+        f"קישור בביו: {a.get('bioLink') or '-'}",
+        "",
+        f"{_RECENT} הסרטונים האחרונים (תאריך | צפיות | לייקים | תגובות | שיתופים | קישור | כיתוב):",
+    ]
+    for v in sorted(videos, key=lambda v: v.get("createTime") or 0, reverse=True):
+        mark = " (נעוץ)" if v.get("isPinned") else " (ממומן)" if v.get("isAd") or v.get("isSponsored") else ""
+        lines.append(f"- {str(v.get('createTimeISO', ''))[:10]}{mark} | {v.get('playCount', '?')} | "
+                     f"{v.get('diggCount', '?')} | {v.get('commentCount', '?')} | {v.get('shareCount', '?')} | "
+                     f"{v.get('webVideoUrl', '')} | {_one_line(v.get('text'), 300)}")
+    return "\n".join(lines)
+
+
+def facebook_page_url(url: str) -> str:
+    """A full Page link: ``fb.com/alpha`` or ``alpha`` -> ``https://www.facebook.com/alpha``."""
+    raw = url.strip()
+    if "/" not in raw and "." not in raw:
+        return f"https://www.facebook.com/{raw.lstrip('@')}"
+    parsed = urlparse(raw if "//" in raw else f"https://{raw}")
+    host = parsed.netloc.lower()
+    if host == "fb.me":  # a short link: the scraper follows it
+        return parsed._replace(scheme="https").geturl()
+    if host not in ("facebook.com", "fb.com") and not host.endswith(".facebook.com"):
+        raise Unavailable("הקישור לא מוביל לפייסבוק")
+    return parsed._replace(scheme="https", netloc="www.facebook.com").geturl()
+
+
+def facebook(url: str) -> str:
+    page_url = facebook_page_url(url)
+    pages = _apify(FACEBOOK_PAGE_ACTOR, {"startUrls": [{"url": page_url}]})
+    if not pages:
+        raise Unavailable("הדף לא נמצא, או שהוא פרופיל אישי ולא דף עסקי")
+    page = pages[0]
+    posts = _apify(FACEBOOK_POSTS_ACTOR, {"startUrls": [{"url": page_url}], "resultsLimit": _RECENT})
+    lines = [
+        f"דף: {page.get('title') or page.get('pageName', '')} ({', '.join(page.get('categories') or [])})",
+        f"עוקבים: {page.get('followers', '?')}",
+        f"אודות: {_one_line(page.get('intro'))}",
+        f"אתר: {page.get('website') or '-'}",
+        "",
+        f"{_RECENT} הפוסטים האחרונים (תאריך | סוג | תגובות רגשיות | תגובות | שיתופים | צפיות | קישור | טקסט):",
+    ]
+    for p in sorted(posts, key=lambda p: str(p.get("time") or ""), reverse=True):
+        lines.append(f"- {str(p.get('time', ''))[:10]} | {'וידאו' if p.get('isVideo') else 'פוסט'} | "
+                     f"{p.get('likes', '?')} | {p.get('comments', '?')} | {p.get('shares', '?')} | "
+                     f"{p.get('viewsCount') or '-'} | {p.get('url', '')} | {_one_line(p.get('text'), 300)}")
+    if not posts:
+        lines.append("- הסריקה לא החזירה פוסטים")
     return "\n".join(lines)
 
 
