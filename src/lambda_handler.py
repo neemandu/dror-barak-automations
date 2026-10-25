@@ -99,6 +99,33 @@ def _sub_status_of(task_id: str, dry_run: bool) -> str | None:
     return canonical_sub_status(str(sub)) or (str(sub) if sub else None)
 
 
+def _clear_new_lead_sub_status(task_id: str, dry_run: bool) -> str | None:
+    """A new lead starts with no secondary status. Returns the one cleared, if any.
+
+    ClickUp can fill it in when the task is made (a list view sorted by the field
+    copies a neighbour's value, 25.10), and a lead that arrives as ``חתם`` would be
+    onboarded by its next edit. A client created in another primary status (an
+    existing client added on purpose) is left as it is. Best-effort: never stops
+    the contact save.
+    """
+    from .lib.clients.crm import STATUS_LEAD, CrmClient
+
+    try:
+        crm = CrmClient(dry_run=dry_run)
+        client = crm.get_client(task_id)
+        sub = client.get("sub_status")
+        if not sub or client.get("status") != STATUS_LEAD:
+            return None
+        crm.clear_field(task_id, "sub_status")
+        crm.append_automation_log(
+            task_id, "היי, ליד חדש מתחיל בלי סטטוס משני, אז ניקיתי את הסטטוס שמולא כשהמשימה נוצרה.")
+        log.info("new_lead_sub_status_cleared", extra={"client_id": task_id, "sub_status": sub})
+        return str(sub)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("new_lead_sub_status_not_cleared", extra={"client_id": task_id, "error": str(exc)})
+        return None
+
+
 def route(
     payload: dict[str, Any], dry_run: bool = False, source: str = ""
 ) -> dict[str, Any]:
@@ -123,7 +150,9 @@ def route(
         return _route_claude_task(payload, event, task_id, dry_run)
 
     if event == "taskCreated":
-        return lead_to_contacts.run(task_id, dry_run=dry_run)
+        cleared = _clear_new_lead_sub_status(task_id, dry_run)
+        result = lead_to_contacts.run(task_id, dry_run=dry_run)
+        return {**result, "sub_status_cleared": cleared} if cleared else result
 
     if event in ("taskUpdated", "taskStatusUpdated"):
         # The phone is usually typed after the task is made: save it when it

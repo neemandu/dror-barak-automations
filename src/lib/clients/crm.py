@@ -329,6 +329,18 @@ class CrmClient(BaseClient):
 
         return {"id": client_id, "written": written, "skipped": skipped}
 
+    def clear_field(self, client_id: str, canonical: str) -> bool:
+        """Empty a custom field on the task. False when the list has no such field."""
+        if self.dry_run:
+            self._record("clear_field", client_id=client_id, field=canonical)
+            return True
+        field = self.fields().get(canonical)
+        if not field:
+            return False
+        self._request("DELETE", f"{self.base_url}/task/{client_id}/field/{field['id']}",
+                      headers=self._headers())
+        return True
+
     def attach_file(
         self,
         client_id: str,

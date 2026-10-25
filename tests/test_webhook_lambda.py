@@ -284,6 +284,27 @@ def test_task_created_saves_the_lead(monkeypatch):
     assert seen == ["t1"]
 
 
+@pytest.mark.parametrize("status,sub,cleared", [
+    ("lead", "quote_sent", True),  # ClickUp copied a neighbour's value into a new lead
+    ("lead", "signed", True),  # would have onboarded a lead on its next edit
+    ("lead", None, False),
+    ("active", "in_work", False),  # an existing client added on purpose keeps it
+])
+def test_a_new_lead_starts_without_a_secondary_status(monkeypatch, status, sub, cleared):
+    from src.automations import lead_to_contacts
+    from src.lib.clients.crm import CrmClient
+
+    monkeypatch.setattr(lead_to_contacts, "run", lambda cid, dry_run=False: {"ok": True})
+    monkeypatch.setattr(CrmClient, "get_client", lambda self, cid: {"id": cid, "status": status, "sub_status": sub})
+    done, said = [], []
+    monkeypatch.setattr(CrmClient, "clear_field", lambda self, cid, f: done.append((cid, f)) or True)
+    monkeypatch.setattr(CrmClient, "append_automation_log", lambda self, cid, m: said.append(m) or {})
+    out = lambda_handler.route(json.loads(payload(event="taskCreated")), dry_run=True)
+    assert out["ok"] is True
+    assert (done == [("t1", "sub_status")]) is cleared and bool(said) is cleared
+    assert out.get("sub_status_cleared") == (sub if cleared else None)
+
+
 def test_a_task_in_the_work_list_goes_to_claude_not_the_crm(monkeypatch):
     from src.automations import clickup_to_claude
     from src.lib.clients.clickup import ClickUpClient
