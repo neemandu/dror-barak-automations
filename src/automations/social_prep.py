@@ -10,7 +10,7 @@ Google Doc in the client's ``אסטרטגיה`` folder, linked on the ClickUp ta
 It says what it could not see. Instagram and TikTok refuse automated visitors;
 an analysis of videos nobody opened would be fiction presented as research, so
 the prompt makes the source of every observation explicit. Instagram and YouTube
-are read from their official APIs, TikTok and Facebook from a public page scraper
+are read from their official APIs, TikTok, Facebook and LinkedIn from a public page scraper
 (Apify), when configured (:mod:`src.lib.social_sources`), and Claude is handed that
 data; otherwise, and for the other networks, the web.
 

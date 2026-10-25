@@ -151,9 +151,9 @@ def test_without_api_data_the_report_reads_the_web_and_says_why(monkeypatch):
 
 
 def test_a_network_without_an_api_is_read_from_the_web_with_no_excuse(monkeypatch):
-    monkeypatch.setattr(social_sources, "profile_data", lambda *a: pytest.fail("no API for LinkedIn"))
+    monkeypatch.setattr(social_sources, "profile_data", lambda *a: pytest.fail("a website is opened, not scraped"))
     ai = _AI()
-    social_prep.analyze_profiles({"linkedin": "https://linkedin.com/company/a"}, ai)
+    social_prep.analyze_profiles({"website": "https://alpha.co.il"}, ai)
     assert "לא זמינים" not in ai.prompts[0] and "פתח את הקישור" in ai.prompts[0]
 
 
@@ -246,6 +246,42 @@ def test_no_apify_token_means_no_scrape(monkeypatch):
     monkeypatch.setattr(social_sources, "_requests", lambda: pytest.fail("no token, no run"))
     with pytest.raises(social_sources.Unavailable, match="אין טוקן Apify"):
         social_sources.tiktok("https://www.tiktok.com/@alpha")
+
+
+@pytest.mark.parametrize("url,clean", [
+    ("https://il.linkedin.com/company/alpha-college/about/?trk=x", "https://www.linkedin.com/company/alpha-college/"),
+    ("linkedin.com/in/dror-barak", "https://www.linkedin.com/in/dror-barak/"),
+    ("https://www.linkedin.com/school/alpha/", "https://www.linkedin.com/school/alpha/"),
+])
+def test_a_linkedin_link_becomes_the_page_itself(url, clean):
+    assert social_sources.linkedin_url(url) == clean
+
+
+@pytest.mark.parametrize("url,why", [
+    ("https://www.linkedin.com/posts/alpha_activity-1", "לא לדף חברה"),
+    ("https://notlinkedin.com/company/alpha", "לא מוביל ללינקדאין"),
+])
+def test_a_linkedin_link_that_is_not_a_page_is_not_scraped(url, why):
+    with pytest.raises(social_sources.Unavailable, match=why):
+        social_sources.linkedin_url(url)
+
+
+def test_linkedin_company_posts_newest_first_with_reposts_marked(monkeypatch):
+    author = {"type": "company", "name": "מכללת אלפא", "info": "4,200 followers"}
+    posts = [{"author": {"type": "profile", "name": "דנה"}, "repostedBy": author,
+              "postedAt": {"timestamp": 3, "date": "2026-10-05T00:00:00Z"},
+              "engagement": {"likes": 9, "comments": 0, "shares": 0}, "linkedinUrl": "l3", "content": "של דנה"},
+             {"author": author, "postedAt": {"timestamp": 1, "date": "2026-09-01T00:00:00Z"}, "repost": {"id": "9"},
+              "engagement": {"likes": 5, "comments": 0, "shares": 0}, "linkedinUrl": "l1", "content": "ישן"},
+             {"author": author, "postedAt": {"timestamp": 2, "date": "2026-10-01T00:00:00Z"},
+              "engagement": {"likes": 40, "comments": 3, "shares": 2}, "linkedinUrl": "l2", "content": "פתיחת מחזור"}]
+    fake = _apify(monkeypatch, lambda actor, payload: (201, posts))
+    text = social_sources.profile_data("linkedin", "https://www.linkedin.com/company/alpha")
+    assert fake.calls == [(social_sources.LINKEDIN_ACTOR,
+                           {"targetUrls": ["https://www.linkedin.com/company/alpha/"], "maxPosts": 12})]
+    assert "חברה: מכללת אלפא" in text and "4,200 followers" in text, "the page, not the author it shared"
+    assert "2026-10-05 (שיתוף של פוסט של דנה) | 9" in text
+    assert text.index("2026-10-01 | 40 | 3 | 2 | l2 | פתיחת מחזור") < text.index("2026-09-01 (ציטוט של פוסט אחר) | 5")
 
 
 def test_a_link_outside_facebook_is_not_scraped():

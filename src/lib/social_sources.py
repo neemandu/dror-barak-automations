@@ -11,13 +11,14 @@ official read API we can use, the data comes from it instead:
   found through the pages the token can see. A personal (non-business) account
   cannot be read this way.
 * **YouTube**: the YouTube Data API with ``YOUTUBE_API_KEY``.
-* **TikTok** and **Facebook**: no official API reads another account, so a public
-  page scraper on Apify (``APIFY_TOKEN``) reads what any visitor sees. Each run is
-  billed (a few cents) and is not retried: a failed run falls back to the web.
+* **TikTok**, **Facebook** and **LinkedIn**: no official API reads another account,
+  so a public page scraper on Apify (``APIFY_TOKEN``, no login cookies) reads what
+  any visitor sees. Each run is billed (a few cents) and is not retried: a failed
+  run falls back to the web.
 
 :func:`profile_data` returns the data as plain text for the prompt, or raises
 :class:`Unavailable` with a reason in Hebrew; the report then falls back to the web
-and says why. :data:`SOURCE` names where the data came from. LinkedIn has neither.
+and says why. :data:`SOURCE` names where the data came from.
 """
 
 from __future__ import annotations
@@ -34,10 +35,12 @@ APIFY = "https://api.apify.com/v2"
 TIKTOK_ACTOR = "clockworks~free-tiktok-scraper"
 FACEBOOK_PAGE_ACTOR = "apify~facebook-pages-scraper"
 FACEBOOK_POSTS_ACTOR = "apify~facebook-posts-scraper"
-WITH_API = ("instagram", "youtube", "tiktok", "facebook")
+LINKEDIN_ACTOR = "harvestapi~linkedin-profile-posts"
+WITH_API = ("instagram", "youtube", "tiktok", "facebook", "linkedin")
 _OFFICIAL = "הממשק הרשמי של הרשת"
 _SCRAPED = "סריקה אוטומטית של הדף הציבורי (מה שכל מבקר רואה)"
-SOURCE = {"instagram": _OFFICIAL, "youtube": _OFFICIAL, "tiktok": _SCRAPED, "facebook": _SCRAPED}
+SOURCE = {"instagram": _OFFICIAL, "youtube": _OFFICIAL,
+          "tiktok": _SCRAPED, "facebook": _SCRAPED, "linkedin": _SCRAPED}
 _RECENT = 12  # posts/videos read per profile
 
 
@@ -55,6 +58,8 @@ def profile_data(role: str, url: str) -> str:
         return tiktok(url)
     if role == "facebook":
         return facebook(url)
+    if role == "linkedin":
+        return linkedin(url)
     raise Unavailable("לרשת הזו אין ממשק רשמי לקריאת חשבונות של אחרים")
 
 
@@ -292,6 +297,47 @@ def facebook(url: str) -> str:
                      f"{p.get('viewsCount') or '-'} | {p.get('url', '')} | {_one_line(p.get('text'), 300)}")
     if not posts:
         lines.append("- הסריקה לא החזירה פוסטים")
+    return "\n".join(lines)
+
+
+def linkedin_url(url: str) -> str:
+    """A company page or a person's profile: ``linkedin.com/company/alpha/about`` ->
+    ``https://www.linkedin.com/company/alpha/``."""
+    raw = url.strip()
+    parsed = urlparse(raw if "//" in raw else f"https://{raw}")
+    host = parsed.netloc.lower()
+    parts = [p for p in parsed.path.split("/") if p]
+    if host != "linkedin.com" and not host.endswith(".linkedin.com"):
+        raise Unavailable("הקישור לא מוביל ללינקדאין")
+    if len(parts) < 2 or parts[0] not in ("company", "in", "school", "showcase"):
+        raise Unavailable("הקישור הוא לא לדף חברה או לפרופיל")
+    return f"https://www.linkedin.com/{parts[0]}/{parts[1]}/"
+
+
+def linkedin(url: str) -> str:
+    page_url = linkedin_url(url)
+    posts = _apify(LINKEDIN_ACTOR, {"targetUrls": [page_url], "maxPosts": _RECENT})
+    if not posts:
+        raise Unavailable("הדף לא נמצא, או שאין בו פוסטים ציבוריים")
+    # A shared post carries its original author; the page itself is the author of
+    # its own posts, or the one who shared.
+    own = [p for p in posts if not p.get("repostedBy")]
+    a = (own[0].get("author") if own else posts[0].get("repostedBy")) or {}
+    kind = "חברה" if a.get("type") == "company" or "/company/" in page_url else "פרופיל אישי"
+    lines = [
+        f"{kind}: {a.get('name', '')}",
+        f"{_one_line(a.get('info'), 200)}",  # a company's follower count, a person's headline
+        "",
+        f"{_RECENT} הפוסטים האחרונים (תאריך | לייקים | תגובות | שיתופים | קישור | טקסט; "
+        "בפוסט ששותף, הנתונים הם של הפוסט המקורי):",
+    ]
+    for p in sorted(posts, key=lambda p: (p.get("postedAt") or {}).get("timestamp") or 0, reverse=True):
+        e = p.get("engagement") or {}
+        mark = (f" (שיתוף של פוסט של {(p.get('author') or {}).get('name', 'אחר')})" if p.get("repostedBy")
+                else " (ציטוט של פוסט אחר)" if p.get("repost") else "")
+        lines.append(f"- {str((p.get('postedAt') or {}).get('date', ''))[:10]}{mark} | {e.get('likes', '?')} | "
+                     f"{e.get('comments', '?')} | {e.get('shares', '?')} | {p.get('linkedinUrl', '')} | "
+                     f"{_one_line(p.get('content'), 300)}")
     return "\n".join(lines)
 
 

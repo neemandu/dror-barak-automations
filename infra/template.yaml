@@ -176,8 +176,8 @@ Parameters:
     NoEcho: true
     Default: ""
     Description: >
-      Apify API token, for the social prep report to scrape a client's public TikTok
-      and Facebook pages (src/lib/social_sources.py). Each run is billed (a few cents,
+      Apify API token, for the social prep report to scrape a client's public TikTok,
+      Facebook and LinkedIn pages (src/lib/social_sources.py). Each run is billed (a few cents,
       within the free plan's monthly credit). Empty = those networks are read from the web.
   ManyChatApiKey:
     Type: String
