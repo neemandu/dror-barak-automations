@@ -171,6 +171,35 @@ each folder in Drive; the id is the last part of the URL
 > System-user tokens are long-lived; a personal token expires in ~60 days. Use the
 > system user.
 
+### 5b. Instagram profiles for the social prep report (same token)
+
+Instagram shows automated visitors a login wall, so the report reads a client's
+Instagram through Meta's **Business Discovery** API instead. It reads other
+business/creator accounts *through one of our own* Instagram business accounts:
+
+1. Dror's Instagram must be a **professional** account (Business or Creator),
+   linked to a **Facebook Page** in his business (Instagram app → Settings →
+   Account type and tools; the Page under Business Settings → Accounts).
+2. Business Settings → **System Users → Automation → Assign Assets**: the
+   **Page** and the **Instagram account** (view access is enough).
+3. **Generate Token** again for the same system user, ticking `ads_read`,
+   `business_management`, **`instagram_basic`**, **`instagram_manage_insights`**,
+   **`pages_show_list`** and **`pages_read_engagement`**. Replace `META_ACCESS_TOKEN`
+   with it (in `.env`, then `python -m src.tools.push_stack_params MetaAccessToken`).
+
+No account id to copy: the code finds our Instagram account through the Page. A
+client whose Instagram is a personal account cannot be read this way; the report
+falls back to the web and says so.
+
+### 5c. YouTube Data API
+
+Google Cloud console, the same project as the service account → APIs & Services →
+**Library → YouTube Data API v3 → Enable**; then **Credentials → Create credentials
+→ API key**, restricted to the YouTube Data API v3. The free quota (10,000 units a
+day) covers thousands of reports.
+
+→ `YOUTUBE_API_KEY` (stack parameter `YoutubeApiKey`)
+
 ## 6. Anthropic — the AI features
 
 `console.anthropic.com` → **Settings → API Keys → Create Key**. Starts with

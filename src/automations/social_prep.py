@@ -7,9 +7,11 @@ not its wording — Claude opens the page with web fetch/search and writes what 
 actually saw: positioning, recent content, three recommendations. The report is a
 Google Doc in the client's ``אסטרטגיה`` folder, linked on the ClickUp task.
 
-It says what it could not see. Instagram and TikTok often refuse automated
-visitors; an analysis of videos nobody opened would be fiction presented as
-research, so the prompt makes the source of every observation explicit.
+It says what it could not see. Instagram and TikTok refuse automated visitors;
+an analysis of videos nobody opened would be fiction presented as research, so
+the prompt makes the source of every observation explicit. Instagram and YouTube
+are read from their official APIs when configured (:mod:`src.lib.social_sources`),
+and Claude is handed that data; otherwise, and for the other networks, the web.
 
 The per-profile analysis (:func:`analyze_profiles`) is reused by the strategy
 bot (T8).
@@ -48,14 +50,22 @@ _PURPOSE = {
 }
 
 
-def _prompt(role: str, url: str, focus: str) -> str:
+def _prompt(role: str, url: str, focus: str, data: str = "", unavailable: str = "") -> str:
     network = questionnaire.ROLES.get(role, role)
+    if data:
+        how = ("אלה נתוני החשבון מהממשק הרשמי של הרשת, נכונים לעכשיו. נתח לפיהם (המספרים, "
+               "הכיתובים והתאריכים הם מה שראית בפועל); אין צורך לפתוח את הקישור. מותר לחפש "
+               "ברשת הקשר נוסף על העסק.\n\n" f"<נתונים>\n{data}\n</נתונים>\n\n")
+    else:
+        why = f"(הנתונים מהממשק הרשמי לא זמינים: {unavailable}.) " if unavailable else ""
+        how = (f"{why}פתח את הקישור. אם הדף חסום או דורש התחברות, חפש ברשת מידע ציבורי על "
+               "החשבון או על העסק.\n\n")
     return (
         f"רשת: {network}\nקישור: {url}\nמטרה: {_PURPOSE.get(focus, focus)}\n\n"
-        "פתח את הקישור. אם הדף חסום או דורש התחברות, חפש ברשת מידע ציבורי על החשבון "
-        "או על העסק.\n\n"
+        + how +
         "כתוב ב-Markdown, בדיוק במבנה הזה, ופתח ישירות בשורת מקור המידע - בלי הקדמה:\n"
-        f"{_SOURCE_LINE} משפט אחד - האם פתחת את הדף, מצאת מידע בחיפוש, או לא הצלחת לגשת.\n"
+        f"{_SOURCE_LINE} משפט אחד - נתונים מהממשק הרשמי, פתחת את הדף, מצאת מידע בחיפוש, "
+        "או לא הצלחת לגשת (ואם לא, למה).\n"
         "### מיצוב\nפסקה אחת: למי הם מדברים, מה ההבטחה, מה הטון.\n"
         "### התוכן האחרון\nעד 5 פוסטים/סרטונים אחרונים שראית בפועל, שורה לכל אחד. "
         "אם לא ראית תוכן - כתוב שלא ניתן היה לראות, בלי לנחש.\n"
@@ -81,11 +91,30 @@ def analyze_profiles(
 
     def one(item: tuple[str, str]) -> tuple[str, str]:
         role, url = item
-        return role, _from_source_line(ai.complete(_prompt(role, url, focus), system=_SYSTEM,
-                                                   max_tokens=16000, web=True, thinking=True))
+        data, unavailable = _api_data(role, url, dry_run=ai.dry_run)
+        return role, _from_source_line(ai.complete(_prompt(role, url, focus, data, unavailable),
+                                                   system=_SYSTEM, max_tokens=16000, web=True,
+                                                   thinking=True))
 
     with ThreadPoolExecutor(max_workers=min(4, len(items))) as pool:
         return dict(pool.map(one, items))
+
+
+def _api_data(role: str, url: str, *, dry_run: bool) -> tuple[str, str]:
+    """``(data, why_not)`` from the network's official API (Instagram, YouTube).
+
+    Networks with no such API return neither: the web is all there is, and the
+    report needs no excuse for it."""
+    from ..lib import social_sources
+
+    if dry_run or role not in social_sources.WITH_API:
+        return "", ""
+    try:
+        return social_sources.profile_data(role, url), ""
+    except social_sources.Unavailable as exc:
+        return "", str(exc)
+    except Exception as exc:  # noqa: BLE001 - the web fallback still writes the section
+        return "", f"שגיאה בקריאה מהממשק ({type(exc).__name__})"
 
 
 def _compile_report(profiles: dict[str, str], analyses: dict[str, str]) -> str:

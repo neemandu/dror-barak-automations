@@ -164,6 +164,13 @@ Parameters:
     Type: String
     Default: "https://graph.facebook.com/v21.0"
     Description: Meta Graph API base URL. Bump the version here when Meta deprecates one.
+  YoutubeApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      YouTube Data API key, for the social prep report to read a client's channel
+      (src/lib/social_sources.py). Empty = the report reads YouTube from the web.
   ManyChatApiKey:
     Type: String
     NoEcho: true
@@ -269,6 +276,7 @@ Globals:
         ANTHROPIC_API_KEY: !Ref AnthropicApiKey
         META_ACCESS_TOKEN: !Ref MetaAccessToken
         META_BASE_URL: !Ref MetaBaseUrl
+        YOUTUBE_API_KEY: !Ref YoutubeApiKey
         DROR_EMAIL: !Ref DrorEmail
         SMTP_HOST: !Ref SmtpHost
         SMTP_PORT: !Ref SmtpPort
