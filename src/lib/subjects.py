@@ -56,6 +56,9 @@ ACTION_LABELS: dict[str, str] = {
     # quotes and signing
     "quote_sent": "הצעת המחיר נשלחה לחתימה",
     "quote_refused_signed": "לא נשלח חוזה: הלקוח כבר חתם",
+    "contract_version_broken": "לא נשלח חוזה: הנוסח שנערך ללקוח לא תקין",
+    "contract_edited": "נוסח החוזה נערך ללקוח",
+    "contract_reset": "החוזה של הלקוח הוחזר לנוסח הרגיל",
     "questionnaire_reminder_skipped_inactive": "תזכורת שאלון לא נשלחה: הלקוח מושהה או הסתיים",
     "questionnaire_resend_warned":"שאלון לא נשלח: הלקוח כבר מילא, ממתין ללחיצה שנייה",
     "reminder_skipped_inactive": "תזכורת חתימה לא נשלחה: הלקוח מושהה או הסתיים",
@@ -176,6 +179,7 @@ _AUTOMATION_RULES: dict[str, str] = {
     "clickup_to_claude": "clickup",
     "send_questionnaire": "whatsapp",
     "send_quote": "quotes",
+    "contract_edit": "quotes",
     "sign_contract": "quotes",
     "file_contract": "quotes",
     "onboarding": "drive",

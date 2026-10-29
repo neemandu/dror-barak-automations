@@ -6,6 +6,12 @@ already reads and writes it):
 
 * ``contract:provider_signature``: Dror's own signature, drawn once in the
   dashboard and placed in the provider's box of every contract.
+* ``contract:draft:<client_id>``: Dror's own version of the contract for this
+  client, edited on the dashboard (:mod:`src.lib.contract_edit`): the whole
+  template with his changes, so a later change to the standard cannot alter it.
+* ``contract:sent:<client_id>``: that version as it was when the contract was
+  sent. The signing page renders from it, so what the client reads and signs is
+  what Dror approved even if he edits again; without one the standard is used.
 * ``contract:signed:<client_id>``: a client's signature the moment they sign:
   the details they typed, the document exactly as signed, and the audit record
   (time, IP, hash of that document). The signing page stores this and answers at
@@ -24,6 +30,8 @@ from . import questionnaire_store
 
 PROVIDER_KEY = "contract:provider_signature"
 SIGNED_PREFIX = "contract:signed:"
+DRAFT_PREFIX = "contract:draft:"
+SENT_PREFIX = "contract:sent:"
 
 # The status of a signing record.
 RECEIVED = "received"  # signed, not yet filed
@@ -112,3 +120,48 @@ def supersede(client_id: str) -> None:
     if rec and rec.get("status") != SUPERSEDED:
         rec["status"] = SUPERSEDED
         questionnaire_store._store().put(rec)
+
+
+# ------------------------------------------------------- a client's own version
+
+
+def draft(client_id: str) -> Optional[dict[str, Any]]:
+    """``{"template", "base", "summary", "changes", "updated_at"}``: Dror's version
+    for this client, or None when the client gets the standard contract."""
+    rec = questionnaire_store._store().get(DRAFT_PREFIX + client_id)
+    return rec if rec and rec.get("template") else None
+
+
+def save_draft(client_id: str, template: str, *, base: str, summary: str, changes: int) -> dict[str, Any]:
+    item = {"pk": DRAFT_PREFIX + client_id, "client_id": client_id, "template": template,
+            "base": base, "summary": summary, "changes": int(changes), "updated_at": _now()}
+    questionnaire_store._store().put(item)
+    return item
+
+
+def clear_draft(client_id: str) -> None:
+    questionnaire_store._store().delete(DRAFT_PREFIX + client_id)
+
+
+def sent(client_id: str) -> Optional[dict[str, Any]]:
+    """The client's own version as it was sent, or None when the standard was."""
+    rec = questionnaire_store._store().get(SENT_PREFIX + client_id)
+    return rec if rec and rec.get("template") else None
+
+
+def sent_template(client_id: str) -> Optional[str]:
+    rec = sent(client_id)
+    return str(rec["template"]) if rec else None
+
+
+def freeze_sent(client_id: str) -> Optional[dict[str, Any]]:
+    """At sending: the version that goes out is the draft as it stands now, or the
+    standard when there is none (and an earlier frozen version no longer applies)."""
+    rec = draft(client_id)
+    if not rec:
+        questionnaire_store._store().delete(SENT_PREFIX + client_id)
+        return None
+    item = {"pk": SENT_PREFIX + client_id, "client_id": client_id, "template": rec["template"],
+            "summary": rec.get("summary", ""), "changes": rec.get("changes", 0), "sent_at": _now()}
+    questionnaire_store._store().put(item)
+    return item

@@ -21,7 +21,7 @@ Manual/dry-run:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from ..lib import contract, contract_store, idempotency, signing
 from ..lib.clients.crm import SUB_IN_WORK, SUB_QUOTE_SENT, SUB_SIGNED, CrmClient
@@ -65,6 +65,21 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
                         detail="אין מחיר במשימה ב-ClickUp")
         raise Refused("אין מחיר במשימה. ממלאים את המחיר החודשי ולוחצים שוב.")
 
+    # Dror's own version for this client, if he edited it on the dashboard. It must
+    # render before anyone gets a link: a reference to a clause he deleted is a
+    # refusal with its reason, not a broken page on the client's phone.
+    version = contract_store.draft(client_id)
+    if version:
+        from ..lib.actions import Refused
+
+        display = {**fields, **{k: f or "-" for k, f in fields.items() if k in contract.REQUIRED_CLIENT_FIELDS}}
+        try:
+            contract.render(display, template=version["template"],
+                            signatures={"provider_signature": "", "client_signature": ""})
+        except contract.ContractError as exc:
+            auto.log_action("contract_version_broken", "error", client_id=client_id, detail=str(exc))
+            raise Refused(f"הנוסח שערכת לחוזה הזה לא תקין: {exc}") from exc
+
     url = signing.sign_url(client_id)
 
     # The details ClickUp has no fields for are collected on the signing page —
@@ -77,6 +92,9 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
     # edit (reminder_tasks): sent automatically on its due date if they have not
     # signed. Signing clears the record and closes the task.
     if not dry_run:
+        # The version that goes out, frozen: editing it later does not change what
+        # this client signs.
+        contract_store.freeze_sent(client_id)
         signing.mark_pending(client_id)
         try:
             from ..lib import reminder_tasks
@@ -100,8 +118,10 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
            "לא נשלח אוטומטית, יש לשלוח את הקישור ללקוח ידנית")
     crm.append_automation_log(
         client_id, _message(client, url, delivered=bool(delivered), email=email,
-                            price=contract.prices(client)["total"], reminder=bool(reminder_task)))
-    auto.log_action("quote_sent", client_id=client_id, url=url, detail=f"{how} ({source})",
+                            price=contract.prices(client)["total"], reminder=bool(reminder_task),
+                            version=version))
+    auto.log_action("quote_sent", client_id=client_id, url=url,
+                    detail=f"{how} ({source})" + (f", נוסח מותאם: {version['summary']}" if version else ""),
                     asks_client_for=asked_on_page, source=source)
     return {"url": url, "delivered": delivered, "to": str(client.get("email") or "") if delivered else "",
             "asks_client_for": asked_on_page}
@@ -128,7 +148,7 @@ def _refuse_if_signed(auto: Automation, client_id: str, client: dict[str, Any], 
 
 
 def _message(client: dict[str, Any], url: str, *, delivered: bool, email: bool, price: float,
-             reminder: bool) -> str:
+             reminder: bool, version: Optional[dict[str, Any]] = None) -> str:
     """What the press (or the dashboard's send) did, as the one comment on the task.
 
     Says who it went to and for how much, and what happens next, because the button
@@ -140,17 +160,20 @@ def _message(client: dict[str, Any], url: str, *, delivered: bool, email: bool, 
     to = str(client.get("email") or "").strip()
     cost = f"{contract._shekels(price)} ₪"
     link = f"קישור לחתימה: {url}"
+    # Which version went out: a button press in ClickUp does not show it otherwise.
+    which = (f"זה הנוסח שערכת ללקוח הזה ({version['summary']})." if version and version.get("summary") else
+             "זה הנוסח שערכת ללקוח הזה." if version else "זה הנוסח הרגיל של החוזה.")
     if delivered:
-        lines = [f"היי, שלחתי את ההסכם לחתימה אל {to}, על סך {cost}.", link]
+        lines = [f"היי, שלחתי את ההסכם לחתימה אל {to}, על סך {cost}. {which}", link]
         if reminder:
             lines.append(f"אם לא ייחתם, תישלח תזכורת אחת בעוד {reminder_tasks.DAYS} ימים, מהמשימה "
                          f"'{reminder_tasks.PREFIX}…' ב'משימות'. אפשר לערוך אותה או לסגור כדי לבטל.")
         return "\n".join(lines)
     if not email:
-        return "\n".join([f"היי, יצרתי את קישור החתימה (על סך {cost}) ולא שלחתי אותו, כמו שביקשת.",
+        return "\n".join([f"היי, יצרתי את קישור החתימה (על סך {cost}) ולא שלחתי אותו, כמו שביקשת. {which}",
                           link, "את השליחה ללקוח אפשר לעשות ידנית."])
     why = "אין מייל במשימה" if not to else f"השליחה אל {to} נכשלה"
-    return "\n".join([f"היי, יצרתי את קישור החתימה אבל לא שלחתי אותו ללקוח: {why}.", link,
+    return "\n".join([f"היי, יצרתי את קישור החתימה אבל לא שלחתי אותו ללקוח: {why}. {which}", link,
                       "אפשר להוסיף מייל וללחוץ שוב, או לשלוח את הקישור ידנית."])
 
 

@@ -302,7 +302,7 @@ SIGN_JS = r"""
 
 
 def render_sign_page(
-    token: str, fields: dict[str, str], error: str = ""
+    token: str, fields: dict[str, str], error: str = "", *, template: Optional[str] = None
 ) -> str:
     """The contract, a form for the missing details, and a signature pad.
 
@@ -318,7 +318,7 @@ def render_sign_page(
     for key, label, _ in ASK_CLIENT:
         if not display.get(key):
             display[key] = "―――"
-    body = contract.render(display, signatures={
+    body = contract.render(display, template=template, signatures={
         "provider_signature": contract_store.provider_signature_img(), "client_signature": ""})
 
     err = (f'<div class="alert alert-danger shake" role="alert" style="margin-bottom:16px">{ui.icon("alert")}'
@@ -378,7 +378,8 @@ def handle_get(token: str, dry_run: bool = False) -> str:
     if done:
         return done_page(str((done.get("fields") or {}).get("client_email") or ""), again=True)
     client = CrmClient(dry_run=dry_run).get_client(client_id)
-    return render_sign_page(token, _client_fields(client))
+    # The version Dror sent, when he edited this client's contract (contract_edit).
+    return render_sign_page(token, _client_fields(client), template=contract_store.sent_template(client_id))
 
 
 def _signature_img(png: bytes) -> str:
@@ -399,6 +400,7 @@ def handle_post(
     """Capture a signature and store it; filing the PDF happens in the background."""
     client_id = signing.resolve(token)
     client = CrmClient(dry_run=dry_run).get_client(client_id)
+    template = contract_store.sent_template(client_id)  # what the page showed them
 
     fields = _client_fields(client)
     # What the client typed wins: they know their own company number.
@@ -409,12 +411,12 @@ def handle_post(
 
     missing = contract.missing_for(fields)
     if missing:
-        return render_sign_page(token, fields, error="חסרים פרטים: " + ", ".join(missing))
+        return render_sign_page(token, fields, error="חסרים פרטים: " + ", ".join(missing), template=template)
 
     try:
         signature_png = signing.decode_signature((form.get("signature") or [""])[0])
     except signing.SigningError as exc:
-        return render_sign_page(token, fields, error=str(exc))
+        return render_sign_page(token, fields, error=str(exc), template=template)
 
     # One signature per contract. A double submit must not file two.
     once = idempotency.guard("signed_contract", client_id)
@@ -424,7 +426,7 @@ def handle_post(
 
     try:
         # Hash what the client actually saw, both signatures and all.
-        body = contract.render(fields, signatures={
+        body = contract.render(fields, template=template, signatures={
             "provider_signature": contract_store.provider_signature_img(),
             "client_signature": _signature_img(signature_png),
         })

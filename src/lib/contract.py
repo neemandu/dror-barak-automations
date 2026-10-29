@@ -200,14 +200,16 @@ def fields_from_client(
         "price_strategy": _shekels(p["strategy"]),
         "price_campaigns": _shekels(p["campaigns"]),
         "price_total": _shekels(p["total"]),
-        # Which price lines the contract shows, and their clause numbers.
+        # Which price lines the contract shows, and their numbers inside the payment
+        # clause. The clause's own number is in the template, where renumbering a
+        # client's edited contract (contract_edit) can follow it.
         "has_strategy": "1" if p["has_strategy"] else "",
         "has_campaigns": "1" if p["has_campaigns"] else "",
         "has_both": "1" if both else "",
-        "n_strategy": "10.1",
-        "n_campaigns": "10.2" if both else "10.1",
-        "n_total": "10.3",
-        "n_payment": "10.4" if both else "10.2",
+        "n_strategy": "1",
+        "n_campaigns": "2" if both else "1",
+        "n_total": "3",
+        "n_payment": "4" if both else "2",
     }
 
 
@@ -238,6 +240,10 @@ def render(
 
     needed = placeholders_in(text) - RAW_FIELDS
     absent = sorted(n for n in needed if not str(fields.get(n) or "").strip())
+    gone = [n.rsplit("_", 1)[-1] for n in absent if n.startswith("missing_clause_")]
+    if gone:  # a client's edited contract refers to a clause it no longer has (contract_edit)
+        raise ContractError(f"החוזה מפנה לסעיף {', '.join(gone)}, שנמחק מהנוסח של הלקוח. "
+                            "אפשר להחזיר את הסעיף או לערוך את ההפניה.")
     if absent:
         raise ContractError(
             "refusing to render a contract with unfilled fields: "
