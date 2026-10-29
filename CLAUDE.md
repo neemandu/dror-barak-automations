@@ -238,6 +238,9 @@ No production credentials are required to prove the code works:
   `.env` at all.
 - Dry-run is not proof on its own. If you change something with a real runtime
   surface, drive it — the last two dashboard bugs both passed the tests.
+- **The ClickUp workspace in `.env` is Dror's real one**, with no test copy. A
+  live run, a button press or a status change there emails real clients. Test live with
+  a clearly named test task, and ask Dror before writing to ClickUp.
 
 ## History — things that changed, so old code makes sense
 
