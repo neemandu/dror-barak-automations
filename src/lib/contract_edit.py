@@ -422,10 +422,11 @@ def editor_blocks(template: str, fields: dict[str, str]) -> list[dict[str, Any]]
     out = []
     for i, b in enumerate(blocks):
         if b.tag == "marker":  # {{#has_x}}: kept in place, never shown
-            out.append({"i": i, "kind": b.tag, "locked": True, "hidden": True})
+            out.append({"i": i, "kind": b.tag, "locked": True, "hidden": True, "close": b.element.startswith("{{/")})
             continue
         item: dict[str, Any] = {"i": i, "kind": b.tag, "locked": b.locked, "html": display(b, fields),
-                                "section": SECTION_LABELS.get(b.section, "") if b.section else ""}
+                                "section": SECTION_LABELS.get(b.section, "") if b.section else "",
+                                "in_section": bool(b.section)}
         if not b.locked and b.tag in EDITABLE:
             item.update(editable(b))
         out.append(item)

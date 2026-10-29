@@ -291,3 +291,20 @@ def test_a_list_without_the_link_column_is_skipped_quietly(monkeypatch):
     assert contract_link.ensure("c2", crm=Crm()) is False
     monkeypatch.setenv("DASHBOARD_URL", "")
     assert contract_link.ensure("c3", crm=Crm()) is False
+
+
+def test_the_contracts_list_marks_a_client_with_their_own_version():
+    from src import contracts_pages
+
+    t = ce.standard()
+    _h, blocks, _t = ce.split(t)
+    assert "נוסח מותאם" not in contracts_pages.contracts_page([], "", dry_run=True)
+    contracts_pages.save_version("42", _payload(t, drop=_clause(blocks, 7)), dry_run=True)
+    assert "נוסח מותאם" in contracts_pages.contracts_page([], "", dry_run=True)
+
+
+def test_the_editor_knows_which_markers_close_a_price_section():
+    view = ce.editor_blocks(ce.standard(), _fields())
+    markers = [b for b in view if b["kind"] == "marker"]
+    assert any(b["close"] for b in markers) and any(not b["close"] for b in markers)
+    assert any(b.get("in_section") for b in view if b["kind"] != "marker")

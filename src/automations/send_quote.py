@@ -86,15 +86,17 @@ def send(client_id: str, *, dry_run: bool = False, email: bool = True,
     # the client knows their own ח.פ. Only note it here so it is not a surprise.
     asked_on_page = contract.missing_for(fields)
 
+    # The version that goes out, frozen before anyone gets the link: editing it later
+    # does not change what this client signs, and a failure here stops the send
+    # rather than handing out a link that would show another version.
+    if not dry_run:
+        contract_store.freeze_sent(client_id)
     delivered = _deliver(crm, client, url, dry_run=dry_run) if email else ""
     reminder_task = ""
     # Start the reminder clock, and open the follow-up as a task Dror can see and
     # edit (reminder_tasks): sent automatically on its due date if they have not
     # signed. Signing clears the record and closes the task.
     if not dry_run:
-        # The version that goes out, frozen: editing it later does not change what
-        # this client signs.
-        contract_store.freeze_sent(client_id)
         signing.mark_pending(client_id)
         try:
             from ..lib import reminder_tasks

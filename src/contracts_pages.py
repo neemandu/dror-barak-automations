@@ -28,7 +28,7 @@ from typing import Any, Optional
 from urllib.parse import quote
 
 from . import clients_pages, ui
-from .lib import contract, contract_edit, contract_store, crm_fields, signing
+from .lib import contract, contract_edit, contract_store, crm_fields, questionnaire_store, signing
 
 _esc = ui.esc
 
@@ -42,6 +42,8 @@ STATES = {
     "none": ("טרם נשלח", "", 5),
 }
 FILING_GRACE_S = 15 * 60  # a filing still running is not yet a failed one
+#: On the list, next to the state: this client's contract was edited (contract_edit).
+OWN_BADGE = ' <span class="badge badge-brand" data-tip="החוזה של הלקוח הזה נערך">נוסח מותאם</span>'
 #: States in which a client has signed something: a new send is a new contract.
 SIGNED_STATES = ("signed", "outside", "filing", "failed")
 
@@ -471,6 +473,10 @@ def contracts_page(entries: list[dict[str, Any]], base: str = "", *, dry_run: bo
         clients, error = [], f"לא הצלחתי לטעון לקוחות מ-ClickUp: {exc}"
     records = _records()
     states = [(c, state_for(c, entries, records.get(str(c["id"])))) for c in clients]
+    try:  # clients whose contract Dror edited (contract_edit)
+        own = {str(r.get("client_id")) for r in questionnaire_store._store().scan(contract_store.DRAFT_PREFIX)}
+    except Exception:  # noqa: BLE001 - the list still shows every contract
+        own = set()
     count = {k: sum(1 for _c, s in states if s["state"] == k) for k in STATES}
     stats = (ui.stat("ממתינים לחתימה", count["waiting"], ico="hourglass", tone="warn", i=3)
              + ui.stat("נחתמו", count["signed"] + count["outside"], ico="check-circle", tone="ok", i=4)
@@ -487,7 +493,9 @@ def contracts_page(entries: list[dict[str, Any]], base: str = "", *, dry_run: bo
         rows += (f'<tr data-href="{_esc(href)}" data-state="{s["state"]}" data-q="{_esc(name.lower())}" {_send_data(c, s)}>'
                  f'<td data-v="{_esc(name)}"><a class="person-link" href="{_esc(href)}"><span class="avatar">{_esc(ui.initials(name))}</span>'
                  f'<span>{_esc(name)}</span></a></td>'
-                 f'<td data-v="{STATES[s["state"]][2]}">{_badge(s["state"])}{extra}</td>'
+                 f'<td data-v="{STATES[s["state"]][2]}">{_badge(s["state"])}'
+                 f'{OWN_BADGE if cid in own else ""}'
+                 f'{extra}</td>'
                  f'<td class="hide-sm muted" data-v="{clients_pages._ms(s["sent_at"])}">{when_sent}</td>'
                  f'<td class="hide-sm muted acts-cell" data-v="{clients_pages._ms(s["signed_at"])}">'
                  f'<span class="when-v">{ui.when(s["signed_at"], "-")}</span>'
@@ -965,6 +973,9 @@ if (ed && side) (function () {
   }
   function add(m, kind) {
     var after = m.previousElementSibling; m.remove(); if (kind === 'x') return;
+    // inside a part shown only with a price, an addition would vanish without it: it goes after that part
+    if (after.dataset.insec) { var n = after.nextElementSibling;
+      while (n && !n.dataset.close) n = n.nextElementSibling; if (n) after = n; }
     var made;
     if (kind === 'clause') {
       // a clause ends with its separator: after one, the new clause opens straight away
@@ -1087,12 +1098,13 @@ def editor_page(client: dict[str, Any], base: str) -> str:
     for b in contract_edit.editor_blocks(template, fields):
         i = b["i"]
         if b.get("hidden"):
-            rows.append(f'<div class="ce-item" data-i="{i}" data-kind="marker" hidden></div>')
+            close = ' data-close="1"' if b.get("close") else ""
+            rows.append(f'<div class="ce-item" data-i="{i}" data-kind="marker"{close} hidden></div>')
             continue
         mark = marks[i] if i < len(marks) else ""
         cls = ("ce-item" + (" is-locked" if b["locked"] else "") + (" ce-hr" if b["kind"] == "hr" else "")
                + (f" ce-{mark}" if mark and not b["locked"] else ""))
-        data = f'data-i="{i}" data-kind="{_esc(b["kind"])}"'
+        data = f'data-i="{i}" data-kind="{_esc(b["kind"])}"' + (' data-insec="1"' if b.get("in_section") else "")
         if "text" in b:
             data += f' data-text="{_esc(b["text"])}"' + (f' data-num="1" data-prefix="{_esc(b["prefix"])}"' if b.get("num") else "")
         tools = ""
