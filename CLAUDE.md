@@ -75,9 +75,22 @@ triggers is a decision for Dror, not a refactor to slip in. The exception, Dror'
 (2026-09-24): a contract page (`/contracts/<id>`) can **send that contract**, the same
 `send_quote` the ClickUp button runs, behind a confirmation naming the recipient and the
 price, a louder one for a client who already signed, and a one-minute guard against a
-double press; or make the link without emailing it. Writes otherwise go through the
-questionnaire admin (`/admin`, `src\questionnaire_admin.py`): questionnaire *content*,
-client links, and Dror's own contract signature (`/admin/api/signature`).
+double press; or make the link without emailing it. The same page can also **edit that
+client's contract before it goes out** (Dror's decision, 2026-10-29): a write of contract
+*content* for one client, which sends nothing (`/admin/api/contracts/<id>/version`, below).
+Writes otherwise go through the questionnaire admin (`/admin`, `src\questionnaire_admin.py`):
+questionnaire *content*, client links, and Dror's own contract signature (`/admin/api/signature`).
+
+**A client's contract can differ from the standard, and what was sent is frozen.** The
+standard is `templates\contract_he.html` (history in git). Dror's version for one client is a
+full copy of it with his edits (`src\lib\contract_edit.py`, stored as `contract:draft:<id>`
+by `src\lib\contract_store.py`), never a list of changes replayed on the live template.
+`send_quote` freezes it as `contract:sent:<id>`, and the signing page renders **only** that
+(or the standard when there is none), so editing after sending never changes what the client
+signs. A block holding a `{{placeholder}}` is locked (names, prices, signatures come from
+ClickUp and the signing page). Clause numbers, sub-clauses and "סעיף N" references are
+renumbered at save; a reference to a deleted clause becomes `{{missing_clause_N}}`, which
+`contract.render` refuses with a Hebrew reason, and `send_quote` turns that into `Refused`.
 
 **Questionnaire questions are data, not code.** They live in the questionnaire store
 (`src\lib\questionnaire_store.py`, DynamoDB `QuestionnaireTable`) and Dror edits them in
@@ -133,7 +146,7 @@ logging, and a `--dry-run` mode.
 | 1 | **Lead → Google Contacts** | Webhook (ClickUp: a task created on the clients list, or updated: the phone is usually typed after) | Save the lead's phone number to Google Contacts, once per (client, number) (idempotency guard): a number added or corrected later is saved, other updates save nothing; a number already in Dror's contacts (compared by its last 9 digits, so +972 and 0 match) is not saved again (`contact_exists`). |
 | 2 | **Send questionnaire** | Button (`שלח שאלון ללקוח במייל`) / CLI | Email the client the link to the default questionnaire (our own branded form, `src\questionnaire_page.py`) and restart the chase; records who was sent what. Onboarding (#5) sends it automatically after signing; the button re-sends a lost link; the admin can mint a link without sending anything. Nothing fires on `initial_meeting` — see History. |
 | 3 | **Social-media prep report** | Questionnaire submitted (background task) / Button (`בנה דוח רשתות (לא נשלח ללקוח)`) | Claude **opens** each profile link the client gave (server-side web fetch/search) and writes what it actually saw — and says what it could not see. Google Doc in the client's `אסטרטגיה` folder. Reused by #8. |
-| 4 | **Send quote + capture signature** | Manual (ClickUp button, or the dashboard's contract page) + our signing page | Send a quote with a signature link. The signing page stores the signature at once (`src\lib\contract_store.py`: the exact signed document, hashed) and answers; a background task (`sign_page.file_contract`) prints it in Chromium (same look, audit page last, Drive's converter as fallback), files it in Drive and on the ClickUp task, sets `חתם`, emails Dror and the client their copy, and logs `signed`; the daily reminder job re-files one that failed. Prices: `מחיר אסטרטגיה` / `מחיר קמפיינים` per line, else the monthly price as the strategy line; an unpriced service leaves the contract. Dror's own signature is drawn once in the dashboard. Prove the printing on a deploy with a `{"check": "contract_pdf"}` invoke of the webhook Lambda (sample details, stores and sends nothing; `"return_pdf": true` returns the PDF). |
+| 4 | **Send quote + capture signature** | Manual (ClickUp button, or the dashboard's contract page) + our signing page | Send a quote with a signature link. The signing page stores the signature at once (`src\lib\contract_store.py`: the exact signed document, hashed) and answers; a background task (`sign_page.file_contract`) prints it in Chromium (same look, audit page last, Drive's converter as fallback), files it in Drive and on the ClickUp task, sets `חתם`, emails Dror and the client their copy, and logs `signed`; the daily reminder job re-files one that failed. Prices: `מחיר אסטרטגיה` / `מחיר קמפיינים` per line, else the monthly price as the strategy line; an unpriced service leaves the contract. Before sending, Dror can edit, delete or add clauses for that client on the contract page (`?edit=1`); both sends use the saved version and say which went out. Each task's `חוזה בדשבורד` URL column links to its contract page (`src\lib\contract_link.py`, written once by the webhook; `src\tools\fill_contract_links.py` for older tasks). Dror's own signature is drawn once in the dashboard. Prove the printing on a deploy with a `{"check": "contract_pdf"}` invoke of the webhook Lambda (sample details, stores and sends nothing; `"return_pdf": true` returns the PDF). |
 | 5 | **Onboarding** (central) | Webhook (ClickUp: `signed`) | Create the client Drive folder + its standard subfolders, copy templates, email the strategy questionnaire (and chase it), send the WhatsApp welcome Flow when `MANYCHAT_FLOW_ONBOARDING` names an approved one (a logged skip until then), flag a missing Meta ad account, promote the client to `active`/`in_work`, and summarise on the task. |
 | 4b | **Signing follow-up** | Scheduled (daily) + a task per contract | `send_quote` opens a task on משימות (`src\lib\reminder_tasks.py`: `תזכורת חתימה: <client>`, due in 3 days, the email text in its description, no employee). `sign_reminders` sends it automatically on the due date if the client has not signed, with the text **as the description then reads**, the signing button and Dror's signature, then completes the task. Dror edits the text or date, or closes the task to cancel; signing closes it. No approval step, by Dror's choice. Contracts from before fall back to the fixed `sign_reminder` text at 3 days. |
 | 5b | **Questionnaire chase** | Scheduled (daily) | Nudges an onboarded client who hasn't filled the questionnaire, at 3 and 7 days, then tells Dror and stops. Runs in the same daily job as the signature reminders (`src\scheduled.py::reminders_handler`). |

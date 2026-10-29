@@ -350,6 +350,8 @@ Resources:
       Environment:
         Variables:
           CHROMIUM_PACK_DIR: /opt/chromium
+          # The link on each client's task to their contract page (src/lib/contract_link.py).
+          DASHBOARD_URL: !Sub "https://${DashboardApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/dashboard"
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable

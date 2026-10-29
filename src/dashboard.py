@@ -186,12 +186,14 @@ def _page(title: str, body: str) -> bytes:
     return ui.document(title, body, kind="app", css=CSS).encode("utf-8")
 
 
-def _login_page(error: str = "", base: str = "") -> bytes:
+def _login_page(error: str = "", base: str = "", after: str = "") -> bytes:
     """``base`` is the path prefix the page lives under — "" locally, "/dev" behind
     API Gateway — so every link and form action lands on the same deployment."""
     note = (f'<div class="alert alert-danger shake" role="alert">{ui.icon("alert")}<span>{_esc(error)}</span></div>'
             if error else "")
-    body = f"""<div class="login-wrap"><form class="card login reveal" method="post" action="{base}/login" data-busy>
+    # ``after``: the page asked for before logging in (a contract linked from ClickUp).
+    back = f'<input type="hidden" name="next" value="{_esc(after)}">' if after else ""
+    body = f"""<div class="login-wrap"><form class="card login reveal" method="post" action="{base}/login" data-busy>{back}
       {ui.BRAND_MARK}<h1>כניסה ללוח הבקרה</h1><p>האוטומציות של דרור ברק</p>{note}
       <label class="field"><span class="label">סיסמה</span><span class="pw">
         <input class="input" type="password" name="password" id="pw" autofocus autocomplete="current-password" required>

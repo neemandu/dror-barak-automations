@@ -149,6 +149,7 @@ def route(
     if source == "tasks" or (tasks_list and _list_id_of(payload) == tasks_list):
         return _route_claude_task(payload, event, task_id, dry_run)
 
+    _contract_link(task_id, dry_run)
     if event == "taskCreated":
         cleared = _clear_new_lead_sub_status(task_id, dry_run)
         result = lead_to_contacts.run(task_id, dry_run=dry_run)
@@ -187,6 +188,16 @@ def route(
                 "sub_status": sub}
 
     return {"ignored": f"no automation for event {event}"}
+
+
+def _contract_link(task_id: str, dry_run: bool) -> None:
+    """The task's link to its contract page, once (best-effort: a link must not stop a lead)."""
+    from .lib import contract_link
+
+    try:
+        contract_link.ensure(task_id, dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("contract_link_not_set", extra={"client_id": task_id, "error": str(exc)})
 
 
 def _list_id_of(payload: dict[str, Any]) -> str:

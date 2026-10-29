@@ -258,3 +258,36 @@ def test_the_editor_page_is_a_dashboard_page_with_locked_values():
     assert " data-spa" in page
     script = re.search(r"<script data-page-script>(.*?)</script>", page, re.S)
     assert not script or "document.addEventListener" not in script.group(1)
+
+
+def test_the_task_gets_its_contract_page_link_once(monkeypatch):
+    from src.lib import contract_link
+
+    monkeypatch.setenv("DASHBOARD_URL", "https://x.example/dev/dashboard")
+    assert contract_link.url_for("86ab") == "https://x.example/dev/contracts/86ab"
+
+    class Crm:
+        calls: list = []
+
+        def update_fields(self, cid, **f):
+            self.calls.append((cid, f))
+            return {"written": f, "skipped": {}}
+
+    crm = Crm()
+    assert contract_link.ensure("86ab", crm=crm) is True
+    assert contract_link.ensure("86ab", crm=crm) is False  # once per client
+    assert crm.calls == [("86ab", {"dashboard_contract": "https://x.example/dev/contracts/86ab"})]
+
+
+def test_a_list_without_the_link_column_is_skipped_quietly(monkeypatch):
+    from src.lib import contract_link
+
+    monkeypatch.setenv("DASHBOARD_URL", "https://x.example/dev/dashboard")
+
+    class Crm:
+        def update_fields(self, cid, **f):
+            return {"written": {}, "skipped": {"dashboard_contract": "no such field on the list"}}
+
+    assert contract_link.ensure("c2", crm=Crm()) is False
+    monkeypatch.setenv("DASHBOARD_URL", "")
+    assert contract_link.ensure("c3", crm=Crm()) is False

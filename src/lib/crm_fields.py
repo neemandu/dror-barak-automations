@@ -62,6 +62,9 @@ ALIASES: dict[str, list[str]] = {
     "questionnaire_answers": ["questionnaire answers", "questionnaire", "תשובות שאלון", "תשובות לשאלון",
                               "תשובות השאלון", "שאלון", "שאלון מולא"],
     "recordings_path": ["recordings", "נתיב הקלטות", "הקלטות"],
+    # The client's contract page on the dashboard, a URL column (src/lib/contract_link.py).
+    "dashboard_contract": ["dashboard contract", "contract page", "חוזה בדשבורד", "חוזה בלוח הבקרה",
+                           "עריכת חוזה", "דף החוזה"],
     # The Meta ad account for the monthly campaign report (T7), the act_ id.
     # NOTE: normalize() casefolds, so a "Meta" the user typed arrives as "meta" —
     # every alias here must be lowercase or it silently never matches, and the

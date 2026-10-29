@@ -126,3 +126,20 @@ def test_leads_are_one_row_per_person_newest_first():
          "client_id": "+972501111111", "name": "מיכל", "msg": "1142673"}])
     assert [r["phone"] for r in rows] == ["+972501111111", "+972502222222"]
     assert rows[0]["name"] == "מיכל" and rows[0]["lists"] == ["889128", "1142673"] and rows[0]["count"] == 2
+
+
+def test_a_contract_link_from_clickup_returns_to_the_contract_after_login():
+    from urllib.parse import quote
+
+    resp = dl.lambda_handler(event("GET", "/dev/contracts/42"))
+    assert resp["statusCode"] == 303 and resp["headers"]["Location"] == "/dev/login?next=/contracts/42"
+    login = dl.lambda_handler(event("GET", "/dev/login", query={"next": "/contracts/42"}))
+    assert 'name="next" value="/contracts/42"' in login["body"]
+    done = dl.lambda_handler(event("POST", "/dev/login", body="password=correct-horse&next=" + quote("/contracts/42")))
+    assert done["headers"]["Location"] == "/dev/contracts/42"
+
+
+def test_login_never_sends_anyone_to_another_site():
+    for bad in ("//evil.example/x", "https://evil.example", "/admin/api/x", "/contracts//evil.example"):
+        done = dl.lambda_handler(event("POST", "/dev/login", body="password=correct-horse&next=" + bad))
+        assert done["headers"]["Location"] == "/dev/dashboard", bad

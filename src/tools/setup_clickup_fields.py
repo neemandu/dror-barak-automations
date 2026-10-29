@@ -32,6 +32,7 @@ SPECS: dict[str, tuple[str, str, dict[str, Any]]] = {
     "price_campaigns": ("מחיר קמפיינים", "currency", {"currency_type": "ILS", "precision": 0}),
     "service_type": ("סוג שירות", "short_text", {}),
     "recordings_path": ("נתיב הקלטות", "short_text", {}),
+    "dashboard_contract": ("חוזה בדשבורד", "url", {}),
 }
 
 BASE = "https://api.clickup.com/api/v2"

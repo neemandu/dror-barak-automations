@@ -22,7 +22,7 @@ import hashlib
 import hmac
 import time
 from typing import Any, Optional
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 
 from . import dashboard, questionnaire_admin
 from .lib import config
@@ -100,6 +100,15 @@ def _html(status: int, body: bytes, cookie: Optional[str] = None) -> dict[str, A
     return out
 
 
+def _safe_next(path: str) -> str:
+    """A screen of this dashboard to return to after logging in, or "": never
+    another site (``//evil.example``) and never anything but the client screens."""
+    path = str(path or "")
+    if not path.startswith(("/contracts", "/clients", "/documents")) or "//" in path or "\\" in path:
+        return ""
+    return quote(path, safe="/%")
+
+
 def _redirect(to: str, cookie: Optional[str] = None) -> dict[str, Any]:
     out: dict[str, Any] = {"statusCode": 303, "headers": {"Location": to, "Cache-Control": "no-store"}, "body": ""}
     if cookie:
@@ -131,7 +140,8 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
     if (route in ("/clients", "/documents", "/contracts") or route.startswith(("/clients/", "/contracts/"))) \
             and method == "GET":
         if not valid_session(_cookie_value(event)):
-            return _redirect(f"{base}/login")
+            # back to this page after logging in: the contract link on a ClickUp task lands here
+            return _redirect(f"{base}/login?next={quote(route, safe='/')}")
         page = dashboard.client_screens(route, base, dry_run=config.get_bool("WEBHOOK_DRY_RUN"), query=q)
         return _html(200, page) if page else _html(404, dashboard._not_found(base))
 
@@ -141,7 +151,7 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         return _html(200, dashboard._leads_page(dashboard._load_leads(), base))
 
     if route == "/login" and method == "GET":
-        return _html(200, dashboard._login_page(base=base))
+        return _html(200, dashboard._login_page(base=base, after=_safe_next(q.get("next", ""))))
 
     if route == "/login" and method == "POST":
         if dashboard._locked_out(ip):
@@ -149,7 +159,9 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         body = str(event.get("body") or "")
         if event.get("isBase64Encoded"):
             body = base64.b64decode(body).decode("utf-8")
-        supplied = (parse_qs(body).get("password") or [""])[0]
+        form = parse_qs(body)
+        supplied = (form.get("password") or [""])[0]
+        after = _safe_next((form.get("next") or [""])[0])
         try:
             ok = dashboard._check_password(supplied)
         except config.ConfigError as exc:
@@ -158,9 +170,9 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         if not ok:
             dashboard._record_failure(ip)
             log.warning("dashboard_login_failed", extra={"ip": ip})
-            return _html(401, dashboard._login_page("סיסמה שגויה.", base))
+            return _html(401, dashboard._login_page("סיסמה שגויה.", base, after))
         dashboard._attempts.pop(ip, None)
-        return _redirect(f"{base}/dashboard", _set_cookie(issue_session()))
+        return _redirect(f"{base}{after or '/dashboard'}", _set_cookie(issue_session()))
 
     if route == "/logout":
         return _redirect(f"{base}/login", _set_cookie(clear=True))
