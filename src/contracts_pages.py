@@ -28,7 +28,7 @@ from typing import Any, Optional
 from urllib.parse import quote
 
 from . import clients_pages, ui
-from .lib import contract, contract_store, crm_fields, signing
+from .lib import contract, contract_edit, contract_store, crm_fields, signing
 
 _esc = ui.esc
 
@@ -535,8 +535,9 @@ if (find) find.addEventListener('input', apply);
 # ------------------------------------------------------------ one contract
 
 
-def _preview_body(client: dict[str, Any]) -> tuple[str, str]:
-    """The contract as it would go out now, and an error if it cannot be produced."""
+def _preview_body(client: dict[str, Any], template: Optional[str] = None) -> tuple[str, str]:
+    """The contract as it would go out now, and an error if it cannot be produced.
+    ``template``: the client's own version, its changed blocks marked (preview only)."""
     from .sign_page import ASK_CLIENT
 
     try:
@@ -548,10 +549,11 @@ def _preview_body(client: dict[str, Any]) -> tuple[str, str]:
         if not shown.get(key):
             shown[key] = "ימולא על ידי הלקוח"
     try:
-        body = contract.render(shown, signatures={
+        body = contract.render(shown, template=template, signatures={
             "provider_signature": contract_store.provider_signature_img(), "client_signature": ""})
-    except contract.ContractError:
-        return "", "חסרים פרטי נותן השירות: " + ", ".join(contract.missing_provider())
+    except contract.ContractError as exc:
+        missing = contract.missing_provider()
+        return "", ("חסרים פרטי נותן השירות: " + ", ".join(missing)) if missing else str(exc)
     return body.replace(">ימולא על ידי הלקוח<", ' data-ask="1">ימולא על ידי הלקוח<'), ""
 
 
@@ -626,10 +628,12 @@ def _send_card(client: dict[str, Any], s: dict[str, Any], *, again: bool) -> str
 
 
 def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, dry_run: bool = False,
-                  new: bool = False) -> Optional[str]:
+                  new: bool = False, edit: bool = False) -> Optional[str]:
     client = clients_pages._find_client(client_id, dry_run)
     if not client:
         return None
+    if edit:
+        return editor_page(client, base)
     name = str(client.get("name") or client_id)
     signed_rec = _records().get(client_id)
     rec = None if new else signed_rec
@@ -659,8 +663,12 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
                 f'<div class="ct-card-body">{err}<dl class="small-facts" style="padding:0">{facts_html}</dl>'
                 f'<div class="sig-acts">{pdf}{again}</div></div></section>')
     else:
-        body, problem = _preview_body(client)
-        label = "תצוגה מקדימה: כך הלקוח יראה את החוזה"
+        version = contract_store.draft(client_id)
+        shown = (contract_edit.marked(version["template"], contract_edit.compare(version["template"])["marks"])
+                 if version else None)
+        body, problem = _preview_body(client, shown)
+        label = ("תצוגה מקדימה של הנוסח שערכת ללקוח (השינויים מסומנים)" if version
+                 else "תצוגה מקדימה: כך הלקוח יראה את החוזה")
         status = ""
         if s["state"] == "waiting":
             rem = (f', {s["reminders"]} תזכורות' if s["reminders"] > 1 else ", נשלחה תזכורת" if s["reminders"] else "")
@@ -673,8 +681,8 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
                          f' <a href="{_esc(s["link"])}" target="_blank" rel="noopener">לחוזה החתום</a>' if s["link"] else "")
             status = (f'<div class="alert alert-warn" style="margin:0 18px 12px">{ui.icon("alert")}<span>הלקוח כבר חתם'
                       f'{" " + _esc(when) if when else ""}. שליחה כאן היא חוזה חדש.{to_signed}</span></div>')
-        side = (_send_card(client, s, again=already)
-                + f'<section class="card reveal" style="--i:3"><div class="card-head"><h2 class="card-title">לפני השליחה</h2></div>'
+        side = (_send_card(client, s, again=already) + _version_card(client, s, base, version)
+                + f'<section class="card reveal" style="--i:4"><div class="card-head"><h2 class="card-title">לפני השליחה</h2></div>'
                 f'{status}{_checks(preflight(client))}'
                 f'<div class="how">אפשר לשלוח גם מהמשימה ב-ClickUp, בכפתור ״שלח חוזה ללקוח במייל״. אם משנים שם מחיר או מייל, '
                 f'החוזה כאן מתעדכן תוך דקה.</div></section>')
@@ -686,8 +694,9 @@ def contract_page(entries: list[dict[str, Any]], base: str, client_id: str, *, d
              f'<article class="paper">{body}</article></div>' if body else
              f'<div class="card">{ui.empty("אי אפשר להציג את החוזה", "יש לתקן את מה שמופיע בצד.", ico="file")}</div>')
     page = (back + head + f'<div class="ct-grid"><div>{paper}</div><aside class="ct-side">{side}</aside></div>')
-    css = clients_pages.CSS + CSS + contract.CONTRACT_CSS + ".paper [data-ask] { background: #eef4ff; color: #3538cd; font-weight: 500; }"
-    return ui.app_page(base, "contracts", f"החוזה של {name} · חוזים", page, css=css, script=CT_JS + PAGE_JS, spa=True)
+    css = (clients_pages.CSS + CSS + contract.CONTRACT_CSS + EDIT_CSS
+           + ".paper [data-ask] { background: #eef4ff; color: #3538cd; font-weight: 500; }")
+    return ui.app_page(base, "contracts", f"החוזה של {name} · חוזים", page, css=css, script=CT_JS + PAGE_JS + VERSION_JS, spa=True)
 
 
 # ------------------------------------------------------- on the client card
@@ -780,3 +789,400 @@ def contract_link(client_id: str, *, dry_run: bool = False) -> tuple[int, dict[s
     if state_for(client, entries, _records().get(client_id))["state"] != "waiting":
         return 409, {"errors": ["אין חוזה שממתין לחתימה. קודם שולחים אותו."]}
     return 200, {"url": signing.sign_url(client_id)}
+
+
+# ------------------------------------------------------- a client's own version
+
+EDIT_CSS = """
+.paper .ce-mark { position: relative; border-radius: 6px; margin: 0 -10px; padding: 0 10px;
+  box-shadow: inset -3px 0 0 var(--ce-c); background: color-mix(in srgb, var(--ce-c) 7%, transparent); }
+.paper .ce-edited { --ce-c: #f79009; }
+.paper .ce-new { --ce-c: #12b76a; }
+.paper .ce-mark::before { content: attr(data-mark); position: absolute; inset-inline-end: 6px; top: 4px; font-size: 11px;
+  font-weight: 600; color: var(--ce-c); }
+.ce-paper { padding: 34px 40px; }
+.ce-item { position: relative; border-radius: 8px; margin: 0 -14px; padding: 2px 14px; border: 1px solid transparent;
+  transition: background var(--d2), border-color var(--d2); }
+.ce-item:hover, .ce-item:focus-within, .ce-item.is-editing { background: #f8fafc; border-color: #e5e8ed; }
+.ce-item.is-locked .ce-body { opacity: .78; }
+.ce-item.ce-edited { box-shadow: inset -3px 0 0 #f79009; }
+.ce-item.ce-new { box-shadow: inset -3px 0 0 #12b76a; }
+.ce-item.is-empty .ce-body { color: #98a2b3; font-style: italic; padding: 10px 0; }
+.ce-tools { position: absolute; inset-inline-end: 6px; top: 4px; z-index: 2; display: flex; gap: 2px; padding: 2px; border-radius: 9px;
+  background: #fff; border: 1px solid #e5e8ed; box-shadow: 0 4px 12px -4px rgba(16, 24, 40, .18);
+  opacity: 0; pointer-events: none; transition: opacity var(--d2); }
+.ce-item:hover > .ce-tools, .ce-item:focus-within > .ce-tools { opacity: 1; pointer-events: auto; }
+.ce-item.is-editing > .ce-tools { display: none; }
+.ce-tools .btn { --h: 28px; width: 28px; padding: 0; justify-content: center; color: #475467; }
+.ce-tools .btn:hover { color: #101828; }
+.ce-tools .btn[data-ce=del]:hover { color: #d92d20; }
+.ce-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #667085; background: #f2f4f7;
+  border-radius: 99px; padding: 1px 9px; margin: 2px 0 0; }
+.ce-tag .icon { width: 11px; height: 11px; }
+.ce-chip { background: #eef4ff; color: #3538cd; border-radius: 5px; padding: 0 5px; font-weight: 500; }
+.ce-edit { display: grid; gap: 8px; padding: 8px 0 10px; }
+.ce-edit .textarea { font: inherit; font-size: 14.5px; line-height: 1.75; min-height: 60px; background: #fff; color: #1d2939; }
+.ce-edit .input { font-size: 16px; font-weight: 700; background: #fff; color: #1d2939; }
+.ce-edit .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ce-edit .hint { font-size: 12px; color: #667085; }
+.ce-add { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 8px; padding: 8px; border-radius: 10px;
+  background: #f2f4f7; animation: menu-in var(--d2) var(--ease); }
+.ce-add .lbl { font-size: 12.5px; color: #667085; margin-inline-end: 4px; }
+.ce-item.ce-hr { padding-top: 4px; padding-bottom: 4px; }
+.ce-gone { animation: ce-out var(--d3) var(--ease) forwards; }
+@keyframes ce-out { to { opacity: 0; transform: scale(.98); } }
+.version-card .summary { font-size: 13.5px; color: var(--fg-muted); }
+.version-card .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.ce-side .steps { margin: 0; padding: 0 18px 4px 0; font-size: 13.5px; color: var(--fg-muted); line-height: 1.8; }
+.ce-side .steps .icon { width: 13px; height: 13px; vertical-align: -2px; }
+.ce-side .acts { display: grid; gap: 8px; }
+.ce-side .dirty { font-size: 12.5px; color: var(--warn-ink); display: none; align-items: center; gap: 6px; }
+.ce-side.is-dirty .dirty { display: flex; }
+/* touch: a tap picks a block and shows its tools under it */
+@media (hover: none) {
+  .ce-tools { display: none; }
+  .ce-item.is-active > .ce-tools { display: flex; position: static; opacity: 1; pointer-events: auto; width: max-content;
+    margin: 4px auto 8px 0; box-shadow: none; }
+  .ce-item.is-active { background: #f8fafc; border-color: #e5e8ed; }
+}
+.ce-savebar { position: fixed; z-index: 60; inset-inline: 12px; bottom: 12px; display: none; align-items: center; gap: 10px;
+  padding: 8px 8px 8px 14px; border-radius: 14px; background: #101828; color: #fff; font-size: 13.5px; box-shadow: var(--sh-xl); }
+.ce-savebar span { flex: 1; }
+@media (max-width: 1100px) { .ce-savebar.is-on { display: flex; } .ce-paper { margin-bottom: 70px; } }
+@media (max-width: 640px) { .ce-paper { padding: 20px 16px; } .ce-item { margin: 0 -8px; padding: 2px 8px; } }
+@media (prefers-reduced-motion: reduce) { .ce-gone, .ce-add { animation: none; } }
+"""
+
+# The version card on the contract page: reset to the standard.
+VERSION_JS = r"""
+var vcard = document.getElementById('version-card');
+if (vcard) vcard.addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-ver=reset]'); if (!b) return;
+  UI.confirm({title: 'לחזור לנוסח הרגיל?', text: 'השינויים שעשית בחוזה של הלקוח הזה יימחקו, והוא יקבל את הנוסח הרגיל. חוזה שכבר נשלח או נחתם לא משתנה.',
+              ok: 'חזרה לנוסח הרגיל', danger: true, icon: 'rotate'}).then(function (yes) {
+    if (!yes) return; UI.busy(b, true);
+    UI.api('/contracts/' + encodeURIComponent(vcard.dataset.client) + '/version', {reset: true}).then(function (r) {
+      UI.busy(b, false);
+      if (r._status !== 200) { UI.toast((r.errors || ['לא הצלחתי'])[0], {kind: 'error'}); return; }
+      UI.toast('החוזה חזר לנוסח הרגיל'); UI.reload();
+    });
+  });
+});
+"""
+
+# The editor: edit, delete or add blocks, then save the whole version at once.
+EDIT_JS = r"""
+var ed = document.getElementById('ce'), side = document.getElementById('ce-side');
+if (ed && side) (function () {
+  var main = document.querySelector('main.page'), dirty = false, cid = ed.dataset.client;
+  var bar = document.getElementById('ce-savebar');
+  function setDirty() { dirty = true; side.classList.add('is-dirty'); if (bar) bar.classList.add('is-on'); }
+  window.onbeforeunload = function () { return document.getElementById('ce') && dirty ? '' : undefined; };
+  // a block keeps its number on screen; a new one gets its number when saved
+  function num(it, blank) { return it.dataset.prefix || blank; }
+  function lines(t) { return t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean); }
+  function show(it) {
+    var kind = it.dataset.kind, text = it.dataset.text || '', body = it.querySelector('.ce-body');
+    body.innerHTML = ''; it.classList.toggle('is-empty', !text.trim() && kind !== 'hr');
+    if (kind === 'hr') { body.appendChild(document.createElement('hr')); return; }
+    if (!text.trim()) { body.textContent = kind === 'h2' ? 'כותרת הסעיף' : 'לחיצה על העיפרון לכתיבה'; return; }
+    var ls = lines(text), node;
+    if (kind === 'ul' || kind === 'ol') { node = document.createElement(kind);
+      ls.forEach(function (l) { var li = document.createElement('li'); li.textContent = l; node.appendChild(li); }); }
+    else if (kind === 'h2' || kind === 'h3') { node = document.createElement(kind);
+      node.textContent = (it.dataset.num === '1' ? num(it, kind === 'h2' ? '#.' : '#.#') + ' ' : '') + ls.join(' '); }
+    else { node = document.createElement('p'); if (it.dataset.num === '1') node.appendChild(document.createTextNode(num(it, '#.#') + ' '));
+      ls.forEach(function (l, i) { if (i) node.appendChild(document.createElement('br')); node.appendChild(document.createTextNode(l)); }); }
+    body.appendChild(node);
+  }
+  function close(it, keep) {
+    var box = it.querySelector('.ce-edit'); if (!box) return true;
+    var field = box.querySelector('.input,.textarea'), v = field.value;
+    if (keep) {
+      if (!v.trim()) { UI.toast('הקטע ריק. כדי להסיר אותו מוחקים אותו', {kind: 'error'}); field.focus(); return false; }
+      if (v.indexOf('{{') >= 0 || v.indexOf('}}') >= 0) { UI.toast('אי אפשר להשתמש בסוגריים מסולסלים כפולים', {kind: 'error'}); return false; }
+      if (v !== it.dataset.text) { it.dataset.text = v; if (!it.dataset.isnew) { it.dataset.edited = '1'; it.classList.add('ce-edited'); } setDirty(); }
+    }
+    box.remove(); it.classList.remove('is-editing'); it.querySelector('.ce-body').hidden = false; show(it);
+    return true;
+  }
+  function open(it) {
+    var other = ed.querySelector('.ce-item.is-editing'); if (other && other !== it && !close(other, true)) return;
+    if (it.classList.contains('is-editing')) return;
+    var kind = it.dataset.kind, head = kind === 'h2' || kind === 'h3';
+    var box = document.createElement('div'); box.className = 'ce-edit';
+    var field = document.createElement(head ? 'input' : 'textarea'); field.className = head ? 'input' : 'textarea';
+    field.value = it.dataset.text || ''; field.setAttribute('aria-label', 'טקסט הקטע');
+    if (!head) field.rows = Math.min(14, Math.max(3, field.value.split('\n').length + 1));
+    var row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = '<button type="button" class="btn btn-primary btn-sm" data-ce="ok">' + UI.icon('check') + '<span>אישור</span></button>' +
+      '<button type="button" class="btn btn-sm" data-ce="cancel">ביטול</button><span class="hint"></span>';
+    row.querySelector('.hint').textContent = (kind === 'ul' || kind === 'ol') ? 'כל שורה היא סעיף ברשימה' :
+      (it.dataset.num === '1' ? 'המספור מתעדכן לבד' : '');
+    box.appendChild(field); box.appendChild(row);
+    it.querySelector('.ce-body').hidden = true; it.appendChild(box); it.classList.add('is-editing');
+    field.focus(); if (field.setSelectionRange) field.setSelectionRange(field.value.length, field.value.length);
+    field.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(it, false); }
+      if (e.key === 'Enter' && (head || e.ctrlKey || e.metaKey)) { e.preventDefault(); close(it, true); }
+    });
+  }
+  function item(kind, text, num) {
+    var it = document.createElement('div'); it.className = 'ce-item ce-new' + (kind === 'hr' ? ' ce-hr' : '');
+    it.dataset.kind = kind; it.dataset.text = text || ''; it.dataset.isnew = '1'; if (num) it.dataset.num = '1';
+    it.innerHTML = '<div class="ce-body"></div><div class="ce-tools">' +
+      (kind === 'hr' ? '' : '<button type="button" class="btn btn-ghost" data-ce="edit" data-tip="עריכה" aria-label="עריכה">' + UI.icon('pen') + '</button>') +
+      '<button type="button" class="btn btn-ghost" data-ce="del" data-tip="מחיקה" aria-label="מחיקה">' + UI.icon('trash') + '</button>' +
+      '<button type="button" class="btn btn-ghost" data-ce="add" data-tip="הוספה אחרי" aria-label="הוספה אחרי">' + UI.icon('plus') + '</button></div>';
+    show(it); return it;
+  }
+  // A clause is its heading and what follows, up to its separator.
+  function clauseOf(it) {
+    var out = [it], n = it.nextElementSibling;
+    while (n && n.classList.contains('ce-item') && n.dataset.kind !== 'h2') { out.push(n); if (n.dataset.kind === 'hr') break; n = n.nextElementSibling; }
+    return out;
+  }
+  function del(it) {
+    var group = it.dataset.kind === 'h2' && it.dataset.num === '1' ? clauseOf(it) : [it];
+    if (group.some(function (x) { return x.classList.contains('is-locked'); })) {
+      UI.toast('בסעיף הזה יש פרטים מ-ClickUp (שמות או מחירים), ולכן אי אפשר למחוק אותו כולו. אפשר למחוק פסקאות בודדות.', {kind: 'error', duration: 5000}); return; }
+    var anchor = group[group.length - 1].nextElementSibling;
+    group.forEach(function (x) { x.classList.add('ce-gone'); });
+    setTimeout(function () { group.forEach(function (x) { x.remove(); x.classList.remove('ce-gone'); }); }, 180);
+    setDirty();
+    UI.toast(group.length > 1 ? 'הסעיף נמחק' : 'הקטע נמחק', {action: {label: 'ביטול', run: function () {
+      group.forEach(function (x) { x.classList.remove('ce-gone'); ed.insertBefore(x, anchor); }); }}});
+  }
+  function addMenu(it) {
+    var was = ed.querySelector('.ce-add'); if (was) { var owner = was.previousElementSibling; was.remove(); if (owner === it) return; }
+    var m = document.createElement('div'); m.className = 'ce-add';
+    m.innerHTML = '<span class="lbl">להוסיף כאן:</span>' +
+      '<button type="button" class="btn btn-sm" data-new="p">' + UI.icon('align') + '<span>פסקה</span></button>' +
+      '<button type="button" class="btn btn-sm" data-new="ul">' + UI.icon('check-square') + '<span>רשימה</span></button>' +
+      '<button type="button" class="btn btn-sm" data-new="clause">' + UI.icon('type') + '<span>סעיף חדש</span></button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-new="x" aria-label="סגירה">' + UI.icon('x') + '</button>';
+    it.after(m);
+  }
+  function add(m, kind) {
+    var after = m.previousElementSibling; m.remove(); if (kind === 'x') return;
+    var made;
+    if (kind === 'clause') {
+      // a clause ends with its separator: after one, the new clause opens straight away
+      var h = item('h2', '', true), p = item('p', ''), hr = item('hr');
+      if (after.dataset.kind === 'hr') { after.after(h); h.after(p); p.after(hr); }
+      else { after.after(hr); hr.after(h); h.after(p); }
+      made = h;
+    } else {
+      var num = kind === 'p' && after.dataset.kind === 'p' && after.dataset.num === '1';
+      made = item(kind, '', num); after.after(made);
+    }
+    setDirty(); open(made);
+  }
+  main.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-ce],[data-new]');
+    if (!t) {  // a tap on a block picks it (its tools show on a touch screen)
+      var pick = e.target.closest('#ce .ce-item');
+      ed.querySelectorAll('.ce-item.is-active').forEach(function (x) { if (x !== pick) x.classList.remove('is-active'); });
+      if (pick && !pick.classList.contains('is-editing')) pick.classList.toggle('is-active');
+      return;
+    }
+    if (!main.contains(t)) return;
+    var it = t.closest('.ce-item');
+    if (t.dataset.new) { add(t.closest('.ce-add'), t.dataset.new); return; }
+    var act = t.dataset.ce;
+    if (act === 'edit') open(it);
+    else if (act === 'ok') close(it, true);
+    else if (act === 'cancel') close(it, false);
+    else if (act === 'del') del(it);
+    else if (act === 'add') addMenu(it);
+    else if (act === 'save') save(t);
+    else if (act === 'leave') leave();
+    else if (act === 'reset') reset(t);
+  });
+  ed.addEventListener('dblclick', function (e) {
+    var it = e.target.closest('.ce-item'); if (it && it.querySelector('[data-ce=edit]') && !it.classList.contains('is-editing')) open(it); });
+  function payload() {
+    var items = [], bad = '';
+    ed.querySelectorAll('.ce-item').forEach(function (it) {
+      if (it.dataset.isnew) {
+        if (it.dataset.kind !== 'hr' && !(it.dataset.text || '').trim()) bad = 'יש קטע חדש שעוד לא נכתב. כותבים אותו או מוחקים.';
+        items.push({'new': it.dataset.kind, text: it.dataset.text || '', num: it.dataset.num === '1'});
+      } else {
+        var x = {i: +it.dataset.i}; if (it.dataset.edited) x.text = it.dataset.text; items.push(x);
+      }
+    });
+    return bad ? {error: bad} : {items: items};
+  }
+  function save(btn) {
+    var openNow = ed.querySelector('.ce-item.is-editing'); if (openNow && !close(openNow, true)) return;
+    var p = payload(); if (p.error) { UI.toast(p.error, {kind: 'error'}); return; }
+    UI.busy(btn, true);
+    UI.api('/contracts/' + encodeURIComponent(cid) + '/version', {base: ed.dataset.base, items: p.items}).then(function (r) {
+      UI.busy(btn, false);
+      if (r._status !== 200) { UI.toast((r.errors || ['השמירה נכשלה'])[0], {kind: 'error', duration: 6000}); return; }
+      dirty = false; if (bar) bar.classList.remove('is-on'); UI.toast(r.standard ? 'אין שינויים: הלקוח יקבל את הנוסח הרגיל' : 'הנוסח נשמר. הוא יישלח ללקוח בשליחה הבאה');
+      UI.forgetPages(); UI.go(side.dataset.back);
+    });
+  }
+  function leave() {
+    if (!dirty) { UI.go(side.dataset.back); return; }
+    UI.confirm({title: 'לצאת בלי לשמור?', text: 'השינויים שלא נשמרו יימחקו.', ok: 'יציאה בלי שמירה', danger: true, icon: 'alert'})
+      .then(function (yes) { if (yes) { dirty = false; UI.go(side.dataset.back); } });
+  }
+  function reset(btn) {
+    UI.confirm({title: 'לחזור לנוסח הרגיל?', text: 'כל השינויים בחוזה של הלקוח הזה יימחקו, והוא יקבל את הנוסח הרגיל. חוזה שכבר נשלח או נחתם לא משתנה.',
+                ok: 'חזרה לנוסח הרגיל', danger: true, icon: 'rotate'}).then(function (yes) {
+      if (!yes) return; UI.busy(btn, true);
+      UI.api('/contracts/' + encodeURIComponent(cid) + '/version', {reset: true}).then(function (r) {
+        UI.busy(btn, false);
+        if (r._status !== 200) { UI.toast((r.errors || ['לא הצלחתי'])[0], {kind: 'error'}); return; }
+        dirty = false; UI.toast('החוזה חזר לנוסח הרגיל'); UI.forgetPages(); UI.go(side.dataset.back);
+      });
+    });
+  }
+})();
+"""
+
+
+def _version_card(client: dict[str, Any], s: dict[str, Any], base: str, version: Optional[dict[str, Any]]) -> str:
+    """Which version this client gets, the way to edit it, and whether the client holds an older one."""
+    cid = str(client.get("id") or "")
+    notes = []
+    if version:
+        badge = '<span class="badge badge-brand badge-dot">נוסח מותאם</span>'
+        what = (f"שינויים בנוסח של הלקוח הזה: {_esc(version.get('summary') or '')}. "
+                f"נשמר {ui.when(version.get('updated_at'), '-')}.")
+        if version.get("base") != contract_edit.sha(contract_edit.standard()):
+            notes.append(("info", "הנוסח הרגיל השתנה מאז שערכת. הנוסח של הלקוח הזה לא מתעדכן לבד."))
+    else:
+        badge = '<span class="badge">נוסח רגיל</span>'
+        what = "הלקוח יקבל את הנוסח הרגיל. אפשר לערוך, להוסיף או למחוק סעיפים רק בחוזה שלו, לפני השליחה."
+    if s["state"] == "waiting":
+        sent = contract_store.sent(cid)
+        if (sent or {}).get("template") != (version or {}).get("template"):
+            notes.append(("warn", "הלקוח קיבל נוסח אחר ממה שמוצג כאן. כדי שיקבל את הנוסח הזה, שולחים שוב."))
+    alerts = "".join(f'<div class="alert alert-{k}" style="margin:0">{ui.icon("alert" if k == "warn" else "info")}'
+                     f'<span>{_esc(t)}</span></div>' for k, t in notes)
+    reset = (f'<button type="button" class="btn btn-ghost" data-ver="reset">{ui.icon("rotate", 15)}'
+             f'<span>חזרה לנוסח הרגיל</span></button>' if version else "")
+    return (f'<section class="card version-card reveal" id="version-card" style="--i:3" data-client="{_esc(cid)}">'
+            f'<div class="card-head"><h2 class="card-title">נוסח החוזה</h2>{badge}</div>'
+            f'<div class="ct-card-body"><p class="summary" style="margin:0">{what}</p>{alerts}<div class="acts">'
+            f'<a class="btn" href="{base}/contracts/{quote(cid)}?edit=1">{ui.icon("pen", 15)}<span>עריכת החוזה</span></a>'
+            f'{reset}</div></div></section>')
+
+
+def editor_page(client: dict[str, Any], base: str) -> str:
+    """The contract as blocks Dror can edit, delete or add to; values from ClickUp stay locked."""
+    cid = str(client.get("id") or "")
+    name = str(client.get("name") or cid)
+    version = contract_store.draft(cid)
+    template = version["template"] if version else contract_edit.standard()
+    try:
+        fields = contract.fields_from_client(client)
+    except contract.ContractError:
+        fields = {}
+    marks = contract_edit.compare(template)["marks"] if version else []
+    rows = []
+    for b in contract_edit.editor_blocks(template, fields):
+        i = b["i"]
+        if b.get("hidden"):
+            rows.append(f'<div class="ce-item" data-i="{i}" data-kind="marker" hidden></div>')
+            continue
+        mark = marks[i] if i < len(marks) else ""
+        cls = ("ce-item" + (" is-locked" if b["locked"] else "") + (" ce-hr" if b["kind"] == "hr" else "")
+               + (f" ce-{mark}" if mark and not b["locked"] else ""))
+        data = f'data-i="{i}" data-kind="{_esc(b["kind"])}"'
+        if "text" in b:
+            data += f' data-text="{_esc(b["text"])}"' + (f' data-num="1" data-prefix="{_esc(b["prefix"])}"' if b.get("num") else "")
+        tools = ""
+        if not b["locked"]:
+            if b["kind"] in contract_edit.EDITABLE:
+                tools += (f'<button type="button" class="btn btn-ghost" data-ce="edit" data-tip="עריכה" aria-label="עריכה">'
+                          f'{ui.icon("pen", 15)}</button>')
+            if b["kind"] != "hr":
+                tip = "מחיקת הסעיף כולו" if b["kind"] == "h2" and b.get("num") else "מחיקה"
+                tools += (f'<button type="button" class="btn btn-ghost" data-ce="del" data-tip="{tip}" aria-label="{tip}">'
+                          f'{ui.icon("trash", 15)}</button>')
+        tools += (f'<button type="button" class="btn btn-ghost" data-ce="add" data-tip="הוספה אחרי" aria-label="הוספה אחרי">'
+                  f'{ui.icon("plus", 15)}</button>')
+        tags = ""
+        if b["locked"] and "ce-chip" in b["html"]:
+            tags += f'<span class="ce-tag">{ui.icon("lock", 11)}<span>מ-ClickUp ומדף החתימה, נערך שם</span></span> '
+        if b.get("section"):
+            tags += f'<span class="ce-tag">{ui.icon("info", 11)}<span>{_esc(b["section"])}</span></span>'
+        rows.append(f'<div class="{cls}" {data}><div class="ce-body">{b["html"]}</div>'
+                    f'<div class="ce-tools">{tools}</div>{f"<div>{tags}</div>" if tags else ""}</div>')
+    back_url = f"{base}/contracts/{quote(cid)}"
+    paper = (f'<article class="paper ce-paper reveal" style="--i:1"><div class="contract" dir="rtl" lang="he" id="ce" '
+             f'data-client="{_esc(cid)}" data-base="{contract_edit.sha(template)}">{"".join(rows)}</div></article>')
+    reset = (f'<button type="button" class="btn btn-ghost btn-block" data-ce="reset">{ui.icon("rotate", 15)}'
+             f'<span>חזרה לנוסח הרגיל</span></button>' if version else "")
+    side = (f'<section class="card ce-side reveal" id="ce-side" style="--i:2" data-back="{_esc(back_url)}">'
+            f'<div class="card-head"><h2 class="card-title">עריכה לחוזה של {_esc(name)} בלבד</h2></div>'
+            f'<div class="ct-card-body"><ol class="steps">'
+            f'<li>מעבירים את העכבר על קטע: {ui.icon("pen", 13)} עריכה, {ui.icon("trash", 13)} מחיקה, '
+            f'{ui.icon("plus", 13)} הוספה אחריו.</li>'
+            f'<li>מחיקת כותרת של סעיף מוחקת את כל הסעיף. המספור וההפניות מתעדכנים לבד.</li>'
+            f'<li>שמות, מחירים ופרטי הלקוח נעולים: הם מגיעים מ-ClickUp ומדף החתימה.</li>'
+            f'<li>שומרים, בודקים בתצוגה המקדימה, ושולחים כרגיל: מכאן או מהכפתור ב-ClickUp.</li></ol>'
+            f'<div class="acts"><button type="button" class="btn btn-primary btn-block" data-ce="save">{ui.icon("check", 15)}'
+            f'<span>שמירת הנוסח</span></button>'
+            f'<button type="button" class="btn btn-block" data-ce="leave">ביטול</button>{reset}</div>'
+            f'<div class="dirty">{ui.icon("alert", 13)}<span>יש שינויים שעוד לא נשמרו</span></div>'
+            f'<p class="small muted" style="margin:0">הנוסח הרגיל לשאר הלקוחות לא משתנה. חוזה שכבר נשלח לא משתנה עד ששולחים שוב.</p>'
+            f'</div></section>')
+    back = f'<a class="back" href="{back_url}">{ui.icon("arrow-right", 15)}<span>לתצוגה המקדימה</span></a>'
+    head = ui.page_head(f"עריכת החוזה של {name}", "")
+    savebar = (f'<div class="ce-savebar" id="ce-savebar"><span>יש שינויים שעוד לא נשמרו</span>'
+               f'<button type="button" class="btn btn-primary btn-sm" data-ce="save">{ui.icon("check", 14)}'
+               f'<span>שמירה</span></button></div>')
+    page = (back + head + f'<div class="ct-grid"><div>{paper}</div><aside class="ct-side">{side}</aside></div>'
+            + savebar)
+    css = clients_pages.CSS + CSS + contract.CONTRACT_CSS + EDIT_CSS
+    return ui.app_page(base, "contracts", f"עריכת החוזה של {name} · חוזים", page, css=css, script=EDIT_JS, spa=True)
+
+
+def save_version(client_id: str, body: dict[str, Any], *, dry_run: bool = False) -> tuple[int, dict[str, Any]]:
+    """The editor's save (``{"base", "items"}``), or ``{"reset": true}``: back to the standard."""
+    from .automations.base import Automation
+
+    client = clients_pages._find_client(client_id, dry_run)
+    if not client:
+        return 404, {"errors": ["הלקוח לא נמצא"]}
+    auto = Automation("contract_edit", dry_run=dry_run)
+    version = contract_store.draft(client_id)
+    if body.get("reset"):
+        if version:
+            contract_store.clear_draft(client_id)
+            auto.log_action("contract_reset", client_id=client_id)
+        return 200, {"ok": True, "standard": True}
+    current = version["template"] if version else contract_edit.standard()
+    try:
+        new = contract_edit.apply(current, body.get("items") or [], str(body.get("base") or ""))
+    except contract_edit.Invalid as exc:
+        return 422, {"errors": [str(exc)]}
+    # Still a contract this client can be sent: a reference to a deleted clause, in
+    # a part this client sees, is said now rather than at sending. What the edit
+    # did not cause (no price, Dror's details) the page and the send already say.
+    try:
+        fields = contract.fields_from_client(client)
+    except contract.ContractError:
+        fields = None
+    if fields is not None and not contract.missing_provider():
+        shown = {**fields, **{k: v or "-" for k, v in fields.items() if k in contract.REQUIRED_CLIENT_FIELDS}}
+        try:
+            contract.render(shown, template=new, signatures={"provider_signature": "", "client_signature": ""})
+        except contract.ContractError as exc:
+            return 422, {"errors": [str(exc)]}
+    changes = contract_edit.compare(new)
+    if not changes["changes"]:
+        if version:
+            contract_store.clear_draft(client_id)
+            auto.log_action("contract_reset", client_id=client_id, detail="כל השינויים בוטלו")
+        return 200, {"ok": True, "standard": True}
+    summary = contract_edit.summary_text(changes)
+    contract_store.save_draft(client_id, new, base=contract_edit.sha(contract_edit.standard()),
+                              summary=summary, changes=changes["changes"])
+    auto.log_action("contract_edited", client_id=client_id, detail=summary)
+    return 200, {"ok": True, "summary": summary}

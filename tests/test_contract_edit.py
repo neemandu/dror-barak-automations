@@ -77,6 +77,7 @@ def test_deleting_a_clause_renumbers_the_rest_and_the_payment_clause_follows():
     new = _without(t, _clause(blocks, 7))
     assert _headers(new) == [str(n) for n in range(1, 20)]
     assert "כתיבת דפי נחיתה" not in new
+    assert ce.summary_text(ce.compare(new)) == "נמחק סעיף: כתיבת דפי נחיתה"
     assert "<p>10.1 כל שינוי" not in new and "<p>19.1 כל שינוי" in new  # "שונות" was 20
     out = contract.render(_fields(), template=new)
     assert "9.1 אסטרטגיה" in out and "9.4 תשלום" in out
@@ -121,6 +122,7 @@ def test_editing_a_paragraph_keeps_its_number_and_escapes_what_was_typed():
     new = ce.apply(t, items, ce.sha(t))
     assert "<p>11.3 כל צד רשאי לסיים בהודעה של 30 יום &lt;b&gt;מראש&lt;/b&gt;</p>" in new
     assert ce.compare(new)["edited"] == 1 and ce.compare(new)["changes"] == 1
+    assert ce.summary_text(ce.compare(new)) == "קטע אחד נערך"
 
 
 def test_a_new_clause_takes_its_place_in_the_numbering():
@@ -139,7 +141,8 @@ def test_a_new_clause_takes_its_place_in_the_numbering():
     out = contract.render(_fields(), template=new)
     assert "11.1 אסטרטגיה" in out
     c = ce.compare(new)
-    assert c["added"] == 2 and c["deleted"] == 0 and c["marks"].count("new") == 3
+    assert c["added_clauses"] == ["תנאים מיוחדים"] and c["added"] == 0 and c["deleted"] == 0
+    assert c["marks"].count("new") == 3 and ce.summary_text(c) == "נוסף סעיף: תנאים מיוחדים"
 
 
 def test_saving_over_a_newer_version_or_moving_blocks_is_refused():
@@ -204,3 +207,54 @@ def test_a_broken_version_refuses_the_send(monkeypatch):
     with pytest.raises(Refused) as exc:
         send_quote.send("c9", dry_run=True)
     assert "סעיף 6" in str(exc.value)
+
+
+# ------------------------------------------------------------- the dashboard
+
+
+def _payload(template, drop=(), edit=None):
+    _h, blocks, _t = ce.split(template)
+    items = [{"i": i} for i in range(len(blocks)) if i not in drop]
+    for it in items:
+        if edit and it["i"] in edit:
+            it["text"] = edit[it["i"]]
+    return {"base": ce.sha(template), "items": items}
+
+
+def test_saving_from_the_dashboard_keeps_a_version_and_reset_clears_it():
+    from src import contracts_pages
+
+    t = ce.standard()
+    _h, blocks, _t = ce.split(t)
+    status, out = contracts_pages.save_version("42", _payload(t, drop=_clause(blocks, 7)), dry_run=True)
+    assert status == 200 and out["summary"] == "נמחק סעיף: כתיבת דפי נחיתה"
+    saved = contract_store.draft("42")
+    assert "כתיבת דפי נחיתה" not in saved["template"]
+    # the page now previews this version, says so, and offers the way back
+    page = contracts_pages.contract_page([], "", "42", dry_run=True)
+    assert "נוסח מותאם" in page and "חזרה לנוסח הרגיל" in page
+    paper = page[page.index('<article class="paper">'):page.index('</article>')]
+    assert "כתיבת דפי נחיתה" not in paper and "<h2>7. כתיבת תסריטים" in paper
+    # a second save against the old base is refused: someone saved in between
+    status, out = contracts_pages.save_version("42", _payload(t), dry_run=True)
+    assert status == 422
+    assert contracts_pages.save_version("42", {"reset": True}, dry_run=True)[0] == 200
+    assert contract_store.draft("42") is None
+
+
+def test_saving_with_no_change_leaves_the_standard():
+    from src import contracts_pages
+
+    t = ce.standard()
+    status, out = contracts_pages.save_version("42", _payload(t), dry_run=True)
+    assert status == 200 and out["standard"] and contract_store.draft("42") is None
+
+
+def test_the_editor_page_is_a_dashboard_page_with_locked_values():
+    from src import contracts_pages
+
+    page = contracts_pages.contract_page([], "", "42", dry_run=True, edit=True)
+    assert 'id="ce"' in page and "ce-chip" in page and 'data-ce="save"' in page
+    assert " data-spa" in page
+    script = re.search(r"<script data-page-script>(.*?)</script>", page, re.S)
+    assert not script or "document.addEventListener" not in script.group(1)

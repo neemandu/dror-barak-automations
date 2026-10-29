@@ -840,6 +840,15 @@ def api(method: str, parts: list[str], body: dict[str, Any], *, dry_run: bool = 
             status, out = contracts_pages.save_signature(body)
             log.info("provider_signature_saved" if status == 200 else "provider_signature_rejected")
             return _json(status, out)
+        if len(parts) == 3 and parts[0] == "contracts" and parts[2] == "version":
+            from urllib.parse import unquote
+
+            from . import contracts_pages
+
+            client_id = unquote(parts[1])
+            status, out = contracts_pages.save_version(client_id, body, dry_run=dry_run)
+            log.info("contract_version", extra={"client_id": client_id, "status": status, "reset": bool(body.get("reset"))})
+            return _json(status, out)
         if len(parts) == 3 and parts[0] == "contracts" and parts[2] in ("send", "link"):
             from urllib.parse import unquote
 

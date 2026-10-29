@@ -182,7 +182,7 @@ def editable(block: Block) -> dict[str, Any]:
     text = "\n".join(_plain(_inner(el)))
     pattern = _NUM_H2 if block.tag == "h2" else _NUM_SUB
     m = pattern.match(text) if block.tag in ("h2", "h3", "p") else None
-    return {"text": text[m.end():] if m else text, "num": bool(m)}
+    return {"text": text[m.end():] if m else text, "num": bool(m), "prefix": m.group(0).strip() if m else ""}
 
 
 def build(tag: str, text: str, *, num: bool = False, open_tag: str = "") -> str:
@@ -311,42 +311,63 @@ def _norm(block: Block) -> str:
 
 
 def compare(draft: str, base: Optional[str] = None) -> dict[str, Any]:
-    """What a client's version changes against the standard: counts, and a mark
-    per block of the draft (``"edited"``, ``"new"`` or ``""``)."""
+    """What a client's version changes against the standard: a mark per block of
+    the draft (``"edited"``, ``"new"`` or ``""``), and the changes counted the way
+    Dror thinks of them: a whole clause added or deleted is one clause, by name."""
     _h, std, _t = split(base if base is not None else standard())
     _h, mine, _t = split(draft)
     a, b = [_norm(x) for x in std], [_norm(x) for x in mine]
     marks = [""] * len(mine)
-    edited = added = deleted = 0
+    out: dict[str, Any] = {"edited": 0, "added": 0, "deleted": 0, "added_clauses": [], "deleted_clauses": []}
 
-    def counts(blocks: list[Block]) -> int:
-        return sum(1 for x in blocks if x.tag not in ("hr", "marker", "text"))
+    def tally(blocks: list[Block], kind: str) -> None:
+        """Blocks added or deleted: a numbered heading takes the blocks after it with it."""
+        in_clause = False
+        for x in blocks:
+            if x.tag in ("hr", "marker", "text"):
+                continue
+            if x.tag == "h2" and editable(x)["num"]:
+                out[f"{kind}_clauses"].append(editable(x)["text"])
+                in_clause = True
+            elif x.tag == "h2":
+                in_clause = False
+                out[kind] += 1
+            elif not in_clause:
+                out[kind] += 1
 
     for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
         if op == "equal":
             continue
-        if op in ("replace", "insert"):
-            for j in range(j1, j2):
-                marks[j] = "edited" if op == "replace" and j - j1 < i2 - i1 else "new"
-            edited += counts(mine[j1:min(j2, j1 + (i2 - i1))]) if op == "replace" else 0
-            added += counts(mine[j1 + (i2 - i1):j2]) if op == "replace" else counts(mine[j1:j2])
-            if op == "replace":
-                deleted += counts(std[i1 + (j2 - j1):i2])
-        else:
-            deleted += counts(std[i1:i2])
-    return {"edited": edited, "added": added, "deleted": deleted,
-            "changes": edited + added + deleted, "marks": marks}
+        paired = min(i2 - i1, j2 - j1) if op == "replace" else 0
+        for j in range(j1, j2):
+            marks[j] = "edited" if j - j1 < paired else "new"
+        out["edited"] += sum(1 for x in mine[j1:j1 + paired] if x.tag not in ("hr", "marker", "text"))
+        tally(mine[j1 + paired:j2], "added")
+        tally(std[i1 + paired:i2], "deleted")
+    out["marks"] = marks
+    out["changes"] = (out["edited"] + out["added"] + out["deleted"]
+                      + len(out["added_clauses"]) + len(out["deleted_clauses"]))
+    return out
 
 
 def summary_text(c: dict[str, Any]) -> str:
-    """"עריכה של 2 קטעים, 1 נוסף" or "" for the standard."""
+    """"נמחק סעיף: כתיבת דפי נחיתה, קטע אחד נערך", or "" for the standard."""
+    def n(count: int, one: str, many: str) -> str:
+        return one if count == 1 else f"{count} {many}"
+
     parts = []
+    if c.get("deleted_clauses"):
+        parts.append(("נמחק סעיף: " if len(c["deleted_clauses"]) == 1 else "נמחקו סעיפים: ")
+                     + ", ".join(c["deleted_clauses"]))
+    if c.get("added_clauses"):
+        parts.append(("נוסף סעיף: " if len(c["added_clauses"]) == 1 else "נוספו סעיפים: ")
+                     + ", ".join(c["added_clauses"]))
     if c.get("edited"):
-        parts.append(f"{c['edited']} נערכו")
+        parts.append(n(c["edited"], "קטע אחד נערך", "קטעים נערכו"))
     if c.get("added"):
-        parts.append(f"{c['added']} נוספו")
+        parts.append(n(c["added"], "קטע אחד נוסף", "קטעים נוספו"))
     if c.get("deleted"):
-        parts.append(f"{c['deleted']} נמחקו")
+        parts.append(n(c["deleted"], "קטע אחד נמחק", "קטעים נמחקו"))
     return ", ".join(parts)
 
 

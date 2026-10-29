@@ -484,7 +484,8 @@ def client_screens(path: str, base: str, *, dry_run: bool = False,
     if path.startswith("/contracts/"):
         client_id = unquote(path[len("/contracts/"):]).strip("/")
         page = (contracts_pages.contract_page(entries, base, client_id, dry_run=dry_run,
-                                              new=bool((query or {}).get("new"))) if client_id else None)
+                                              new=bool((query or {}).get("new")),
+                                              edit=bool((query or {}).get("edit"))) if client_id else None)
         return page.encode("utf-8") if page else None
     if path == "/documents":
         return clients_pages.documents_page(entries, base, dry_run=dry_run).encode("utf-8")
