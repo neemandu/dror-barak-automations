@@ -39,6 +39,9 @@ def test_reminders_run_both_chases_even_if_the_first_dies(read_log, monkeypatch)
     def boom(**kwargs):
         raise RuntimeError("ClickUp 500")
 
+    # Dry-run: without it the questionnaire chase runs live against the ClickUp and
+    # SMTP in a developer's .env, and a test run would email real clients.
+    monkeypatch.setenv("WEBHOOK_DRY_RUN", "1")
     monkeypatch.setattr(sign_reminders, "run", boom)
     result = scheduled.reminders_handler({}, None)
     assert "error" in result["signatures"]
