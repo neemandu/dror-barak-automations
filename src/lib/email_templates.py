@@ -277,17 +277,21 @@ def layout(body_html: str, *, internal: bool = False, preheader: str = "", width
     return (
         '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<meta name="color-scheme" content="light"></head>'
+        '<meta name="color-scheme" content="light">'
+        # Phones: less padding around and inside the card. Clients that drop <style>
+        # keep the desktop padding, which still fits; the widths are fluid either way.
+        '<style>@media (max-width:520px){.em-out{padding:12px 6px!important}'
+        '.em-pad{padding:20px 16px 10px!important}}</style></head>'
         f'<body style="margin:0;padding:0;background:{_GROUND}">'
         f'<div style="display:none;max-height:0;overflow:hidden;opacity:0">{html.escape(preheader)}</div>'
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-        f'style="background:{_GROUND}"><tr><td align="center" style="padding:28px 12px">'
+        f'style="background:{_GROUND}"><tr><td class="em-out" align="center" style="padding:28px 12px">'
         f'<table role="presentation" width="{width}" cellpadding="0" cellspacing="0" border="0" dir="rtl" '
         f'style="width:100%;max-width:{width}px;background:#ffffff;border:1px solid {_LINE};border-radius:14px">'
         f'<tr><td style="padding:0;line-height:0;font-size:0">'
         f'<img src="cid:{BAND_CID}" width="{width}" alt="דרור ברק" '
         f'style="display:block;width:100%;max-width:{width}px;height:auto;border:0;border-radius:14px 14px 0 0"></td></tr>'
-        f'<tr><td dir="rtl" style="padding:30px 36px 14px;font-family:{_FONT};font-size:16px;'
+        f'<tr><td class="em-pad" dir="rtl" style="padding:30px 36px 14px;font-family:{_FONT};font-size:16px;'
         f'line-height:1.75;color:{_INK};text-align:right">{body_html}</td></tr>'
         f'{"" if internal else _signature_html()}'
         f"</table>{footer}</td></tr></table></body></html>"

@@ -39,12 +39,45 @@ def _esc(value: Any) -> str:
     return escape("" if value is None else str(value), quote=True)
 
 
-def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = "") -> str:
+# One column, every line free to wrap: a phone is 360 px wide, and a row of
+# time | name | client | detail cells does not fit in it.
+_WRAP = "overflow-wrap:anywhere;word-break:break-word"
+_MUTED = f"color:#6b7280;font-size:13px;line-height:1.5;{_WRAP}"
+
+
+def _entry_row(e: dict[str, Any], names: dict[str, str], *, with_time: bool = True) -> str:
+    status = str(e.get("status"))
+    mark = {"ok": "✓", "error": "✕", "skipped": "-"}.get(status, "•")
+    colour = {"ok": "#0a7c42", "error": "#c0271c", "skipped": "#8a6d16"}.get(status, "#6b7280")
+    links = "".join(
+        f' <a href="{_esc(u)}" style="color:#1a56db;white-space:nowrap">{_esc(lbl)} ↗</a>'
+        for lbl, u in subjects.links_for(e)
+    )
+    who = str(e.get("client_id") or "")
+    detail = e.get("detail")
+    meta = [
+        subjects.parse_ts(e) if with_time else "",
+        names.get(who, who),
+        "" if not detail or str(detail).startswith("http") else str(detail),
+    ]
+    note = " · ".join(_esc(m) for m in meta if m)
+    note_html = f'<div style="{_MUTED}">{note}</div>' if note else ""
+    return (
+        f'<tr><td valign="top" style="padding:6px 0 6px 8px;color:{colour};width:14px">{mark}</td>'
+        f'<td style="padding:6px 0;{_WRAP}"><b>{_esc(subjects.label_for(e))}</b>{links}{note_html}</td></tr>'
+    )
+
+
+def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = "",
+               names: Optional[dict[str, str]] = None) -> str:
     """Render the day's entries as an RTL Hebrew email.
 
     Inline styles only — mail clients strip <style> blocks and have no dark mode,
-    so this deliberately does not share the dashboard's stylesheet.
+    so this deliberately does not share the dashboard's stylesheet. ``names`` maps
+    a client id (a ClickUp task id) to the client's name.
     """
+    names = names or {}
+    table = 'role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse"'
     counts = subjects.counts(entries)
     if not entries:
         inner = '<p style="color:#6b7280">אין פעילות אוטומציות היום.</p>'
@@ -52,47 +85,21 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
         inner = ""
         failed = subjects.failures(entries)
         if failed:
-            rows = "".join(
-                f'<tr><td style="padding:4px 0;color:#c0271c">✕</td>'
-                f'<td style="padding:4px 8px"><b>{_esc(subjects.label_for(e))}</b>'
-                f'<div style="color:#6b7280;font-size:13px">{_esc(e.get("client_id") or "")} - {_esc(e.get("detail"))}</div></td></tr>'
-                for e in failed[:10]
-            )
+            rows = "".join(_entry_row(e, names, with_time=False) for e in failed[:10])
             inner += (
-                '<div style="border:1px solid #c0271c;border-radius:8px;padding:12px;margin-bottom:16px">'
-                f'<div style="color:#c0271c;font-weight:700;margin-bottom:6px">⚠️ דורש טיפול ({len(failed)})</div>'
-                f"<table>{rows}</table></div>"
+                '<div style="border:1px solid #c0271c;border-radius:8px;padding:10px 12px;margin-bottom:16px">'
+                f'<div style="color:#c0271c;font-weight:700;margin-bottom:4px">⚠️ דורש טיפול ({len(failed)})</div>'
+                f"<table {table}>{rows}</table></div>"
             )
 
         for subject, group in subjects.group_by_subject(entries):
-            rows = ""
-            for e in sorted(group, key=lambda x: str(x.get("ts")), reverse=True):
-                mark = {"ok": "✓", "error": "✕", "skipped": "-"}.get(str(e.get("status")), "•")
-                colour = {"ok": "#0a7c42", "error": "#c0271c", "skipped": "#8a6d16"}.get(
-                    str(e.get("status")), "#6b7280"
-                )
-                links = "".join(
-                    f' <a href="{_esc(u)}" style="color:#1a56db">{_esc(lbl)} ↗</a>'
-                    for lbl, u in subjects.links_for(e)
-                )
-                detail = e.get("detail")
-                note = (
-                    f'<div style="color:#6b7280;font-size:13px">{_esc(detail)}</div>'
-                    if detail and not str(detail).startswith("http")
-                    else ""
-                )
-                rows += (
-                    f'<tr><td style="padding:4px 0;color:{colour};width:16px">{mark}</td>'
-                    f'<td style="padding:4px 8px;color:#6b7280;font-size:13px;white-space:nowrap">'
-                    f'{_esc(subjects.parse_ts(e) or "")}</td>'
-                    f'<td style="padding:4px 8px"><b>{_esc(subjects.label_for(e))}</b>{links}{note}</td>'
-                    f'<td style="padding:4px 8px;color:#6b7280;font-size:13px">{_esc(e.get("client_id") or "")}</td></tr>'
-                )
+            rows = "".join(_entry_row(e, names)
+                           for e in sorted(group, key=lambda x: str(x.get("ts")), reverse=True))
             inner += (
-                '<div style="border:1px solid #e3e6ea;border-radius:8px;padding:12px;margin-bottom:12px">'
-                f'<div style="font-weight:700;margin-bottom:6px">{subject.icon} {_esc(subject.label)} '
+                '<div style="border:1px solid #e3e6ea;border-radius:8px;padding:10px 12px;margin-bottom:12px">'
+                f'<div style="font-weight:700;margin-bottom:4px">{subject.icon} {_esc(subject.label)} '
                 f'<span style="color:#6b7280;font-weight:400">({len(group)})</span></div>'
-                f'<table style="width:100%;border-collapse:collapse">{rows}</table></div>'
+                f'<table {table}>{rows}</table></div>'
             )
 
     link = (
@@ -107,6 +114,13 @@ def build_html(entries: list[dict[str, Any]], date: str, dashboard_url: str = ""
         f" · {counts['skipped']} דילוגים</p>{inner}{link}",
         internal=True, width=680,
         preheader=f"{counts['total']} פעולות, {counts['error']} שגיאות")
+
+
+def _client_names(dry_run: bool) -> dict[str, str]:
+    """Client names from ClickUp, or {} (the ids then show as they are)."""
+    from ..clients_pages import _names
+
+    return _names(dry_run)[0]
 
 
 def build_text(entries: list[dict[str, Any]], date: str) -> str:
@@ -129,7 +143,7 @@ def run(*, dry_run: bool = False, since: Optional[datetime] = None) -> dict[str,
     date = since.date().isoformat()
 
     dashboard_url = config.get("DASHBOARD_URL", "")
-    html_body = build_html(entries, date, dashboard_url)
+    html_body = build_html(entries, date, dashboard_url, _client_names(dry_run))
     text_body = build_text(entries, date)
     counts = subjects.counts(entries)
     subject_line = f"סיכום יומי {date}: {counts['total']} פעולות"

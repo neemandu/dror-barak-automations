@@ -205,3 +205,15 @@ def test_daily_email_escapes_log_content():
               "status": "ok", "client_id": "<script>bad</script>", "detail": "ok"}]
     html = daily_email.build_html(nasty, "2026-07-15")
     assert "<script>bad</script>" not in html
+
+
+def test_daily_email_fits_a_phone_and_names_clients():
+    from src.automations import daily_email
+
+    entries = [{"ts": "2026-07-15T09:00:00Z", "automation": "onboarding", "action": "folder_created",
+                "status": "ok", "client_id": "86abc123", "detail": "x" * 120}]
+    html = daily_email.build_html(entries, "2026-07-15", names={"86abc123": "מכללת אלפא"})
+    assert "מכללת אלפא" in html and "86abc123" not in html
+    assert "white-space:nowrap\">" not in html  # no cell that refuses to wrap
+    assert "overflow-wrap:anywhere" in html
+    assert "@media (max-width:520px)" in html
