@@ -265,6 +265,9 @@ account and no monthly fee. It needs:
 
 → `DROR_WHATSAPP` — international format, digits only, no `+`, e.g. `972501234567`
 → `DROR_EMAIL` — for report approvals and strategy notifications
+  (and the daily report, signed copies, questionnaire answers). Keep it Dror's own address
+  (`dror@drorbrk.co.il`) in **every** `.env` that deploys: `deploy_stack` copies it to the live
+  stack, so a developer's own address there silently redirects Dror's mail (2026-10-30).
 → `DASHBOARD_PASSWORD` — the dashboard's shared password (pushed as `DashboardPassword`);
   the function refuses to serve while it is empty
 → `CHROMIUM_LAYER_ARN` — from `python -m src.tools.publish_chromium_layer`; pushed as
